@@ -356,8 +356,13 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 true
             };
 
-            let is_at_very_bottom =
-                at_bottom_of_file_list && at_bottom_of_hunk_list && at_bottom_of_line_list;
+            let is_at_very_bottom = match state.cursor_level {
+                CursorLevel::File => at_bottom_of_file_list,
+                CursorLevel::Hunk => at_bottom_of_file_list && at_bottom_of_hunk_list,
+                CursorLevel::Line => {
+                    at_bottom_of_file_list && at_bottom_of_hunk_list && at_bottom_of_line_list
+                }
+            };
 
             if is_at_very_bottom {
                 state.is_bottom = true;
@@ -401,38 +406,44 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 }
             }
         }
-        Some(Input::KeyRight) => match state.cursor_level {
-            CursorLevel::File => {
-                if !state.files.is_empty() {
-                    state.cursor_level = CursorLevel::Hunk;
+        Some(Input::KeyRight) => {
+            state.is_bottom = false;
+            match state.cursor_level {
+                CursorLevel::File => {
+                    if !state.files.is_empty() {
+                        state.cursor_level = CursorLevel::Hunk;
+                        state.hunk_cursor = 0;
+                        state.line_cursor = 0;
+                    }
+                }
+                CursorLevel::Hunk => {
+                    if let Some(file) = state.files.get(state.file_cursor) {
+                        if !file.hunks.is_empty() {
+                            state.cursor_level = CursorLevel::Line;
+                            state.line_cursor = 1; // Skip hunk header
+                        }
+                    }
+                }
+                CursorLevel::Line => {
+                    // Do nothing
+                }
+            }
+        },
+        Some(Input::KeyLeft) => {
+            state.is_bottom = false;
+            match state.cursor_level {
+                CursorLevel::File => {
+                    // Do nothing
+                }
+                CursorLevel::Hunk => {
+                    state.cursor_level = CursorLevel::File;
                     state.hunk_cursor = 0;
                     state.line_cursor = 0;
                 }
-            }
-            CursorLevel::Hunk => {
-                if let Some(file) = state.files.get(state.file_cursor) {
-                    if !file.hunks.is_empty() {
-                        state.cursor_level = CursorLevel::Line;
-                        state.line_cursor = 1; // Skip hunk header
-                    }
+                CursorLevel::Line => {
+                    state.cursor_level = CursorLevel::Hunk;
+                    state.line_cursor = 0;
                 }
-            }
-            CursorLevel::Line => {
-                // Do nothing
-            }
-        },
-        Some(Input::KeyLeft) => match state.cursor_level {
-            CursorLevel::File => {
-                // Do nothing
-            }
-            CursorLevel::Hunk => {
-                state.cursor_level = CursorLevel::File;
-                state.hunk_cursor = 0;
-                state.line_cursor = 0;
-            }
-            CursorLevel::Line => {
-                state.cursor_level = CursorLevel::Hunk;
-                state.line_cursor = 0;
             }
         },
         _ => {}
@@ -471,12 +482,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 state.scroll = cursor_position - window_height + 1;
             }
         }
-    }
-
-    if !state.lines.is_empty() && state.scroll + window_height >= state.lines.len() {
-        state.is_bottom = true;
-    } else {
-        state.is_bottom = false;
     }
 
     state
