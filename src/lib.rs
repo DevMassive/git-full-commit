@@ -254,16 +254,18 @@ fn adjust_scroll_for_item(
     start_line: usize,
     end_line: usize,
     window_height: usize,
+    margin: usize,
 ) {
-    let effective_height = if window_height > 2 { window_height - 2 } else { 1 };
-    if start_line < *scroll {
-        *scroll = start_line;
-    } else if end_line > *scroll + effective_height {
-        *scroll = end_line.saturating_sub(effective_height);
+    let bottom_margin_boundary = window_height.saturating_sub(margin);
+    if start_line < *scroll + margin {
+        *scroll = start_line.saturating_sub(margin);
+    } else if end_line > *scroll + bottom_margin_boundary {
+        *scroll = end_line.saturating_sub(bottom_margin_boundary);
     }
 }
 
 pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) -> AppState {
+    const SCROLL_MARGIN: usize = 3;
     let (max_y, _) = window.get_max_yx();
 
     match input {
@@ -472,7 +474,13 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 } else {
                     state.lines.len()
                 };
-                adjust_scroll_for_item(&mut state.scroll, start_line, end_line, window_height);
+                adjust_scroll_for_item(
+                    &mut state.scroll,
+                    start_line,
+                    end_line,
+                    window_height,
+                    SCROLL_MARGIN,
+                );
             }
         }
         CursorLevel::Hunk => {
@@ -480,17 +488,24 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
                     let start_line = hunk.start_line;
                     let end_line = start_line + hunk.lines.len();
-                    adjust_scroll_for_item(&mut state.scroll, start_line, end_line, window_height);
+                    adjust_scroll_for_item(
+                        &mut state.scroll,
+                        start_line,
+                        end_line,
+                        window_height,
+                        SCROLL_MARGIN,
+                    );
                 }
             }
         }
         CursorLevel::Line => {
-            let effective_height = if window_height > 2 { window_height - 2 } else { 1 };
-            if cursor_position < state.scroll {
-                state.scroll = cursor_position;
-            } else if cursor_position >= state.scroll + effective_height {
-                state.scroll = cursor_position - effective_height + 1;
-            }
+            adjust_scroll_for_item(
+                &mut state.scroll,
+                cursor_position,
+                cursor_position + 1,
+                window_height,
+                SCROLL_MARGIN,
+            );
         }
     }
 
