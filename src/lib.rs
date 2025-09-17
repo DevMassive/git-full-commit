@@ -1,8 +1,9 @@
+use anyhow::{bail, Result};
 use pancurses::{
     A_REVERSE, COLOR_BLACK, COLOR_GREEN, COLOR_PAIR, COLOR_RED, Input, Window, curs_set, endwin,
     init_pair, initscr, noecho, start_color,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command as OsCommand;
 
 pub trait Command {
@@ -487,7 +488,24 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) {
     endwin();
 }
 
-pub fn run() {
-    let (files, lines) = get_diff(".".into());
-    tui_loop(".".into(), files, lines);
+pub fn run(repo_path: PathBuf) -> Result<()> {
+    if !is_git_repository(&repo_path) {
+        bail!(
+            "fatal: not a git repository (or any of the parent directories): .git"
+        );
+    }
+
+    let (files, lines) = get_diff(repo_path.clone());
+
+    if files.is_empty() {
+        println!("No staged changes found.");
+        return Ok(());
+    }
+
+    tui_loop(repo_path, files, lines);
+    Ok(())
+}
+
+fn is_git_repository(path: &Path) -> bool {
+    path.join(".git").is_dir()
 }
