@@ -253,12 +253,16 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
     let (max_y, _) = window.get_max_yx();
 
     match input {
-        Some(Input::Character('q')) => state.running = false,
+        Some(Input::Character('q')) => {
+            state.running = false;
+            state.is_bottom = false;
+        }
         Some(Input::Character('\n')) => {
             if state.is_bottom {
                 state.running = false;
                 return state;
             }
+
             if let CursorLevel::File = state.cursor_level {
                 if let Some(file) = state.files.get(state.file_cursor) {
                     let command = Box::new(UnstageFileCommand {
