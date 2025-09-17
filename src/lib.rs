@@ -250,7 +250,6 @@ impl AppState {
 }
 
 pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) -> AppState {
-    const SCROLL_MARGIN: usize = 3;
     let (max_y, _) = window.get_max_yx();
 
     match input {
@@ -341,11 +340,52 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     }
                 }
             }
+            let cursor_line = state.get_cursor_line_index();
+            let window_height = max_y as usize;
+            const MARGIN: usize = 3;
+
+            if let Some(file) = state.files.get(state.file_cursor) {
+                if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                    let hunk_len = hunk.lines.len();
+                    if hunk_len <= window_height {
+                        let hunk_start = hunk.start_line;
+                        let hunk_end = hunk_start + hunk_len;
+
+                        if hunk_start < state.scroll + MARGIN {
+                            state.scroll = hunk_start.saturating_sub(MARGIN);
+                        } else if hunk_end > state.scroll + window_height - MARGIN {
+                            state.scroll = hunk_end.saturating_sub(window_height - MARGIN);
+                        }
+                    }
+                }
+            }
+
+            if cursor_line < state.scroll + MARGIN {
+                state.scroll = cursor_line.saturating_sub(MARGIN);
+            } else if cursor_line >= state.scroll + window_height - MARGIN {
+                state.scroll = cursor_line.saturating_sub(window_height - MARGIN);
+            }
         }
         Some(Input::KeyDown) => {
             if state.is_bottom {
                 state.running = false;
                 return state;
+            }
+
+            if let CursorLevel::Hunk = state.cursor_level {
+                let window_height = max_y as usize;
+                if let Some(file) = state.files.get(state.file_cursor) {
+                    if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                        let hunk_end = hunk.start_line + hunk.lines.len();
+                        let is_hunk_taller_than_screen = hunk.lines.len() > window_height;
+                        let is_hunk_bottom_on_screen = hunk_end <= state.scroll + window_height;
+
+                        if is_hunk_taller_than_screen && !is_hunk_bottom_on_screen {
+                            state.scroll = state.scroll.saturating_add(window_height / 2);
+                            return state;
+                        }
+                    }
+                }
             }
 
             let at_bottom_of_file_list = state.file_cursor == state.files.len().saturating_sub(1);
@@ -366,22 +406,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
 
             let is_at_very_bottom = match state.cursor_level {
                 CursorLevel::File => at_bottom_of_file_list,
-                CursorLevel::Hunk => {
-                    let window_height = max_y as usize;
-                    if let Some(file) = state.files.get(state.file_cursor) {
-                        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                            let hunk_end = hunk.start_line + hunk.lines.len();
-                            let is_hunk_taller_than_screen = hunk.lines.len() > window_height;
-                            let is_hunk_bottom_on_screen = hunk_end <= state.scroll + window_height;
-
-                            if is_hunk_taller_than_screen && !is_hunk_bottom_on_screen {
-                                state.scroll = state.scroll.saturating_add(window_height / 2);
-                                return state;
-                            }
-                        }
-                    }
-                    at_bottom_of_file_list && at_bottom_of_hunk_list
-                }
+                CursorLevel::Hunk => at_bottom_of_file_list && at_bottom_of_hunk_list,
                 CursorLevel::Line => {
                     at_bottom_of_file_list && at_bottom_of_hunk_list && at_bottom_of_line_list
                 }
@@ -428,6 +453,31 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     }
                 }
             }
+            let cursor_line = state.get_cursor_line_index();
+            let window_height = max_y as usize;
+            const MARGIN: usize = 3;
+
+            if let Some(file) = state.files.get(state.file_cursor) {
+                if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                    let hunk_len = hunk.lines.len();
+                    if hunk_len <= window_height {
+                        let hunk_start = hunk.start_line;
+                        let hunk_end = hunk_start + hunk_len;
+
+                        if hunk_start < state.scroll + MARGIN {
+                            state.scroll = hunk_start.saturating_sub(MARGIN);
+                        } else if hunk_end > state.scroll + window_height - MARGIN {
+                            state.scroll = hunk_end.saturating_sub(window_height - MARGIN);
+                        }
+                    }
+                }
+            }
+
+            if cursor_line < state.scroll + MARGIN {
+                state.scroll = cursor_line.saturating_sub(MARGIN);
+            } else if cursor_line >= state.scroll + window_height - MARGIN {
+                state.scroll = cursor_line.saturating_sub(window_height - MARGIN);
+            }
         }
         Some(Input::KeyRight) => {
             state.is_bottom = false;
@@ -472,34 +522,12 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         _ => {}
     }
 
-    let cursor_line = state.get_cursor_line_index();
-    let window_height = max_y as usize;
-    const MARGIN: usize = 3;
-
-    if let Some(file) = state.files.get(state.file_cursor) {
-        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-            let hunk_len = hunk.lines.len();
-            if hunk_len <= window_height {
-                let hunk_start = hunk.start_line;
-                let hunk_end = hunk_start + hunk_len;
-
-                if hunk_start < state.scroll + MARGIN {
-                    state.scroll = hunk_start.saturating_sub(MARGIN);
-                } else if hunk_end > state.scroll + window_height - MARGIN {
-                    state.scroll = hunk_end.saturating_sub(window_height - MARGIN);
-                }
-            }
-        }
-    }
-
-    if cursor_line < state.scroll + MARGIN {
-        state.scroll = cursor_line.saturating_sub(MARGIN);
-    } else if cursor_line >= state.scroll + window_height - MARGIN {
-        state.scroll = cursor_line.saturating_sub(window_height - MARGIN);
-    }
-
     state
 }
+
+
+
+
 
 fn render(
     window: &Window,

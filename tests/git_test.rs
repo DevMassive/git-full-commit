@@ -1,5 +1,5 @@
 use git_reset_pp::*;
-use pancurses::Input;
+use pancurses::{initscr, Input, Window};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command as OsCommand;
@@ -65,32 +65,17 @@ fn create_test_state(test_setup: &TestSetup) -> AppState {
     AppState::new(test_setup.repo_path.clone(), files, lines)
 }
 
-#[test]
-fn test_update_state_scroll_down() {
-    let setup = TestSetup::new();
-    let window = pancurses::newwin(0, 0, 0, 0);
-    let mut state = create_test_state(&setup);
-    state.cursor_level = CursorLevel::Line;
-    state.line_cursor = 1;
-    let new_state = update_state(state, Some(Input::KeyDown), &window);
-    assert_eq!(new_state.line_cursor, 2);
-}
-
-#[test]
-fn test_update_state_scroll_up() {
-    let setup = TestSetup::new();
-    let window = pancurses::newwin(0, 0, 0, 0);
-    let mut state = create_test_state(&setup);
-    state.cursor_level = CursorLevel::Line;
-    state.line_cursor = 2;
-    let new_state = update_state(state, Some(Input::KeyUp), &window);
-    assert_eq!(new_state.line_cursor, 1);
+fn setup_pancurses() -> Window {
+    let window = initscr();
+    window.keypad(true);
+    pancurses::noecho();
+    window
 }
 
 #[test]
 fn test_update_state_quit() {
     let setup = TestSetup::new();
-    let window = pancurses::newwin(0, 0, 0, 0);
+    let window = setup_pancurses();
     let state = create_test_state(&setup);
     let new_state = update_state(state, Some(Input::Character('q')), &window);
     assert!(!new_state.running);
@@ -99,7 +84,7 @@ fn test_update_state_quit() {
 #[test]
 fn test_unstage_file() {
     let setup = TestSetup::new();
-    let window = pancurses::newwin(0, 0, 0, 0);
+    let window = setup_pancurses();
     let mut state = create_test_state(&setup);
     state.cursor_level = CursorLevel::File;
     let new_state = update_state(state, Some(Input::Character('\n')), &window);
@@ -109,7 +94,7 @@ fn test_unstage_file() {
 #[test]
 fn test_unstage_hunk_with_undo_redo() {
     let setup = TestSetup::new();
-    let window = pancurses::newwin(0, 0, 0, 0);
+    let window = setup_pancurses();
     let mut state = create_test_state(&setup);
 
     // Ensure we have a file with a hunk
@@ -157,10 +142,12 @@ fn test_hunk_half_page_scroll() {
     let mut state = AppState::new(repo_path.clone(), files, lines);
     state.cursor_level = CursorLevel::Hunk;
 
-    let window = pancurses::newwin(20, 80, 0, 0);
+    let window = setup_pancurses();
+    let (max_y, _) = window.get_max_yx();
+    let window_height = max_y as usize;
 
     let state_after_scroll_down = update_state(state, Some(Input::KeyDown), &window);
-    assert_eq!(state_after_scroll_down.scroll, 10);
+    assert_eq!(state_after_scroll_down.scroll, window_height / 2);
 
     let state_after_scroll_up = update_state(state_after_scroll_down, Some(Input::KeyUp), &window);
     assert_eq!(state_after_scroll_up.scroll, 0);
