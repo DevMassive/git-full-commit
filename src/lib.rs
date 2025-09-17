@@ -255,11 +255,11 @@ fn adjust_scroll_for_item(
     end_line: usize,
     window_height: usize,
 ) {
+    let effective_height = if window_height > 1 { window_height - 1 } else { 1 };
     if start_line < *scroll {
         *scroll = start_line;
-    }
-    if end_line > *scroll + window_height {
-        *scroll = end_line - window_height;
+    } else if end_line > *scroll + effective_height {
+        *scroll = end_line.saturating_sub(effective_height);
     }
 }
 
@@ -485,11 +485,11 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
         }
         CursorLevel::Line => {
+            let effective_height = if window_height > 1 { window_height - 1 } else { 1 };
             if cursor_position < state.scroll {
                 state.scroll = cursor_position;
-            }
-            if cursor_position >= state.scroll + window_height {
-                state.scroll = cursor_position - window_height + 1;
+            } else if cursor_position >= state.scroll + effective_height {
+                state.scroll = cursor_position - effective_height + 1;
             }
         }
     }
@@ -509,7 +509,19 @@ fn render(
 
     let cursor_position = state.get_cursor_line_index();
 
-    let file_name = &state.files[state.file_cursor].file_name;
+    // Find current file based on scroll position
+    let current_file_index = state
+        .files
+        .iter()
+        .rposition(|f| f.start_line <= state.scroll)
+        .unwrap_or(0); // Default to the first file
+
+    let file_name = if !state.files.is_empty() {
+        &state.files[current_file_index].file_name
+    } else {
+        ""
+    };
+
     let syntax = SYNTAX_SET
         .find_syntax_by_extension(
             Path::new(file_name)
@@ -525,7 +537,7 @@ fn render(
     for (i, line) in lines
         .iter()
         .skip(state.scroll)
-        .take(max_y as usize)
+        .take(max_y as usize - 1) // Make space for the header
         .enumerate()
     {
         let line_index_in_full_list = i + state.scroll;
@@ -534,12 +546,21 @@ fn render(
             state,
             line,
             line_index_in_full_list,
-            i as i32,
+            i as i32 + 1, // Start rendering from the second line
             cursor_position,
             &mut h,
             color_map,
             next_color_pair,
         );
+    }
+
+    // Render sticky header
+    if !file_name.is_empty() {
+        window.attron(COLOR_PAIR(5));
+        window.mv(0, 0);
+        window.clrtoeol();
+        window.addstr(file_name);
+        window.attroff(COLOR_PAIR(5));
     }
 
     if state.is_bottom {
