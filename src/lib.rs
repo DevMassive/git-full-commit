@@ -1,6 +1,7 @@
 use anyhow::{Result, bail};
 use pancurses::{
-    curs_set, endwin, init_color, init_pair, initscr, noecho, start_color, Input, Window, A_DIM, A_REVERSE, COLOR_BLACK, COLOR_CYAN, COLOR_MAGENTA, COLOR_PAIR
+    A_DIM, A_REVERSE, COLOR_BLACK, COLOR_CYAN, COLOR_MAGENTA, COLOR_PAIR, Input, Window, curs_set,
+    endwin, init_color, init_pair, initscr, noecho, start_color,
 };
 use std::path::{Path, PathBuf};
 use std::process::Command as OsCommand;
@@ -180,6 +181,7 @@ pub struct AppState {
     pub lines: Vec<String>,
     pub cursor_level: CursorLevel,
     pub command_history: CommandHistory,
+    pub is_bottom: bool,
 }
 
 impl AppState {
@@ -195,6 +197,7 @@ impl AppState {
             lines,
             cursor_level: CursorLevel::Hunk,
             command_history: CommandHistory::new(),
+            is_bottom: false,
         }
     }
 
@@ -256,6 +259,10 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
     match input {
         Some(Input::Character('q')) => state.running = false,
         Some(Input::Character('\n')) => {
+            if state.is_bottom {
+                state.running = false;
+                return state;
+            }
             if let CursorLevel::File = state.cursor_level {
                 if let Some(file) = state.files.get(state.file_cursor) {
                     let command = Box::new(UnstageFileCommand {
@@ -287,72 +294,38 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             state.command_history.redo();
             state.refresh_diff();
         }
-        Some(Input::KeyUp) => match state.cursor_level {
-            CursorLevel::File => {
-                state.file_cursor = state.file_cursor.saturating_sub(1);
-            }
-            CursorLevel::Hunk => {
-                if state.hunk_cursor > 0 {
-                    state.hunk_cursor -= 1;
-                } else if state.file_cursor > 0 {
-                    state.file_cursor -= 1;
-                    if let Some(file) = state.files.get(state.file_cursor) {
-                        state.hunk_cursor = file.hunks.len().saturating_sub(1);
-                    }
+        Some(Input::KeyUp) => {
+            state.is_bottom = false;
+            match state.cursor_level {
+                CursorLevel::File => {
+                    state.file_cursor = state.file_cursor.saturating_sub(1);
                 }
-            }
-            CursorLevel::Line => {
-                if state.line_cursor > 1 {
-                    state.line_cursor -= 1;
-                } else if state.hunk_cursor > 0 {
-                    state.hunk_cursor -= 1;
-                    if let Some(file) = state.files.get(state.file_cursor) {
-                        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                            state.line_cursor = hunk.lines.len().saturating_sub(1);
-                        }
-                    }
-                } else if state.file_cursor > 0 {
-                    state.file_cursor -= 1;
-                    if let Some(file) = state.files.get(state.file_cursor) {
-                        state.hunk_cursor = file.hunks.len().saturating_sub(1);
-                        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                            state.line_cursor = hunk.lines.len().saturating_sub(1);
-                        } else {
-                            state.line_cursor = 0;
+                CursorLevel::Hunk => {
+                    if state.hunk_cursor > 0 {
+                        state.hunk_cursor -= 1;
+                    } else if state.file_cursor > 0 {
+                        state.file_cursor -= 1;
+                        if let Some(file) = state.files.get(state.file_cursor) {
+                            state.hunk_cursor = file.hunks.len().saturating_sub(1);
                         }
                     }
                 }
-            }
-        },
-        Some(Input::KeyDown) => match state.cursor_level {
-            CursorLevel::File => {
-                if state.file_cursor < state.files.len().saturating_sub(1) {
-                    state.file_cursor += 1;
-                }
-            }
-            CursorLevel::Hunk => {
-                if let Some(file) = state.files.get(state.file_cursor) {
-                    if state.hunk_cursor < file.hunks.len().saturating_sub(1) {
-                        state.hunk_cursor += 1;
-                    } else if state.file_cursor < state.files.len().saturating_sub(1) {
-                        state.file_cursor += 1;
-                        state.hunk_cursor = 0;
-                    }
-                }
-            }
-            CursorLevel::Line => {
-                if let Some(file) = state.files.get(state.file_cursor) {
-                    if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                        if state.line_cursor < hunk.lines.len().saturating_sub(1) {
-                            state.line_cursor += 1;
-                        } else if state.hunk_cursor < file.hunks.len().saturating_sub(1) {
-                            state.hunk_cursor += 1;
-                            state.line_cursor = 1;
-                        } else if state.file_cursor < state.files.len().saturating_sub(1) {
-                            state.file_cursor += 1;
-                            state.hunk_cursor = 0;
-                            if !state.files[state.file_cursor].hunks.is_empty() {
-                                state.line_cursor = 1;
+                CursorLevel::Line => {
+                    if state.line_cursor > 1 {
+                        state.line_cursor -= 1;
+                    } else if state.hunk_cursor > 0 {
+                        state.hunk_cursor -= 1;
+                        if let Some(file) = state.files.get(state.file_cursor) {
+                            if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                                state.line_cursor = hunk.lines.len().saturating_sub(1);
+                            }
+                        }
+                    } else if state.file_cursor > 0 {
+                        state.file_cursor -= 1;
+                        if let Some(file) = state.files.get(state.file_cursor) {
+                            state.hunk_cursor = file.hunks.len().saturating_sub(1);
+                            if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                                state.line_cursor = hunk.lines.len().saturating_sub(1);
                             } else {
                                 state.line_cursor = 0;
                             }
@@ -360,7 +333,74 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     }
                 }
             }
-        },
+        }
+        Some(Input::KeyDown) => {
+            if state.is_bottom {
+                state.running = false;
+                return state;
+            }
+
+            let at_bottom_of_file_list = state.file_cursor == state.files.len().saturating_sub(1);
+            let at_bottom_of_hunk_list = if let Some(file) = state.files.get(state.file_cursor) {
+                state.hunk_cursor == file.hunks.len().saturating_sub(1)
+            } else {
+                true
+            };
+            let at_bottom_of_line_list = if let Some(file) = state.files.get(state.file_cursor) {
+                if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                    state.line_cursor == hunk.lines.len().saturating_sub(1)
+                } else {
+                    true
+                }
+            } else {
+                true
+            };
+
+            let is_at_very_bottom =
+                at_bottom_of_file_list && at_bottom_of_hunk_list && at_bottom_of_line_list;
+
+            if is_at_very_bottom {
+                state.is_bottom = true;
+            } else {
+                match state.cursor_level {
+                    CursorLevel::File => {
+                        if state.file_cursor < state.files.len().saturating_sub(1) {
+                            state.file_cursor += 1;
+                        }
+                    }
+                    CursorLevel::Hunk => {
+                        if let Some(file) = state.files.get(state.file_cursor) {
+                            if state.hunk_cursor < file.hunks.len().saturating_sub(1) {
+                                state.hunk_cursor += 1;
+                            } else if state.file_cursor < state.files.len().saturating_sub(1) {
+                                state.file_cursor += 1;
+                                state.hunk_cursor = 0;
+                            }
+                        }
+                    }
+                    CursorLevel::Line => {
+                        if let Some(file) = state.files.get(state.file_cursor) {
+                            if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                                if state.line_cursor < hunk.lines.len().saturating_sub(1) {
+                                    state.line_cursor += 1;
+                                } else if state.hunk_cursor < file.hunks.len().saturating_sub(1) {
+                                    state.hunk_cursor += 1;
+                                    state.line_cursor = 1;
+                                } else if state.file_cursor < state.files.len().saturating_sub(1) {
+                                    state.file_cursor += 1;
+                                    state.hunk_cursor = 0;
+                                    if !state.files[state.file_cursor].hunks.is_empty() {
+                                        state.line_cursor = 1;
+                                    } else {
+                                        state.line_cursor = 0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         Some(Input::KeyRight) => match state.cursor_level {
             CursorLevel::File => {
                 if !state.files.is_empty() {
@@ -433,12 +473,18 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         }
     }
 
+    if !state.lines.is_empty() && state.scroll + window_height >= state.lines.len() {
+        state.is_bottom = true;
+    } else {
+        state.is_bottom = false;
+    }
+
     state
 }
 
 fn render(window: &Window, state: &AppState) {
     window.clear();
-    let (max_y, _) = window.get_max_yx();
+    let (max_y, max_x) = window.get_max_yx();
     let lines = &state.lines;
 
     let cursor_position = state.get_cursor_line_index();
@@ -519,7 +565,7 @@ fn render(window: &Window, state: &AppState) {
             window.attron(COLOR_PAIR(6));
             window.mvaddstr(i as i32, 0, line);
             window.attroff(COLOR_PAIR(6));
-        } else if line.starts_with("diff --git") {
+        } else if line.starts_with("diff --git ") {
             let file_name_a_b = line.strip_prefix("diff --git ").unwrap();
             let file_name_a = file_name_a_b.split_whitespace().next().unwrap();
             let file_name = file_name_a.strip_prefix("a/").unwrap();
@@ -544,6 +590,11 @@ fn render(window: &Window, state: &AppState) {
             window.attroff(A_REVERSE);
         }
     }
+
+    if state.is_bottom {
+        window.mvaddstr(max_y - 1, max_x - 4, "ok?");
+    }
+
     window.refresh();
 }
 
@@ -607,7 +658,7 @@ pub fn get_diff(repo_path: PathBuf) -> (Vec<FileDiff>, Vec<String>) {
     (files, diff_str.lines().map(String::from).collect())
 }
 
-pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) {
+pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) -> bool {
     let window = initscr();
     window.keypad(true);
     noecho();
@@ -639,6 +690,7 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) {
     }
 
     endwin();
+    state.is_bottom
 }
 
 pub fn run(repo_path: PathBuf) -> Result<()> {
@@ -653,7 +705,18 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
         return Ok(());
     }
 
-    tui_loop(repo_path, files, lines);
+    let should_commit = tui_loop(repo_path.clone(), files, lines);
+
+    if should_commit {
+        let mut cmd = OsCommand::new("git");
+        cmd.arg("commit");
+        cmd.current_dir(&repo_path);
+        let status = cmd.status().expect("failed to execute git commit");
+        if !status.success() {
+            eprintln!("git commit failed");
+        }
+    }
+
     Ok(())
 }
 
