@@ -529,7 +529,9 @@ fn render(
     window: &Window,
     state: &AppState,
     color_map: &mut HashMap<syntect::highlighting::Color, i16>,
-    next_color_pair: &mut i16,
+    pair_map: &mut HashMap<(i16, i16), i16>,
+    next_color_num: &mut i16,
+    next_pair_num: &mut i16,
 ) {
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
@@ -578,7 +580,9 @@ fn render(
             cursor_position,
             &mut h,
             color_map,
-            next_color_pair,
+            pair_map,
+            next_color_num,
+            next_pair_num,
         );
     }
 
@@ -609,7 +613,9 @@ fn render_line(
     cursor_position: usize,
     h: &mut HighlightLines,
     color_map: &mut HashMap<syntect::highlighting::Color, i16>,
-    next_color_pair: &mut i16,
+    pair_map: &mut HashMap<(i16, i16), i16>,
+    next_color_num: &mut i16,
+    next_pair_num: &mut i16,
 ) {
     let is_cursor_line = line_index_in_full_list == cursor_position
         && matches!(state.cursor_level, CursorLevel::Line);
@@ -659,23 +665,63 @@ fn render_line(
     } else if line.starts_with("new file mode ") {
         window.mvaddstr(line_render_index, 0, "[new]");
     } else if line.starts_with('+') {
-        let attributes = if is_selected {
-            COLOR_PAIR(1)
-        } else {
-            COLOR_PAIR(3)
-        };
-        window.attron(attributes);
-        window.mvaddstr(line_render_index, 0, line);
-        window.attroff(attributes);
+        let (sign_pair_num, bg_color) = if is_selected { (1, 18) } else { (3, 18) };
+
+        let bg_pair = *pair_map.entry((-1, bg_color)).or_insert_with(|| {
+            let pair_num = *next_pair_num;
+            *next_pair_num += 1;
+            init_pair(pair_num, COLOR_BLACK, bg_color);
+            pair_num
+        });
+        window.attron(COLOR_PAIR(bg_pair as u32));
+        window.mv(line_render_index, 0);
+        window.clrtoeol();
+        window.attroff(COLOR_PAIR(bg_pair as u32));
+
+        window.attron(COLOR_PAIR(sign_pair_num as u32));
+        window.mvaddstr(line_render_index, 0, "+");
+        window.attroff(COLOR_PAIR(sign_pair_num as u32));
+
+        window.mv(line_render_index, 1);
+        highlight_line(
+            window,
+            &line[1..],
+            h,
+            color_map,
+            pair_map,
+            next_color_num,
+            next_pair_num,
+            bg_color,
+        );
     } else if line.starts_with('-') {
-        let attributes = if is_selected {
-            COLOR_PAIR(2)
-        } else {
-            COLOR_PAIR(4)
-        };
-        window.attron(attributes);
-        window.mvaddstr(line_render_index, 0, line);
-        window.attroff(attributes);
+        let (sign_pair_num, bg_color) = if is_selected { (2, 19) } else { (4, 19) };
+
+        let bg_pair = *pair_map.entry((-1, bg_color)).or_insert_with(|| {
+            let pair_num = *next_pair_num;
+            *next_pair_num += 1;
+            init_pair(pair_num, COLOR_BLACK, bg_color);
+            pair_num
+        });
+        window.attron(COLOR_PAIR(bg_pair as u32));
+        window.mv(line_render_index, 0);
+        window.clrtoeol();
+        window.attroff(COLOR_PAIR(bg_pair as u32));
+
+        window.attron(COLOR_PAIR(sign_pair_num as u32));
+        window.mvaddstr(line_render_index, 0, "-");
+        window.attroff(COLOR_PAIR(sign_pair_num as u32));
+
+        window.mv(line_render_index, 1);
+        highlight_line(
+            window,
+            &line[1..],
+            h,
+            color_map,
+            pair_map,
+            next_color_num,
+            next_pair_num,
+            bg_color,
+        );
     } else if line.starts_with("@@ ") {
         window.attron(COLOR_PAIR(6));
         window.mvaddstr(line_render_index, 0, line);
@@ -696,7 +742,16 @@ fn render_line(
         if !is_selected {
             window.attron(A_DIM);
         }
-        highlight_line(window, line, h, color_map, next_color_pair);
+        highlight_line(
+            window,
+            line,
+            h,
+            color_map,
+            pair_map,
+            next_color_num,
+            next_pair_num,
+            COLOR_BLACK,
+        );
         if !is_selected {
             window.attroff(A_DIM);
         }
@@ -712,27 +767,36 @@ fn highlight_line(
     line: &str,
     h: &mut HighlightLines,
     color_map: &mut HashMap<syntect::highlighting::Color, i16>,
-    next_color_pair: &mut i16,
+    pair_map: &mut HashMap<(i16, i16), i16>,
+    next_color_num: &mut i16,
+    next_pair_num: &mut i16,
+    bg_color_num: i16,
 ) {
     let ranges: Vec<(Style, &str)> = h.highlight_line(line, &SYNTAX_SET).unwrap();
     for (style, text) in ranges {
-        let color = style.foreground;
-        let pair = color_map.entry(color).or_insert_with(|| {
-            let color_num = *next_color_pair;
-            let pair_num = *next_color_pair;
+        let fg_syntect_color = style.foreground;
+        let fg_color_num = *color_map.entry(fg_syntect_color).or_insert_with(|| {
+            let color_num = *next_color_num;
+            *next_color_num += 1;
             init_color(
                 color_num,
-                (color.r as f32 / 255.0 * 1000.0) as i16,
-                (color.g as f32 / 255.0 * 1000.0) as i16,
-                (color.b as f32 / 255.0 * 1000.0) as i16,
+                (fg_syntect_color.r as f32 / 255.0 * 1000.0) as i16,
+                (fg_syntect_color.g as f32 / 255.0 * 1000.0) as i16,
+                (fg_syntect_color.b as f32 / 255.0 * 1000.0) as i16,
             );
-            init_pair(pair_num, color_num, COLOR_BLACK);
-            *next_color_pair += 1;
+            color_num
+        });
+
+        let pair_key = (fg_color_num, bg_color_num);
+        let pair_num = *pair_map.entry(pair_key).or_insert_with(|| {
+            let pair_num = *next_pair_num;
+            *next_pair_num += 1;
+            init_pair(pair_num, fg_color_num, bg_color_num);
             pair_num
         });
-        window.attron(COLOR_PAIR(*pair as u32));
+        window.attron(COLOR_PAIR(pair_num as u32));
         window.addstr(text);
-        window.attroff(COLOR_PAIR(*pair as u32));
+        window.attroff(COLOR_PAIR(pair_num as u32));
     }
 }
 
@@ -821,10 +885,19 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) ->
 
     let mut state = AppState::new(repo_path, files, lines);
     let mut color_map: HashMap<syntect::highlighting::Color, i16> = HashMap::new();
-    let mut next_color_pair = 20;
+    let mut pair_map: HashMap<(i16, i16), i16> = HashMap::new();
+    let mut next_color_num = 20;
+    let mut next_pair_num = 20;
 
     while state.running {
-        render(&window, &state, &mut color_map, &mut next_color_pair);
+        render(
+            &window,
+            &state,
+            &mut color_map,
+            &mut pair_map,
+            &mut next_color_num,
+            &mut next_pair_num,
+        );
         let input = window.getch();
         state = update_state(state, input, &window);
     }
