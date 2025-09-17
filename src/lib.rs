@@ -249,21 +249,6 @@ impl AppState {
     }
 }
 
-fn adjust_scroll_for_item(
-    scroll: &mut usize,
-    start_line: usize,
-    end_line: usize,
-    window_height: usize,
-    margin: usize,
-) {
-    let bottom_margin_boundary = window_height.saturating_sub(margin);
-    if start_line < *scroll + margin {
-        *scroll = start_line.saturating_sub(margin);
-    } else if end_line > *scroll + bottom_margin_boundary {
-        *scroll = end_line.saturating_sub(bottom_margin_boundary);
-    }
-}
-
 pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) -> AppState {
     const SCROLL_MARGIN: usize = 3;
     let (max_y, _) = window.get_max_yx();
@@ -313,12 +298,23 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     state.file_cursor = state.file_cursor.saturating_sub(1);
                 }
                 CursorLevel::Hunk => {
-                    if state.hunk_cursor > 0 {
-                        state.hunk_cursor -= 1;
-                    } else if state.file_cursor > 0 {
-                        state.file_cursor -= 1;
-                        if let Some(file) = state.files.get(state.file_cursor) {
-                            state.hunk_cursor = file.hunks.len().saturating_sub(1);
+                    let window_height = max_y as usize;
+                    if let Some(file) = state.files.get(state.file_cursor) {
+                        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                            let hunk_start = hunk.start_line;
+                            let is_hunk_taller_than_screen = hunk.lines.len() > window_height;
+                            let is_hunk_top_on_screen = hunk_start >= state.scroll;
+
+                            if is_hunk_taller_than_screen && !is_hunk_top_on_screen {
+                                state.scroll = state.scroll.saturating_sub(window_height / 2);
+                            } else if state.hunk_cursor > 0 {
+                                state.hunk_cursor -= 1;
+                            } else if state.file_cursor > 0 {
+                                state.file_cursor -= 1;
+                                if let Some(file) = state.files.get(state.file_cursor) {
+                                    state.hunk_cursor = file.hunks.len().saturating_sub(1);
+                                }
+                            }
                         }
                     }
                 }
@@ -370,7 +366,22 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
 
             let is_at_very_bottom = match state.cursor_level {
                 CursorLevel::File => at_bottom_of_file_list,
-                CursorLevel::Hunk => at_bottom_of_file_list && at_bottom_of_hunk_list,
+                CursorLevel::Hunk => {
+                    let window_height = max_y as usize;
+                    if let Some(file) = state.files.get(state.file_cursor) {
+                        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                            let hunk_end = hunk.start_line + hunk.lines.len();
+                            let is_hunk_taller_than_screen = hunk.lines.len() > window_height;
+                            let is_hunk_bottom_on_screen = hunk_end <= state.scroll + window_height;
+
+                            if is_hunk_taller_than_screen && !is_hunk_bottom_on_screen {
+                                state.scroll = state.scroll.saturating_add(window_height / 2);
+                                return state;
+                            }
+                        }
+                    }
+                    at_bottom_of_file_list && at_bottom_of_hunk_list
+                }
                 CursorLevel::Line => {
                     at_bottom_of_file_list && at_bottom_of_hunk_list && at_bottom_of_line_list
                 }
@@ -461,52 +472,30 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         _ => {}
     }
 
-    // Adjust scroll
-    let cursor_position = state.get_cursor_line_index();
+    let cursor_line = state.get_cursor_line_index();
     let window_height = max_y as usize;
+    const MARGIN: usize = 3;
 
-    match state.cursor_level {
-        CursorLevel::File => {
-            if let Some(file) = state.files.get(state.file_cursor) {
-                let start_line = file.start_line;
-                let end_line = if state.file_cursor + 1 < state.files.len() {
-                    state.files[state.file_cursor + 1].start_line
-                } else {
-                    state.lines.len()
-                };
-                adjust_scroll_for_item(
-                    &mut state.scroll,
-                    start_line,
-                    end_line,
-                    window_height,
-                    SCROLL_MARGIN,
-                );
-            }
-        }
-        CursorLevel::Hunk => {
-            if let Some(file) = state.files.get(state.file_cursor) {
-                if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                    let start_line = hunk.start_line;
-                    let end_line = start_line + hunk.lines.len();
-                    adjust_scroll_for_item(
-                        &mut state.scroll,
-                        start_line,
-                        end_line,
-                        window_height,
-                        SCROLL_MARGIN,
-                    );
+    if let Some(file) = state.files.get(state.file_cursor) {
+        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+            let hunk_len = hunk.lines.len();
+            if hunk_len <= window_height {
+                let hunk_start = hunk.start_line;
+                let hunk_end = hunk_start + hunk_len;
+
+                if hunk_start < state.scroll + MARGIN {
+                    state.scroll = hunk_start.saturating_sub(MARGIN);
+                } else if hunk_end > state.scroll + window_height - MARGIN {
+                    state.scroll = hunk_end.saturating_sub(window_height - MARGIN);
                 }
             }
         }
-        CursorLevel::Line => {
-            adjust_scroll_for_item(
-                &mut state.scroll,
-                cursor_position,
-                cursor_position + 1,
-                window_height,
-                SCROLL_MARGIN,
-            );
-        }
+    }
+
+    if cursor_line < state.scroll + MARGIN {
+        state.scroll = cursor_line.saturating_sub(MARGIN);
+    } else if cursor_line >= state.scroll + window_height - MARGIN {
+        state.scroll = cursor_line.saturating_sub(window_height - MARGIN);
     }
 
     state

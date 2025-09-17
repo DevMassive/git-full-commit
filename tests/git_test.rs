@@ -132,3 +132,36 @@ fn test_unstage_hunk_with_undo_redo() {
     let state_after_redo = update_state(state_after_undo, Some(Input::Character('r')), &window);
     assert_eq!(state_after_redo.files.len(), 0);
 }
+
+#[test]
+fn test_hunk_half_page_scroll() {
+    let tmp_dir = TempDir::new().unwrap();
+    let repo_path = tmp_dir.path().to_path_buf();
+
+    run_git(&repo_path, &["init"]);
+    run_git(&repo_path, &["config", "user.name", "Test"]);
+    run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+
+    let file_path = repo_path.join("test.txt");
+    let initial_content: String = (0..100).map(|i| format!("line {}", i)).collect::<Vec<String>>().join("\n");
+    fs::write(&file_path, initial_content).unwrap();
+
+    run_git(&repo_path, &["add", "test.txt"]);
+    run_git(&repo_path, &["commit", "-m", "initial commit"]);
+
+    let modified_content: String = (0..100).map(|i| format!("modified line {}", i)).collect::<Vec<String>>().join("\n");
+    fs::write(&file_path, modified_content).unwrap();
+    run_git(&repo_path, &["add", "test.txt"]);
+
+    let (files, lines) = get_diff(repo_path.clone());
+    let mut state = AppState::new(repo_path.clone(), files, lines);
+    state.cursor_level = CursorLevel::Hunk;
+
+    let window = pancurses::newwin(20, 80, 0, 0);
+
+    let state_after_scroll_down = update_state(state, Some(Input::KeyDown), &window);
+    assert_eq!(state_after_scroll_down.scroll, 10);
+
+    let state_after_scroll_up = update_state(state_after_scroll_down, Some(Input::KeyUp), &window);
+    assert_eq!(state_after_scroll_up.scroll, 0);
+}
