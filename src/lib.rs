@@ -702,6 +702,10 @@ fn render_line(
         window.clrtoeol();
         window.attroff(COLOR_PAIR(bg_pair as u32));
 
+        if !is_selected {
+            window.attron(A_DIM);
+        }
+
         window.attron(COLOR_PAIR(sign_pair_num as u32));
         window.mvaddstr(line_render_index, 0, "+");
         window.attroff(COLOR_PAIR(sign_pair_num as u32));
@@ -717,6 +721,10 @@ fn render_line(
             next_pair_num,
             bg_color,
         );
+
+        if !is_selected {
+            window.attroff(A_DIM);
+        }
     } else if line.starts_with('-') {
         let (sign_pair_num, bg_color) = if is_selected { (2, 19) } else { (4, 19) };
 
@@ -730,6 +738,10 @@ fn render_line(
         window.mv(line_render_index, 0);
         window.clrtoeol();
         window.attroff(COLOR_PAIR(bg_pair as u32));
+
+        if !is_selected {
+            window.attron(A_DIM);
+        }
 
         window.attron(COLOR_PAIR(sign_pair_num as u32));
         window.mvaddstr(line_render_index, 0, "-");
@@ -746,6 +758,10 @@ fn render_line(
             next_pair_num,
             bg_color,
         );
+
+        if !is_selected {
+            window.attroff(A_DIM);
+        }
     } else if line.starts_with("@@ ") {
         window.attron(COLOR_PAIR(6));
         window.mvaddstr(line_render_index, 0, line);
@@ -895,8 +911,8 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) ->
     init_color(15, 1000, 0, 0);
     init_color(16, 0, 500, 0);
     init_color(17, 500, 0, 0);
-    init_color(18, 0, 80, 0);
-    init_color(19, 80, 0, 0);
+    init_color(18, 0, 200, 0);
+    init_color(19, 200, 0, 0);
 
     init_pair(1, 14, 18);
     init_pair(2, 15, 19);
