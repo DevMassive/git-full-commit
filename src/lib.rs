@@ -525,10 +525,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
     state
 }
 
-
-
-
-
 fn render(
     window: &Window,
     state: &AppState,

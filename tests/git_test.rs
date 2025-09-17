@@ -1,5 +1,5 @@
 use git_reset_pp::*;
-use pancurses::{initscr, Input, Window};
+use pancurses::{Input, Window, initscr};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command as OsCommand;
@@ -128,13 +128,19 @@ fn test_hunk_half_page_scroll() {
     run_git(&repo_path, &["config", "user.email", "test@example.com"]);
 
     let file_path = repo_path.join("test.txt");
-    let initial_content: String = (0..100).map(|i| format!("line {}", i)).collect::<Vec<String>>().join("\n");
+    let initial_content: String = (0..100)
+        .map(|i| format!("line {i}"))
+        .collect::<Vec<String>>()
+        .join("\n");
     fs::write(&file_path, initial_content).unwrap();
 
     run_git(&repo_path, &["add", "test.txt"]);
     run_git(&repo_path, &["commit", "-m", "initial commit"]);
 
-    let modified_content: String = (0..100).map(|i| format!("modified line {}", i)).collect::<Vec<String>>().join("\n");
+    let modified_content: String = (0..100)
+        .map(|i| format!("modified line {i}"))
+        .collect::<Vec<String>>()
+        .join("\n");
     fs::write(&file_path, modified_content).unwrap();
     run_git(&repo_path, &["add", "test.txt"]);
 
