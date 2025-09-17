@@ -194,7 +194,7 @@ impl AppState {
             line_cursor: 0,
             files,
             lines,
-            cursor_level: CursorLevel::File,
+            cursor_level: CursorLevel::Hunk,
             command_history: CommandHistory::new(),
         }
     }
@@ -279,11 +279,35 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 state.file_cursor = state.file_cursor.saturating_sub(1);
             }
             CursorLevel::Hunk => {
-                state.hunk_cursor = state.hunk_cursor.saturating_sub(1);
+                if state.hunk_cursor > 0 {
+                    state.hunk_cursor -= 1;
+                } else if state.file_cursor > 0 {
+                    state.file_cursor -= 1;
+                    if let Some(file) = state.files.get(state.file_cursor) {
+                        state.hunk_cursor = file.hunks.len().saturating_sub(1);
+                    }
+                }
             }
             CursorLevel::Line => {
                 if state.line_cursor > 1 {
                     state.line_cursor -= 1;
+                } else if state.hunk_cursor > 0 {
+                    state.hunk_cursor -= 1;
+                    if let Some(file) = state.files.get(state.file_cursor) {
+                        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                            state.line_cursor = hunk.lines.len().saturating_sub(1);
+                        }
+                    }
+                } else if state.file_cursor > 0 {
+                    state.file_cursor -= 1;
+                    if let Some(file) = state.files.get(state.file_cursor) {
+                        state.hunk_cursor = file.hunks.len().saturating_sub(1);
+                        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                            state.line_cursor = hunk.lines.len().saturating_sub(1);
+                        } else {
+                            state.line_cursor = 0;
+                        }
+                    }
                 }
             }
         },
@@ -297,6 +321,9 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 if let Some(file) = state.files.get(state.file_cursor) {
                     if state.hunk_cursor < file.hunks.len().saturating_sub(1) {
                         state.hunk_cursor += 1;
+                    } else if state.file_cursor < state.files.len().saturating_sub(1) {
+                        state.file_cursor += 1;
+                        state.hunk_cursor = 0;
                     }
                 }
             }
@@ -305,6 +332,17 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
                         if state.line_cursor < hunk.lines.len().saturating_sub(1) {
                             state.line_cursor += 1;
+                        } else if state.hunk_cursor < file.hunks.len().saturating_sub(1) {
+                            state.hunk_cursor += 1;
+                            state.line_cursor = 1;
+                        } else if state.file_cursor < state.files.len().saturating_sub(1) {
+                            state.file_cursor += 1;
+                            state.hunk_cursor = 0;
+                            if !state.files[state.file_cursor].hunks.is_empty() {
+                                state.line_cursor = 1;
+                            } else {
+                                state.line_cursor = 0;
+                            }
                         }
                     }
                 }
