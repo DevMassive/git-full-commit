@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 use lazy_static::lazy_static;
 use pancurses::{
     A_DIM, A_REVERSE, COLOR_BLACK, COLOR_CYAN, COLOR_MAGENTA, COLOR_PAIR, Input, Window, curs_set,
@@ -963,15 +963,8 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
     }
 
     let should_commit = tui_loop(repo_path.clone(), files, lines);
-
-    if should_commit {
-        let mut cmd = OsCommand::new("git");
-        cmd.arg("commit");
-        cmd.current_dir(&repo_path);
-        let status = cmd.status().expect("failed to execute git commit");
-        if !status.success() {
-            eprintln!("git commit failed");
-        }
+    if !should_commit {
+        std::process::exit(1);
     }
 
     Ok(())
