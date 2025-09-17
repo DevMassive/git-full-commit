@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use pancurses::{
     A_REVERSE, COLOR_BLACK, COLOR_GREEN, COLOR_PAIR, COLOR_RED, Input, Window, curs_set, endwin,
     init_pair, initscr, noecho, start_color,
@@ -426,7 +426,11 @@ fn render(window: &Window, state: &AppState) {
             window.attron(A_REVERSE);
         }
 
-        if line.starts_with('+') {
+        if line.starts_with("--- ") {
+        } else if line.starts_with("+++ ") {
+        } else if line.starts_with("new file mode ") {
+            window.mvaddstr(i as i32, 0, "[new]");
+        } else if line.starts_with('+') {
             window.attron(COLOR_PAIR(1));
             window.mvaddstr(i as i32, 0, line);
             window.attroff(COLOR_PAIR(1));
@@ -438,6 +442,12 @@ fn render(window: &Window, state: &AppState) {
             let (_, max_x) = window.get_max_yx();
             window.mv(i as i32, 0);
             window.hline('-', max_x);
+        } else if line.starts_with("diff --git") {
+            let file_name_a_b = line.strip_prefix("diff --git ").unwrap();
+            let file_name_a = file_name_a_b.split_whitespace().next().unwrap();
+            let file_name = file_name_a.strip_prefix("a/").unwrap();
+            window.mvaddstr(i as i32, 0, file_name);
+        } else if line.starts_with("index ") {
         } else {
             window.mvaddstr(i as i32, 0, line);
         }
@@ -532,9 +542,7 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) {
 
 pub fn run(repo_path: PathBuf) -> Result<()> {
     if !is_git_repository(&repo_path) {
-        bail!(
-            "fatal: not a git repository (or any of the parent directories): .git"
-        );
+        bail!("fatal: not a git repository (or any of the parent directories): .git");
     }
 
     let (files, lines) = get_diff(repo_path.clone());
