@@ -255,7 +255,7 @@ fn adjust_scroll_for_item(
     end_line: usize,
     window_height: usize,
 ) {
-    let effective_height = if window_height > 1 { window_height - 1 } else { 1 };
+    let effective_height = if window_height > 2 { window_height - 2 } else { 1 };
     if start_line < *scroll {
         *scroll = start_line;
     } else if end_line > *scroll + effective_height {
@@ -485,7 +485,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
         }
         CursorLevel::Line => {
-            let effective_height = if window_height > 1 { window_height - 1 } else { 1 };
+            let effective_height = if window_height > 2 { window_height - 2 } else { 1 };
             if cursor_position < state.scroll {
                 state.scroll = cursor_position;
             } else if cursor_position >= state.scroll + effective_height {
@@ -537,7 +537,7 @@ fn render(
     for (i, line) in lines
         .iter()
         .skip(state.scroll)
-        .take(max_y as usize - 1) // Make space for the header
+        .take(max_y as usize - 2) // Make space for the header
         .enumerate()
     {
         let line_index_in_full_list = i + state.scroll;
@@ -546,7 +546,7 @@ fn render(
             state,
             line,
             line_index_in_full_list,
-            i as i32 + 1, // Start rendering from the second line
+            i as i32 + 2, // Start rendering from the third line
             cursor_position,
             &mut h,
             color_map,
@@ -561,6 +561,8 @@ fn render(
         window.clrtoeol();
         window.addstr(file_name);
         window.attroff(COLOR_PAIR(5));
+        window.mv(1, 0);
+        window.hline(pancurses::ACS_HLINE(), max_x);
     }
 
     if state.is_bottom {
