@@ -434,6 +434,10 @@ fn render(window: &Window, state: &AppState) {
             window.attron(COLOR_PAIR(2));
             window.mvaddstr(i as i32, 0, line);
             window.attroff(COLOR_PAIR(2));
+        } else if line.starts_with("@@ ") {
+            let (_, max_x) = window.get_max_yx();
+            window.mv(i as i32, 0);
+            window.hline('-', max_x);
         } else {
             window.mvaddstr(i as i32, 0, line);
         }
