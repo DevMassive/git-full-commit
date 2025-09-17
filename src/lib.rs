@@ -564,6 +564,30 @@ fn render(
     let theme = &THEME_SET.themes["Solarized (dark)"];
     let mut h = HighlightLines::new(syntax, theme);
 
+    // Warm up highlighter state
+    let file_start_line = if !state.files.is_empty() {
+        state.files[current_file_index].start_line
+    } else {
+        0
+    };
+
+    for line in lines.iter().take(state.scroll).skip(file_start_line) {
+        if line.starts_with('+') || line.starts_with('-') {
+            let _ = h.highlight_line(&line[1..], &SYNTAX_SET).unwrap();
+        } else if line.starts_with("diff --git")
+            || line.starts_with("index ")
+            || line.starts_with("--- ")
+            || line.starts_with("+++ ")
+            || line.starts_with("@@ ")
+            || line.starts_with("new file mode ")
+        {
+            // Do nothing, just as render_line does
+        } else {
+            // This is a context line
+            let _ = h.highlight_line(line, &SYNTAX_SET).unwrap();
+        }
+    }
+
     for (i, line) in lines
         .iter()
         .skip(state.scroll)
