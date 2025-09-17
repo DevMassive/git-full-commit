@@ -1,7 +1,6 @@
 use anyhow::{Result, bail};
 use pancurses::{
-    A_BOLD, A_DIM, A_REVERSE, COLOR_BLACK, COLOR_GREEN, COLOR_MAGENTA, COLOR_PAIR, COLOR_RED,
-    Input, Window, curs_set, endwin, init_color, init_pair, initscr, noecho, start_color,
+    curs_set, endwin, init_color, init_pair, initscr, noecho, start_color, Input, Window, A_DIM, A_REVERSE, COLOR_BLACK, COLOR_CYAN, COLOR_MAGENTA, COLOR_PAIR
 };
 use std::path::{Path, PathBuf};
 use std::process::Command as OsCommand;
@@ -194,7 +193,7 @@ impl AppState {
             line_cursor: 0,
             files,
             lines,
-            cursor_level: CursorLevel::Line,
+            cursor_level: CursorLevel::Hunk,
             command_history: CommandHistory::new(),
         }
     }
@@ -234,6 +233,20 @@ impl AppState {
         self.hunk_cursor = 0;
         self.line_cursor = 0;
         self.scroll = 0;
+    }
+}
+
+fn adjust_scroll_for_item(
+    scroll: &mut usize,
+    start_line: usize,
+    end_line: usize,
+    window_height: usize,
+) {
+    if start_line < *scroll {
+        *scroll = start_line;
+    }
+    if end_line > *scroll + window_height {
+        *scroll = end_line - window_height;
     }
 }
 
@@ -387,16 +400,33 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
 
     // Adjust scroll
     let cursor_position = state.get_cursor_line_index();
+    let window_height = max_y as usize;
 
     match state.cursor_level {
-        CursorLevel::File | CursorLevel::Hunk => {
-            state.scroll = cursor_position;
+        CursorLevel::File => {
+            if let Some(file) = state.files.get(state.file_cursor) {
+                let start_line = file.start_line;
+                let end_line = if state.file_cursor + 1 < state.files.len() {
+                    state.files[state.file_cursor + 1].start_line
+                } else {
+                    state.lines.len()
+                };
+                adjust_scroll_for_item(&mut state.scroll, start_line, end_line, window_height);
+            }
+        }
+        CursorLevel::Hunk => {
+            if let Some(file) = state.files.get(state.file_cursor) {
+                if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                    let start_line = hunk.start_line;
+                    let end_line = start_line + hunk.lines.len();
+                    adjust_scroll_for_item(&mut state.scroll, start_line, end_line, window_height);
+                }
+            }
         }
         CursorLevel::Line => {
             if cursor_position < state.scroll {
                 state.scroll = cursor_position;
             }
-            let window_height = max_y as usize;
             if cursor_position >= state.scroll + window_height {
                 state.scroll = cursor_position - window_height + 1;
             }
@@ -486,9 +516,9 @@ fn render(window: &Window, state: &AppState) {
             window.mvaddstr(i as i32, 0, line);
             window.attroff(attributes);
         } else if line.starts_with("@@ ") {
-            window.attron(A_DIM);
+            window.attron(COLOR_PAIR(6));
             window.mvaddstr(i as i32, 0, line);
-            window.attroff(A_DIM);
+            window.attroff(COLOR_PAIR(6));
         } else if line.starts_with("diff --git") {
             let file_name_a_b = line.strip_prefix("diff --git ").unwrap();
             let file_name_a = file_name_a_b.split_whitespace().next().unwrap();
@@ -501,7 +531,13 @@ fn render(window: &Window, state: &AppState) {
             window.mv(i as i32, 0);
             window.hline('-', max_x);
         } else {
+            if !is_selected {
+                window.attron(A_DIM);
+            }
             window.mvaddstr(i as i32, 0, line);
+            if !is_selected {
+                window.attroff(A_DIM);
+            }
         }
 
         if is_cursor_line {
@@ -591,7 +627,8 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) {
     init_pair(3, 16, 18);
     init_pair(4, 17, 19);
 
-    init_pair(5, COLOR_MAGENTA, COLOR_BLACK);
+    init_pair(5, COLOR_CYAN, COLOR_BLACK);
+    init_pair(6, COLOR_MAGENTA, COLOR_BLACK);
 
     let mut state = AppState::new(repo_path, files, lines);
 
