@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use pancurses::{
-    A_REVERSE, COLOR_BLACK, COLOR_GREEN, COLOR_PAIR, COLOR_RED, Input, Window, curs_set, endwin,
-    init_pair, initscr, noecho, start_color,
+    A_BOLD, A_DIM, A_REVERSE, COLOR_BLACK, COLOR_GREEN, COLOR_MAGENTA, COLOR_PAIR, COLOR_RED,
+    Input, Window, curs_set, endwin, init_color, init_pair, initscr, noecho, start_color,
 };
 use std::path::{Path, PathBuf};
 use std::process::Command as OsCommand;
@@ -194,7 +194,7 @@ impl AppState {
             line_cursor: 0,
             files,
             lines,
-            cursor_level: CursorLevel::Hunk,
+            cursor_level: CursorLevel::Line,
             command_history: CommandHistory::new(),
         }
     }
@@ -420,34 +420,59 @@ fn render(window: &Window, state: &AppState) {
         .enumerate()
     {
         let line_index_in_full_list = i + state.scroll;
-        let is_cursor_line = line_index_in_full_list == cursor_position;
+        let is_cursor_line = line_index_in_full_list == cursor_position
+            && matches!(state.cursor_level, CursorLevel::Line);
+        
+        // TODO
+        let is_selected = is_cursor_line;
 
         if is_cursor_line {
             window.attron(A_REVERSE);
         }
 
         if line.starts_with("--- ") {
+            window.attron(A_DIM);
+            window.mvaddstr(i as i32, 0, line);
+            window.attroff(A_DIM);
         } else if line.starts_with("+++ ") {
+            window.attron(A_DIM);
+            window.mvaddstr(i as i32, 0, line);
+            window.attroff(A_DIM);
         } else if line.starts_with("new file mode ") {
             window.mvaddstr(i as i32, 0, "[new]");
         } else if line.starts_with('+') {
-            window.attron(COLOR_PAIR(1));
+            let attributes = if is_selected {
+                COLOR_PAIR(1)
+            } else {
+                COLOR_PAIR(3)
+            };
+            window.attron(attributes);
             window.mvaddstr(i as i32, 0, line);
-            window.attroff(COLOR_PAIR(1));
+            window.attroff(attributes);
         } else if line.starts_with('-') {
-            window.attron(COLOR_PAIR(2));
+            let attributes = if is_selected {
+                COLOR_PAIR(2)
+            } else {
+                COLOR_PAIR(4)
+            };
+            window.attron(attributes);
             window.mvaddstr(i as i32, 0, line);
-            window.attroff(COLOR_PAIR(2));
+            window.attroff(attributes);
         } else if line.starts_with("@@ ") {
-            let (_, max_x) = window.get_max_yx();
-            window.mv(i as i32, 0);
-            window.hline('-', max_x);
+            window.attron(A_DIM);
+            window.mvaddstr(i as i32, 0, line);
+            window.attroff(A_DIM);
         } else if line.starts_with("diff --git") {
             let file_name_a_b = line.strip_prefix("diff --git ").unwrap();
             let file_name_a = file_name_a_b.split_whitespace().next().unwrap();
             let file_name = file_name_a.strip_prefix("a/").unwrap();
+            window.attron(COLOR_PAIR(5));
             window.mvaddstr(i as i32, 0, file_name);
+            window.attroff(COLOR_PAIR(5));
         } else if line.starts_with("index ") {
+            let (_, max_x) = window.get_max_yx();
+            window.mv(i as i32, 0);
+            window.hline('-', max_x);
         } else {
             window.mvaddstr(i as i32, 0, line);
         }
@@ -526,8 +551,20 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) {
     curs_set(0);
 
     start_color();
-    init_pair(1, COLOR_GREEN, COLOR_BLACK);
-    init_pair(2, COLOR_RED, COLOR_BLACK);
+    init_color(14, 0, 1000, 0);
+    init_color(15, 1000, 0, 0);
+    init_color(16, 0, 500, 0);
+    init_color(17, 500, 0, 0);
+    init_color(18, 0, 80, 0);
+    init_color(19, 80, 0, 0);
+
+    init_pair(1, 14, 18);
+    init_pair(2, 15, 19);
+
+    init_pair(3, 16, 18);
+    init_pair(4, 17, 19);
+
+    init_pair(5, COLOR_MAGENTA, COLOR_BLACK);
 
     let mut state = AppState::new(repo_path, files, lines);
 
