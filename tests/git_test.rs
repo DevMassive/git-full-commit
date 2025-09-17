@@ -1,5 +1,5 @@
 use git_reset_pp::*;
-use pancurses::{Input, Window, endwin, initscr};
+use pancurses::Input;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command as OsCommand;
@@ -17,12 +17,6 @@ impl TestSetup {
             _tmp_dir: tmp_dir,
             repo_path,
         }
-    }
-}
-
-impl Drop for TestSetup {
-    fn drop(&mut self) {
-        endwin();
     }
 }
 
@@ -66,10 +60,6 @@ fn run_git(dir: &std::path::Path, args: &[&str]) {
     }
 }
 
-fn init_test_window() -> Window {
-    initscr()
-}
-
 fn create_test_state(test_setup: &TestSetup) -> AppState {
     let (files, lines) = get_diff(test_setup.repo_path.clone());
     AppState::new(test_setup.repo_path.clone(), files, lines)
@@ -78,7 +68,7 @@ fn create_test_state(test_setup: &TestSetup) -> AppState {
 #[test]
 fn test_update_state_scroll_down() {
     let setup = TestSetup::new();
-    let window = init_test_window();
+    let window = pancurses::newwin(0, 0, 0, 0);
     let mut state = create_test_state(&setup);
     state.cursor_level = CursorLevel::Line;
     state.line_cursor = 1;
@@ -89,7 +79,7 @@ fn test_update_state_scroll_down() {
 #[test]
 fn test_update_state_scroll_up() {
     let setup = TestSetup::new();
-    let window = init_test_window();
+    let window = pancurses::newwin(0, 0, 0, 0);
     let mut state = create_test_state(&setup);
     state.cursor_level = CursorLevel::Line;
     state.line_cursor = 2;
@@ -100,7 +90,7 @@ fn test_update_state_scroll_up() {
 #[test]
 fn test_update_state_quit() {
     let setup = TestSetup::new();
-    let window = init_test_window();
+    let window = pancurses::newwin(0, 0, 0, 0);
     let state = create_test_state(&setup);
     let new_state = update_state(state, Some(Input::Character('q')), &window);
     assert!(!new_state.running);
@@ -109,7 +99,7 @@ fn test_update_state_quit() {
 #[test]
 fn test_unstage_file() {
     let setup = TestSetup::new();
-    let window = init_test_window();
+    let window = pancurses::newwin(0, 0, 0, 0);
     let mut state = create_test_state(&setup);
     state.cursor_level = CursorLevel::File;
     let new_state = update_state(state, Some(Input::Character('\n')), &window);
@@ -119,7 +109,7 @@ fn test_unstage_file() {
 #[test]
 fn test_unstage_hunk_with_undo_redo() {
     let setup = TestSetup::new();
-    let window = init_test_window();
+    let window = pancurses::newwin(0, 0, 0, 0);
     let mut state = create_test_state(&setup);
 
     // Ensure we have a file with a hunk

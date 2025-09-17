@@ -1,10 +1,20 @@
 use anyhow::{Result, bail};
+use lazy_static::lazy_static;
 use pancurses::{
     A_DIM, A_REVERSE, COLOR_BLACK, COLOR_CYAN, COLOR_MAGENTA, COLOR_PAIR, Input, Window, curs_set,
     endwin, init_color, init_pair, initscr, noecho, start_color,
 };
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command as OsCommand;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{Style, ThemeSet};
+use syntect::parsing::SyntaxSet;
+
+lazy_static! {
+    pub static ref SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
+    pub static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
+}
 
 pub trait Command {
     fn execute(&mut self);
@@ -428,7 +438,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     // Do nothing
                 }
             }
-        },
+        }
         Some(Input::KeyLeft) => {
             state.is_bottom = false;
             match state.cursor_level {
@@ -445,7 +455,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     state.line_cursor = 0;
                 }
             }
-        },
+        }
         _ => {}
     }
 
@@ -487,12 +497,30 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
     state
 }
 
-fn render(window: &Window, state: &AppState) {
+fn render(
+    window: &Window,
+    state: &AppState,
+    color_map: &mut HashMap<syntect::highlighting::Color, i16>,
+    next_color_pair: &mut i16,
+) {
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
     let lines = &state.lines;
 
     let cursor_position = state.get_cursor_line_index();
+
+    let file_name = &state.files[state.file_cursor].file_name;
+    let syntax = SYNTAX_SET
+        .find_syntax_by_extension(
+            Path::new(file_name)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("txt"),
+        )
+        .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
+
+    let theme = &THEME_SET.themes["Solarized (dark)"];
+    let mut h = HighlightLines::new(syntax, theme);
 
     for (i, line) in lines
         .iter()
@@ -501,99 +529,17 @@ fn render(window: &Window, state: &AppState) {
         .enumerate()
     {
         let line_index_in_full_list = i + state.scroll;
-        let is_cursor_line = line_index_in_full_list == cursor_position
-            && matches!(state.cursor_level, CursorLevel::Line);
-
-        let is_selected = match state.cursor_level {
-            CursorLevel::File => {
-                if let Some(file) = state.files.get(state.file_cursor) {
-                    let file_start = file.start_line;
-                    let file_end = if state.file_cursor + 1 < state.files.len() {
-                        state.files[state.file_cursor + 1].start_line
-                    } else {
-                        state.lines.len()
-                    };
-                    line_index_in_full_list >= file_start && line_index_in_full_list < file_end
-                } else {
-                    false
-                }
-            }
-            CursorLevel::Hunk => {
-                if let Some(file) = state.files.get(state.file_cursor) {
-                    if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                        let hunk_start = hunk.start_line;
-                        let hunk_end = hunk_start + hunk.lines.len();
-                        line_index_in_full_list >= hunk_start && line_index_in_full_list < hunk_end
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            }
-            CursorLevel::Line => is_cursor_line,
-        };
-
-        if is_cursor_line {
-            window.attron(A_REVERSE);
-        }
-
-        if line.starts_with("--- ") {
-            window.attron(A_DIM);
-            window.mvaddstr(i as i32, 0, line);
-            window.attroff(A_DIM);
-        } else if line.starts_with("+++ ") {
-            window.attron(A_DIM);
-            window.mvaddstr(i as i32, 0, line);
-            window.attroff(A_DIM);
-        } else if line.starts_with("new file mode ") {
-            window.mvaddstr(i as i32, 0, "[new]");
-        } else if line.starts_with('+') {
-            let attributes = if is_selected {
-                COLOR_PAIR(1)
-            } else {
-                COLOR_PAIR(3)
-            };
-            window.attron(attributes);
-            window.mvaddstr(i as i32, 0, line);
-            window.attroff(attributes);
-        } else if line.starts_with('-') {
-            let attributes = if is_selected {
-                COLOR_PAIR(2)
-            } else {
-                COLOR_PAIR(4)
-            };
-            window.attron(attributes);
-            window.mvaddstr(i as i32, 0, line);
-            window.attroff(attributes);
-        } else if line.starts_with("@@ ") {
-            window.attron(COLOR_PAIR(6));
-            window.mvaddstr(i as i32, 0, line);
-            window.attroff(COLOR_PAIR(6));
-        } else if line.starts_with("diff --git ") {
-            let file_name_a_b = line.strip_prefix("diff --git ").unwrap();
-            let file_name_a = file_name_a_b.split_whitespace().next().unwrap();
-            let file_name = file_name_a.strip_prefix("a/").unwrap();
-            window.attron(COLOR_PAIR(5));
-            window.mvaddstr(i as i32, 0, file_name);
-            window.attroff(COLOR_PAIR(5));
-        } else if line.starts_with("index ") {
-            let (_, max_x) = window.get_max_yx();
-            window.mv(i as i32, 0);
-            window.hline('-', max_x);
-        } else {
-            if !is_selected {
-                window.attron(A_DIM);
-            }
-            window.mvaddstr(i as i32, 0, line);
-            if !is_selected {
-                window.attroff(A_DIM);
-            }
-        }
-
-        if is_cursor_line {
-            window.attroff(A_REVERSE);
-        }
+        render_line(
+            window,
+            state,
+            line,
+            line_index_in_full_list,
+            i as i32,
+            cursor_position,
+            &mut h,
+            color_map,
+            next_color_pair,
+        );
     }
 
     if state.is_bottom {
@@ -601,6 +547,142 @@ fn render(window: &Window, state: &AppState) {
     }
 
     window.refresh();
+}
+
+fn render_line(
+    window: &Window,
+    state: &AppState,
+    line: &str,
+    line_index_in_full_list: usize,
+    line_render_index: i32,
+    cursor_position: usize,
+    h: &mut HighlightLines,
+    color_map: &mut HashMap<syntect::highlighting::Color, i16>,
+    next_color_pair: &mut i16,
+) {
+    let is_cursor_line = line_index_in_full_list == cursor_position
+        && matches!(state.cursor_level, CursorLevel::Line);
+
+    let is_selected = match state.cursor_level {
+        CursorLevel::File => {
+            if let Some(file) = state.files.get(state.file_cursor) {
+                let file_start = file.start_line;
+                let file_end = if state.file_cursor + 1 < state.files.len() {
+                    state.files[state.file_cursor + 1].start_line
+                } else {
+                    state.lines.len()
+                };
+                line_index_in_full_list >= file_start && line_index_in_full_list < file_end
+            } else {
+                false
+            }
+        }
+        CursorLevel::Hunk => {
+            if let Some(file) = state.files.get(state.file_cursor) {
+                if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                    let hunk_start = hunk.start_line;
+                    let hunk_end = hunk_start + hunk.lines.len();
+                    line_index_in_full_list >= hunk_start && line_index_in_full_list < hunk_end
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+        CursorLevel::Line => is_cursor_line,
+    };
+
+    if is_cursor_line {
+        window.attron(A_REVERSE);
+    }
+
+    if line.starts_with("--- ") {
+        window.attron(A_DIM);
+        window.mvaddstr(line_render_index, 0, line);
+        window.attroff(A_DIM);
+    } else if line.starts_with("+++ ") {
+        window.attron(A_DIM);
+        window.mvaddstr(line_render_index, 0, line);
+        window.attroff(A_DIM);
+    } else if line.starts_with("new file mode ") {
+        window.mvaddstr(line_render_index, 0, "[new]");
+    } else if line.starts_with('+') {
+        let attributes = if is_selected {
+            COLOR_PAIR(1)
+        } else {
+            COLOR_PAIR(3)
+        };
+        window.attron(attributes);
+        window.mvaddstr(line_render_index, 0, line);
+        window.attroff(attributes);
+    } else if line.starts_with('-') {
+        let attributes = if is_selected {
+            COLOR_PAIR(2)
+        } else {
+            COLOR_PAIR(4)
+        };
+        window.attron(attributes);
+        window.mvaddstr(line_render_index, 0, line);
+        window.attroff(attributes);
+    } else if line.starts_with("@@ ") {
+        window.attron(COLOR_PAIR(6));
+        window.mvaddstr(line_render_index, 0, line);
+        window.attroff(COLOR_PAIR(6));
+    } else if line.starts_with("diff --git ") {
+        let file_name_a_b = line.strip_prefix("diff --git ").unwrap();
+        let file_name_a = file_name_a_b.split_whitespace().next().unwrap();
+        let file_name = file_name_a.strip_prefix("a/").unwrap();
+        window.attron(COLOR_PAIR(5));
+        window.mvaddstr(line_render_index, 0, file_name);
+        window.attroff(COLOR_PAIR(5));
+    } else if line.starts_with("index ") {
+        let (_, max_x) = window.get_max_yx();
+        window.mv(line_render_index, 0);
+        window.hline('-', max_x);
+    } else {
+        window.mv(line_render_index, 0);
+        if !is_selected {
+            window.attron(A_DIM);
+        }
+        highlight_line(window, line, h, color_map, next_color_pair);
+        if !is_selected {
+            window.attroff(A_DIM);
+        }
+    }
+
+    if is_cursor_line {
+        window.attroff(A_REVERSE);
+    }
+}
+
+fn highlight_line(
+    window: &Window,
+    line: &str,
+    h: &mut HighlightLines,
+    color_map: &mut HashMap<syntect::highlighting::Color, i16>,
+    next_color_pair: &mut i16,
+) {
+    let ranges: Vec<(Style, &str)> = h.highlight_line(line, &SYNTAX_SET).unwrap();
+    for (style, text) in ranges {
+        let color = style.foreground;
+        let pair = color_map.entry(color).or_insert_with(|| {
+            let color_num = *next_color_pair;
+            let pair_num = *next_color_pair;
+            init_color(
+                color_num,
+                (color.r as f32 / 255.0 * 1000.0) as i16,
+                (color.g as f32 / 255.0 * 1000.0) as i16,
+                (color.b as f32 / 255.0 * 1000.0) as i16,
+            );
+            init_pair(pair_num, color_num, COLOR_BLACK);
+            *next_color_pair += 1;
+            pair_num
+        });
+        window.attron(COLOR_PAIR(*pair as u32));
+        window.addstr(text);
+        window.attroff(COLOR_PAIR(*pair as u32));
+    }
 }
 
 pub fn get_diff(repo_path: PathBuf) -> (Vec<FileDiff>, Vec<String>) {
@@ -687,9 +769,11 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) ->
     init_pair(6, COLOR_MAGENTA, COLOR_BLACK);
 
     let mut state = AppState::new(repo_path, files, lines);
+    let mut color_map: HashMap<syntect::highlighting::Color, i16> = HashMap::new();
+    let mut next_color_pair = 20;
 
     while state.running {
-        render(&window, &state);
+        render(&window, &state, &mut color_map, &mut next_color_pair);
         let input = window.getch();
         state = update_state(state, input, &window);
     }
