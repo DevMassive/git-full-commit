@@ -422,9 +422,36 @@ fn render(window: &Window, state: &AppState) {
         let line_index_in_full_list = i + state.scroll;
         let is_cursor_line = line_index_in_full_list == cursor_position
             && matches!(state.cursor_level, CursorLevel::Line);
-        
-        // TODO
-        let is_selected = is_cursor_line;
+
+        let is_selected = match state.cursor_level {
+            CursorLevel::File => {
+                if let Some(file) = state.files.get(state.file_cursor) {
+                    let file_start = file.start_line;
+                    let file_end = if state.file_cursor + 1 < state.files.len() {
+                        state.files[state.file_cursor + 1].start_line
+                    } else {
+                        state.lines.len()
+                    };
+                    line_index_in_full_list >= file_start && line_index_in_full_list < file_end
+                } else {
+                    false
+                }
+            }
+            CursorLevel::Hunk => {
+                if let Some(file) = state.files.get(state.file_cursor) {
+                    if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                        let hunk_start = hunk.start_line;
+                        let hunk_end = hunk_start + hunk.lines.len();
+                        line_index_in_full_list >= hunk_start && line_index_in_full_list < hunk_end
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+            CursorLevel::Line => is_cursor_line,
+        };
 
         if is_cursor_line {
             window.attron(A_REVERSE);
