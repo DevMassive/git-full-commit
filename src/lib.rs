@@ -660,7 +660,7 @@ fn render_line(
     } else if line.starts_with("index ") {
         let (_, max_x) = window.get_max_yx();
         window.mv(line_render_index, 0);
-        window.hline('-', max_x);
+        window.hline(pancurses::ACS_HLINE(), max_x);
     } else {
         window.mv(line_render_index, 0);
         if !is_selected {
