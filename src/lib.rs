@@ -958,8 +958,7 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
     let (files, lines) = get_diff(repo_path.clone());
 
     if files.is_empty() {
-        println!("No staged changes found.");
-        return Ok(());
+        bail!("No staged changes found.");
     }
 
     let should_commit = tui_loop(repo_path.clone(), files, lines);
