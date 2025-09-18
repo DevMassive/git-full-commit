@@ -1,15 +1,8 @@
 use anyhow::{Result, bail};
-use pancurses::{
-    A_DIM, A_REVERSE, COLOR_BLACK, COLOR_CYAN, COLOR_MAGENTA, COLOR_PAIR, Input, Window, curs_set,
-    endwin, init_color, init_pair, initscr, noecho, start_color,
-};
-use std::collections::HashMap;
+use pancurses::{COLOR_BLACK, COLOR_PAIR, Input, Window, curs_set, endwin, init_color, init_pair, initscr, noecho, start_color};
+
 use std::path::{Path, PathBuf};
 use std::process::Command as OsCommand;
-use syntect::easy::HighlightLines;
-use syntect::highlighting::{Style, ThemeSet};
-use syntect::parsing::SyntaxSet;
-use syntect_assets::assets::HighlightingAssets;
 use unicode_width::UnicodeWidthStr;
 
 mod commit_storage;
@@ -820,16 +813,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
     state
 }
 
-fn render(
-    window: &Window,
-    state: &AppState,
-    color_map: &mut HashMap<syntect::highlighting::Color, i16>,
-    pair_map: &mut HashMap<(i16, i16), i16>,
-    next_color_num: &mut i16,
-    next_pair_num: &mut i16,
-    syntax_set: &SyntaxSet,
-    theme_set: &ThemeSet,
-) {
+fn render(window: &Window, state: &AppState) {
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
 
@@ -837,19 +821,15 @@ fn render(
 
     // Render sticky header
     if !state.files.is_empty() {
-        window.attron(COLOR_PAIR(5));
         for (i, file) in state.files.iter().enumerate() {
+            let is_selected_file = i == state.file_cursor;
+            let pair = if is_selected_file { 5 } else { 1 };
+            window.attron(COLOR_PAIR(pair));
             window.mv(i as i32, 0);
             window.clrtoeol();
-            if i == state.file_cursor {
-                window.attron(A_REVERSE);
-            }
             window.addstr(&file.file_name);
-            if i == state.file_cursor {
-                window.attroff(A_REVERSE);
-            }
+            window.attroff(COLOR_PAIR(pair));
         }
-        window.attroff(COLOR_PAIR(5));
     }
 
     // Render commit message line
@@ -864,9 +844,9 @@ fn render(
     };
 
     if state.file_cursor == num_files {
-        window.attron(A_REVERSE);
+        window.attron(COLOR_PAIR(5));
         window.addstr(prefix);
-        window.attroff(A_REVERSE);
+        window.attroff(COLOR_PAIR(5));
     } else {
         window.addstr(prefix);
     }
@@ -900,18 +880,6 @@ fn render(
 
     let cursor_position = state.get_cursor_line_index();
 
-    let syntax = syntax_set
-        .find_syntax_by_extension(
-            Path::new(&selected_file.file_name)
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("txt"),
-        )
-        .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
-
-    let theme = &theme_set.themes["Monokai Extended"];
-    let mut h = HighlightLines::new(syntax, theme);
-
     let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); lines.len()];
     for hunk in &selected_file.hunks {
         let mut old_line_counter = hunk.old_start;
@@ -937,24 +905,6 @@ fn render(
         }
     }
 
-    // Warm up highlighter state
-    for line in lines.iter().take(state.scroll) {
-        if line.starts_with('+') || line.starts_with('-') {
-            let _ = h.highlight_line(&line[1..], syntax_set).unwrap();
-        } else if line.starts_with("diff --git")
-            || line.starts_with("index ")
-            || line.starts_with("--- ")
-            || line.starts_with("+++ ")
-            || line.starts_with("@@ ")
-            || line.starts_with("new file mode ")
-        {
-            // Do nothing, just as render_line does
-        } else {
-            // This is a context line
-            let _ = h.highlight_line(line, syntax_set).unwrap();
-        }
-    }
-
     for (i, line) in lines
         .iter()
         .skip(state.scroll)
@@ -970,14 +920,8 @@ fn render(
             line_index_in_file,
             i as i32 + header_height as i32,
             cursor_position,
-            &mut h,
-            color_map,
-            pair_map,
-            next_color_num,
-            next_pair_num,
             old_line_num,
             new_line_num,
-            syntax_set,
         );
     }
 
@@ -991,20 +935,15 @@ fn render_line(
     line_index_in_file: usize,
     line_render_index: i32,
     cursor_position: usize,
-    h: &mut HighlightLines,
-    color_map: &mut HashMap<syntect::highlighting::Color, i16>,
-    pair_map: &mut HashMap<(i16, i16), i16>,
-    next_color_num: &mut i16,
-    next_pair_num: &mut i16,
     old_line_num: Option<usize>,
     new_line_num: Option<usize>,
-    syntax_set: &SyntaxSet,
 ) {
     let is_cursor_line = line_index_in_file == cursor_position;
 
-    if is_cursor_line {
-        window.attron(A_REVERSE);
-    }
+    let default_pair = if is_cursor_line { 5 } else { 1 };
+    let deletion_pair = if is_cursor_line { 6 } else { 2 };
+    let addition_pair = if is_cursor_line { 7 } else { 3 };
+    let hunk_header_pair = if is_cursor_line { 8 } else { 4 };
 
     let line_num_str = format!(
         "{:>4} {:>4}",
@@ -1016,154 +955,49 @@ fn render_line(
     window.mv(line_render_index, 0);
     window.clrtoeol();
 
-    if line.starts_with("--- ") {
-        window.attron(A_DIM);
-        window.mvaddstr(line_render_index, 0, line);
-        window.attroff(A_DIM);
-    } else if line.starts_with("+++ ") {
-        window.attron(A_DIM);
-        window.mvaddstr(line_render_index, 0, line);
-        window.attroff(A_DIM);
+    if line.starts_with("--- ") || line.starts_with("+++ ") {
+        window.attron(COLOR_PAIR(deletion_pair));
+        window.mvaddstr(line_render_index, 0, &line_num_str);
+        window.addstr(" ");
+        window.addstr(line);
+        window.attroff(COLOR_PAIR(deletion_pair));
     } else if line.starts_with('+') {
-        let (sign_pair_num, bg_color) = (1, 18);
-
-        let bg_pair = *pair_map.entry((-1, bg_color)).or_insert_with(|| {
-            let pair_num = *next_pair_num;
-            *next_pair_num += 1;
-            init_pair(pair_num, COLOR_BLACK, bg_color);
-            pair_num
-        });
-        window.attron(COLOR_PAIR(bg_pair as u32));
-        window.mv(line_render_index, 0);
-        window.clrtoeol();
-        window.attroff(COLOR_PAIR(bg_pair as u32));
-
-        window.attron(COLOR_PAIR(6));
+        window.attron(COLOR_PAIR(addition_pair));
         window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.attroff(COLOR_PAIR(6));
-
-        window.attron(COLOR_PAIR(sign_pair_num as u32));
-        window.mvaddstr(line_render_index, line_content_offset, "+");
-        window.attroff(COLOR_PAIR(sign_pair_num as u32));
-
-        window.mv(line_render_index, line_content_offset + 1);
-        highlight_line(
-            window,
-            &line[1..],
-            h,
-            color_map,
-            pair_map,
-            next_color_num,
-            next_pair_num,
-            bg_color,
-            syntax_set,
-        );
+        window.mvaddstr(line_render_index, line_content_offset, line);
+        window.attroff(COLOR_PAIR(addition_pair));
     } else if line.starts_with('-') {
-        let (sign_pair_num, bg_color) = (2, 19);
-
-        let bg_pair = *pair_map.entry((-1, bg_color)).or_insert_with(|| {
-            let pair_num = *next_pair_num;
-            *next_pair_num += 1;
-            init_pair(pair_num, COLOR_BLACK, bg_color);
-            pair_num
-        });
-        window.attron(COLOR_PAIR(bg_pair as u32));
-        window.mv(line_render_index, 0);
-        window.clrtoeol();
-        window.attroff(COLOR_PAIR(bg_pair as u32));
-
-        window.attron(COLOR_PAIR(6));
+        window.attron(COLOR_PAIR(deletion_pair));
         window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.attroff(COLOR_PAIR(6));
-
-        window.attron(COLOR_PAIR(sign_pair_num as u32));
-        window.mvaddstr(line_render_index, line_content_offset, "-");
-        window.attroff(COLOR_PAIR(sign_pair_num as u32));
-
-        window.mv(line_render_index, line_content_offset + 1);
-        highlight_line(
-            window,
-            &line[1..],
-            h,
-            color_map,
-            pair_map,
-            next_color_num,
-            next_pair_num,
-            bg_color,
-            syntax_set,
-        );
+        window.mvaddstr(line_render_index, line_content_offset, line);
+        window.attroff(COLOR_PAIR(deletion_pair));
     } else if line.starts_with("@@ ") {
-        window.attron(COLOR_PAIR(6));
-        window.mvaddstr(line_render_index, 0, line);
-        window.attroff(COLOR_PAIR(6));
-    } else if line.starts_with("diff --git ") {
-        window.attron(COLOR_PAIR(5));
-        window.mvaddstr(line_render_index, 0, line);
-        window.attroff(COLOR_PAIR(5));
-    } else if line.starts_with("index ") {
-        window.attron(COLOR_PAIR(5));
-        window.mvaddstr(line_render_index, 0, line);
-        window.attroff(COLOR_PAIR(5));
-    } else {
-        window.attron(COLOR_PAIR(6));
+        let mut parts = line.splitn(2, "@@");
+        let at_at = parts.next().unwrap_or("");
+        let rest = parts.next().unwrap_or("");
+        let mut rest_parts = rest.splitn(2, " ");
+        let func = rest_parts.next().unwrap_or("");
+
+        window.attron(COLOR_PAIR(hunk_header_pair));
         window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.attroff(COLOR_PAIR(6));
+        window.addstr(" ");
+        window.addstr(at_at);
+        window.addstr("@@");
+        window.attroff(COLOR_PAIR(hunk_header_pair));
 
-        window.mv(line_render_index, line_content_offset);
-        highlight_line(
-            window,
-            line,
-            h,
-            color_map,
-            pair_map,
-            next_color_num,
-            next_pair_num,
-            COLOR_BLACK,
-            syntax_set,
-        );
-    }
-
-    if is_cursor_line {
-        window.attroff(A_REVERSE);
-    }
-}
-
-fn highlight_line(
-    window: &Window,
-    line: &str,
-    h: &mut HighlightLines,
-    color_map: &mut HashMap<syntect::highlighting::Color, i16>,
-    pair_map: &mut HashMap<(i16, i16), i16>,
-    next_color_num: &mut i16,
-    next_pair_num: &mut i16,
-    bg_color_num: i16,
-    syntax_set: &SyntaxSet,
-) {
-    let ranges: Vec<(Style, &str)> = h.highlight_line(line, syntax_set).unwrap();
-    for (style, text) in ranges {
-        let fg_syntect_color = style.foreground;
-        let fg_color_num = *color_map.entry(fg_syntect_color).or_insert_with(|| {
-            let color_num = *next_color_num;
-            *next_color_num += 1;
-            init_color(
-                color_num,
-                (fg_syntect_color.r as f32 / 255.0 * 1000.0) as i16,
-                (fg_syntect_color.g as f32 / 255.0 * 1000.0) as i16,
-                (fg_syntect_color.b as f32 / 255.0 * 1000.0) as i16,
-            );
-            color_num
-        });
-
-        let pair_key = (fg_color_num, bg_color_num);
-        let pair_num = *pair_map.entry(pair_key).or_insert_with(|| {
-            let pair_num = *next_pair_num;
-            *next_pair_num += 1;
-            init_pair(pair_num, fg_color_num, bg_color_num);
-            pair_num
-        });
-        window.attron(COLOR_PAIR(pair_num as u32));
-        window.addstr(text);
-        window.attroff(COLOR_PAIR(pair_num as u32));
+        window.attron(COLOR_PAIR(addition_pair));
+        window.addstr(func);
+        window.attroff(COLOR_PAIR(addition_pair));
+    } else if line.starts_with("diff --git ") {
+        window.attron(COLOR_PAIR(default_pair));
+        window.mvaddstr(line_render_index, 0, line);
+        window.attroff(COLOR_PAIR(default_pair));
+    } else {
+        window.attron(COLOR_PAIR(default_pair));
+        window.mvaddstr(line_render_index, 0, &line_num_str);
+        window.addstr(" ");
+        window.addstr(line);
+        window.attroff(COLOR_PAIR(default_pair));
     }
 }
 
@@ -1255,45 +1089,42 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
     files
 }
 
-pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, syntax_set: &SyntaxSet, theme_set: &ThemeSet) {
+pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>) {
     let window = initscr();
     window.keypad(true);
     noecho();
     curs_set(0);
 
     start_color();
-    init_color(14, 0, 1000, 0);
-    init_color(15, 1000, 0, 0);
-    init_color(16, 0, 500, 0);
-    init_color(17, 500, 0, 0);
-    init_color(18, 0, 200, 0);
-    init_color(19, 200, 0, 0);
+    // Base colors
+    let color_white = 20;
+    let color_red = 21;
+    let color_green = 22;
+    let color_cyan = 23;
+    let color_selected_bg = 24;
 
-    init_pair(1, 14, 18);
-    init_pair(2, 15, 19);
+    init_color(color_white, 968, 968, 941); // #F7F7F0
+    init_color(color_red, 1000, 0, 439); // #FF0070
+    init_color(color_green, 525, 812, 0); // #86CF00
+    init_color(color_cyan, 0, 769, 961); // #00C4F5
+    init_color(color_selected_bg, 133, 133, 133); // #222222
 
+    // Color pairs
+    init_pair(1, color_white, COLOR_BLACK); // Default: White on Black
+    init_pair(2, color_red, COLOR_BLACK); // Deletion: Red on Black
+    init_pair(3, color_green, COLOR_BLACK); // Addition: Green on Black
+    init_pair(4, color_cyan, COLOR_BLACK); // Hunk Header: Cyan on Black
 
-
-    init_pair(5, COLOR_CYAN, COLOR_BLACK);
-    init_pair(6, COLOR_MAGENTA, COLOR_BLACK);
+    // Selected line pairs
+    init_pair(5, color_white, color_selected_bg); // Default: White on #222222
+    init_pair(6, color_red, color_selected_bg); // Deletion: Red on #222222
+    init_pair(7, color_green, color_selected_bg); // Addition: Green on #222222
+    init_pair(8, color_cyan, color_selected_bg); // Hunk Header: Cyan on #222222
 
     let mut state = AppState::new(repo_path, files);
-    let mut color_map: HashMap<syntect::highlighting::Color, i16> = HashMap::new();
-    let mut pair_map: HashMap<(i16, i16), i16> = HashMap::new();
-    let mut next_color_num = 20;
-    let mut next_pair_num = 20;
 
     while state.running {
-        render(
-            &window,
-            &state,
-            &mut color_map,
-            &mut pair_map,
-            &mut next_color_num,
-            &mut next_pair_num,
-            syntax_set,
-            theme_set,
-        );
+        render(&window, &state);
         let input = window.getch();
         state = update_state(state, input, &window);
     }
@@ -1304,13 +1135,6 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, syntax_set: &SyntaxSet
 pub fn run(repo_path: PathBuf) -> Result<()> {
     if !is_git_repository(&repo_path) {
         bail!("fatal: not a git repository (or any of the parent directories): .git");
-    }
-
-    let assets = HighlightingAssets::from_binary();
-    let syntax_set = assets.get_syntax_set().unwrap().clone();
-    let mut theme_set = ThemeSet::new();
-    for theme_name in assets.themes() {
-        theme_set.themes.insert(theme_name.to_string(), assets.get_theme(theme_name).clone());
     }
 
     let staged_diff_output = OsCommand::new("git")
@@ -1333,7 +1157,7 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
         bail!("No changes found.");
     }
 
-    tui_loop(repo_path.clone(), files, &syntax_set, &theme_set);
+    tui_loop(repo_path.clone(), files);
 
     Ok(())
 }
