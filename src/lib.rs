@@ -10,6 +10,7 @@ use std::process::Command as OsCommand;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, ThemeSet};
 use syntect::parsing::SyntaxSet;
+use unicode_width::UnicodeWidthStr;
 
 mod commit_storage;
 
@@ -499,6 +500,37 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     state.is_commit_mode = false;
                     state.is_amend_mode = false; // Also reset amend mode
                     curs_set(0);
+                } else if c == '\u{1}' {
+                    // Ctrl-A: beginning of line
+                    state.commit_cursor = 0;
+                } else if c == '\u{5}' {
+                    // Ctrl-E: end of line
+                    let message = if state.is_amend_mode {
+                        &state.amend_message
+                    } else {
+                        &state.commit_message
+                    };
+                    state.commit_cursor = message.chars().count();
+                } else if c == '\u{b}' {
+                    // Ctrl-K: kill to end of line
+                    let message = if state.is_amend_mode {
+                        &mut state.amend_message
+                    } else {
+                        &mut state.commit_message
+                    };
+                    if state.commit_cursor < message.chars().count() {
+                        let byte_offset = message
+                            .char_indices()
+                            .nth(state.commit_cursor)
+                            .map_or(message.len(), |(idx, _)| idx);
+                        message.truncate(byte_offset);
+                        if !state.is_amend_mode {
+                            let _ = commit_storage::save_commit_message(
+                                &state.repo_path,
+                                &state.commit_message,
+                            );
+                        }
+                    }
                 } else if c == '\u{7f}' || c == '\u{08}' {
                     // Backspace
                     if state.commit_cursor > 0 {
@@ -521,7 +553,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                             }
                         }
                     }
-                } else {
+                } else if !c.is_control() {
                     let message = if state.is_amend_mode {
                         &mut state.amend_message
                     } else {
@@ -750,12 +782,15 @@ fn render(
 
     if state.file_cursor >= num_files {
         if state.is_commit_mode {
-            let prefix_len = if state.is_amend_mode {
-                "Amend: ".len()
+            let (prefix, message) = if state.is_amend_mode {
+                ("Amend: ", &state.amend_message)
             } else {
-                "Commit: ".len()
+                ("Commit: ", &state.commit_message)
             };
-            window.mv(commit_line_y, (prefix_len + state.commit_cursor) as i32);
+            let prefix_width = prefix.width();
+            let message_before_cursor: String = message.chars().take(state.commit_cursor).collect();
+            let cursor_display_pos = prefix_width + message_before_cursor.width();
+            window.mv(commit_line_y, cursor_display_pos as i32);
         }
         window.refresh();
         return;
