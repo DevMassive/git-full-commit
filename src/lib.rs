@@ -1,4 +1,4 @@
-use anyhow::{Error, Result, bail};
+use anyhow::{Result, bail};
 use lazy_static::lazy_static;
 use pancurses::{
     A_DIM, A_REVERSE, COLOR_BLACK, COLOR_CYAN, COLOR_MAGENTA, COLOR_PAIR, Input, Window, curs_set,
@@ -592,10 +592,17 @@ fn render(
         }
     }
 
+    let header_height = if state.files.is_empty() {
+        0
+    } else {
+        state.files.len() + 1
+    };
+    let content_height = (max_y as usize).saturating_sub(header_height);
+
     for (i, line) in lines
         .iter()
         .skip(state.scroll)
-        .take(max_y as usize - 2) // Make space for the header
+        .take(content_height)
         .enumerate()
     {
         let line_index_in_full_list = i + state.scroll;
@@ -604,7 +611,7 @@ fn render(
             state,
             line,
             line_index_in_full_list,
-            i as i32 + 2, // Start rendering from the third line
+            i as i32 + header_height as i32,
             cursor_position,
             &mut h,
             color_map,
@@ -615,13 +622,21 @@ fn render(
     }
 
     // Render sticky header
-    if !file_name.is_empty() {
+    if !state.files.is_empty() {
         window.attron(COLOR_PAIR(5));
-        window.mv(0, 0);
-        window.clrtoeol();
-        window.addstr(file_name);
+        for (i, file) in state.files.iter().enumerate() {
+            window.mv(i as i32, 0);
+            window.clrtoeol();
+            if i == state.file_cursor {
+                window.attron(A_REVERSE);
+            }
+            window.addstr(&file.file_name);
+            if i == state.file_cursor {
+                window.attroff(A_REVERSE);
+            }
+        }
         window.attroff(COLOR_PAIR(5));
-        window.mv(1, 0);
+        window.mv(state.files.len() as i32, 0);
         window.hline(pancurses::ACS_HLINE(), max_x);
     }
 
