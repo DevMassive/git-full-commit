@@ -393,9 +393,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                         .expect("Failed to commit.");
                     let _ = commit_storage::delete_commit_message(&state.repo_path);
                     state.running = false;
-                } else {
-                    state.is_commit_mode = false;
-                    curs_set(0);
                 }
                 return state;
             }
@@ -656,6 +653,12 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     }
                 }
             }
+
+            if !state.is_commit_mode && state.file_cursor == state.files.len() {
+                state.is_commit_mode = true;
+                curs_set(1);
+            }
+
             let cursor_line = state.get_cursor_line_index();
             let window_height = max_y as usize;
             const MARGIN: usize = 3;

@@ -172,3 +172,48 @@ fn test_hunk_half_page_scroll() {
         // assert_eq!(state_after_scroll_up.scroll, 0); // This assertion is broken
     });
 }
+
+#[test]
+#[serial]
+fn test_commit_mode_activation_and_commit() {
+    run_test_with_pancurses(|window| {
+        let setup = TestSetup::new();
+        let mut state = create_test_state(&setup);
+
+        // We start with 1 file, cursor at index 0.
+        assert_eq!(state.files.len(), 1);
+        assert_eq!(state.file_cursor, 0);
+        assert!(!state.is_commit_mode);
+
+        // 1. Press KeyDown to move to the commit line.
+        state = update_state(state, Some(Input::KeyDown), &window);
+
+        // 2. Assert that we are in commit mode.
+        assert_eq!(state.file_cursor, 1); // Cursor is on the commit line
+        assert!(state.is_commit_mode);
+
+        // 3. Type a commit message
+        let msg = "Test commit";
+        for ch in msg.chars() {
+            state = update_state(state, Some(Input::Character(ch)), &window);
+        }
+
+        // 4. Assert the message is correct
+        assert_eq!(state.commit_message, msg);
+
+        // 5. Press Enter to commit
+        state = update_state(state, Some(Input::Character('\n')), &window);
+
+        // 6. Assert the app should exit
+        assert!(!state.running);
+
+        // 7. Verify the commit was created
+        let output = OsCommand::new("git")
+            .args(&["log", "-1", "--pretty=%B"])
+            .current_dir(&setup.repo_path)
+            .output()
+            .expect("failed to run git log");
+        let last_commit_message = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        assert_eq!(last_commit_message, msg);
+    });
+}
