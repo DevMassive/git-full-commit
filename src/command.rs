@@ -169,6 +169,13 @@ impl Command for IgnoreFileCommand {
         writeln!(gitignore, "{}", self.file_name).expect("Failed to write to .gitignore");
 
         OsCommand::new("git")
+            .arg("add")
+            .arg(".gitignore")
+            .current_dir(&self.repo_path)
+            .output()
+            .expect("Failed to stage .gitignore");
+
+        OsCommand::new("git")
             .arg("rm")
             .arg("--cached")
             .arg(&self.file_name)
@@ -183,10 +190,28 @@ impl Command for IgnoreFileCommand {
             let content = fs::read_to_string(&gitignore_path).expect("Failed to read .gitignore");
             let new_content: String = content
                 .lines()
-                .filter(|line| *line != self.file_name)
+                .filter(|line| !line.trim().is_empty() && *line != self.file_name)
                 .collect::<Vec<_>>()
                 .join("\n");
-            fs::write(&gitignore_path, new_content + "\n").expect("Failed to write to .gitignore");
+
+            if new_content.is_empty() {
+                fs::remove_file(&gitignore_path).expect("Failed to remove .gitignore");
+                OsCommand::new("git")
+                    .arg("rm")
+                    .arg(".gitignore")
+                    .current_dir(&self.repo_path)
+                    .output()
+                    .expect("Failed to remove .gitignore from index");
+            } else {
+                fs::write(&gitignore_path, new_content + "\n")
+                    .expect("Failed to write to .gitignore");
+                OsCommand::new("git")
+                    .arg("add")
+                    .arg(".gitignore")
+                    .current_dir(&self.repo_path)
+                    .output()
+                    .expect("Failed to stage .gitignore");
+            }
         }
 
         OsCommand::new("git")
