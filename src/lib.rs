@@ -832,6 +832,7 @@ fn render(window: &Window, state: &AppState) {
         for (i, file) in state.files.iter().enumerate() {
             let is_selected_file = i == state.file_cursor;
             let pair = if is_selected_file { 5 } else { 1 };
+            let status_pair = if is_selected_file { 6 } else { 2 };
             window.attron(COLOR_PAIR(pair));
             window.mv(i as i32, 0);
             if is_selected_file {
@@ -842,13 +843,18 @@ fn render(window: &Window, state: &AppState) {
             } else {
                 window.clrtoeol();
             }
+            window.attroff(COLOR_PAIR(pair));
             let status_char = match file.status {
                 FileStatus::Added => 'A',
                 FileStatus::Modified => 'M',
                 FileStatus::Renamed => 'R',
                 FileStatus::Deleted => 'D',
             };
-            window.addstr(&format!("{} {}", status_char, file.file_name));
+            window.attron(COLOR_PAIR(status_pair));
+            window.addstr(&format!("{}", status_char));
+            window.attroff(COLOR_PAIR(status_pair));
+            window.attron(COLOR_PAIR(pair));
+            window.addstr(&format!(" {}", file.file_name));
             window.attroff(COLOR_PAIR(pair));
         }
     }
