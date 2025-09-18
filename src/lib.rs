@@ -294,11 +294,39 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             state.command_history.redo();
             state.refresh_diff();
         }
+        Some(Input::Character(' ')) => {
+            // Page down
+            state.is_bottom = false;
+            if let CursorLevel::File = state.cursor_level {
+                let header_height = if state.files.is_empty() {
+                    0
+                } else {
+                    state.files.len() + 1
+                };
+                let content_height = (max_y as usize).saturating_sub(header_height);
+                let new_scroll = state.scroll.saturating_add(content_height);
+                let max_scroll = state.lines.len().saturating_sub(content_height);
+                state.scroll = new_scroll.min(max_scroll);
+            }
+        }
+        Some(Input::Character('b')) => {
+            // Page up
+            state.is_bottom = false;
+            if let CursorLevel::File = state.cursor_level {
+                let header_height = if state.files.is_empty() {
+                    0
+                } else {
+                    state.files.len() + 1
+                };
+                let content_height = (max_y as usize).saturating_sub(header_height);
+                state.scroll = state.scroll.saturating_sub(content_height);
+            }
+        }
         Some(Input::KeyUp) => {
             state.is_bottom = false;
             match state.cursor_level {
                 CursorLevel::File => {
-                    state.file_cursor = state.file_cursor.saturating_sub(1);
+                    // Do nothing
                 }
                 CursorLevel::Hunk => {
                     let window_height = max_y as usize;
@@ -421,9 +449,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             } else {
                 match state.cursor_level {
                     CursorLevel::File => {
-                        if state.file_cursor < state.files.len().saturating_sub(1) {
-                            state.file_cursor += 1;
-                        }
+                        // Do nothing
                     }
                     CursorLevel::Hunk => {
                         if let Some(file) = state.files.get(state.file_cursor) {
@@ -489,8 +515,40 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 CursorLevel::File => {
                     if !state.files.is_empty() {
                         state.cursor_level = CursorLevel::Hunk;
-                        state.hunk_cursor = 0;
                         state.line_cursor = 0;
+
+                        let header_height = if state.files.is_empty() {
+                            0
+                        } else {
+                            state.files.len() + 1
+                        };
+                        let content_height = (max_y as usize).saturating_sub(header_height);
+                        let screen_start = state.scroll;
+                        let screen_end = state.scroll + content_height;
+
+                        let mut first_visible_hunk: Option<(usize, usize)> = None;
+
+                        for (file_idx, file) in state.files.iter().enumerate() {
+                            for (hunk_idx, hunk) in file.hunks.iter().enumerate() {
+                                let hunk_start = hunk.start_line;
+                                let hunk_end = hunk.start_line + hunk.lines.len();
+
+                                if hunk_start < screen_end && hunk_end > screen_start {
+                                    first_visible_hunk = Some((file_idx, hunk_idx));
+                                    break;
+                                }
+                            }
+                            if first_visible_hunk.is_some() {
+                                break;
+                            }
+                        }
+
+                        if let Some((file_idx, hunk_idx)) = first_visible_hunk {
+                            state.file_cursor = file_idx;
+                            state.hunk_cursor = hunk_idx;
+                        } else {
+                            state.hunk_cursor = 0;
+                        }
                     }
                 }
                 CursorLevel::Hunk => {
@@ -528,6 +586,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
 
     state
 }
+
 
 fn render(
     window: &Window,
