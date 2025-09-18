@@ -392,31 +392,56 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
             Some(Input::Character('\n')) => {
                 if state.is_amend_mode {
-                    if !state.amend_message.is_empty() {
-                        OsCommand::new("git")
-                            .arg("commit")
-                            .arg("--amend")
-                            .arg("-m")
-                            .arg(&state.amend_message)
-                            .current_dir(&state.repo_path)
-                            .output()
-                            .expect("Failed to amend commit.");
-                        let _ = commit_storage::delete_commit_message(&state.repo_path);
-                        state.running = false;
+                    if state.amend_message.is_empty() {
+                        return state;
                     }
+                    OsCommand::new("git")
+                        .arg("commit")
+                        .arg("--amend")
+                        .arg("-m")
+                        .arg(&state.amend_message)
+                        .current_dir(&state.repo_path)
+                        .output()
+                        .expect("Failed to amend commit.");
+                    let _ = commit_storage::delete_commit_message(&state.repo_path);
+                    state.amend_message.clear();
                 } else {
-                    if !state.commit_message.is_empty() {
-                        OsCommand::new("git")
-                            .arg("commit")
-                            .arg("-m")
-                            .arg(&state.commit_message)
-                            .current_dir(&state.repo_path)
-                            .output()
-                            .expect("Failed to commit.");
-                        let _ = commit_storage::delete_commit_message(&state.repo_path);
-                        state.running = false;
+                    if state.commit_message.is_empty() {
+                        return state;
                     }
+                    OsCommand::new("git")
+                        .arg("commit")
+                        .arg("-m")
+                        .arg(&state.commit_message)
+                        .current_dir(&state.repo_path)
+                        .output()
+                        .expect("Failed to commit.");
+                    let _ = commit_storage::delete_commit_message(&state.repo_path);
+                    state.commit_message.clear();
                 }
+
+                OsCommand::new("git")
+                    .arg("add")
+                    .arg("-A")
+                    .current_dir(&state.repo_path)
+                    .output()
+                    .expect("Failed to git add -A.");
+
+                let staged_diff_output = OsCommand::new("git")
+                    .arg("diff")
+                    .arg("--staged")
+                    .current_dir(&state.repo_path)
+                    .output()
+                    .expect("Failed to git diff --staged.");
+
+                if staged_diff_output.stdout.is_empty() {
+                    state.running = false;
+                } else {
+                    state.refresh_diff();
+                    state.is_commit_mode = false;
+                    curs_set(0);
+                }
+
                 return state;
             }
             Some(Input::KeyBackspace) => {
@@ -1171,10 +1196,24 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
         bail!("fatal: not a git repository (or any of the parent directories): .git");
     }
 
+    let staged_diff_output = OsCommand::new("git")
+        .arg("diff")
+        .arg("--staged")
+        .current_dir(&repo_path)
+        .output()?;
+
+    if staged_diff_output.stdout.is_empty() {
+        OsCommand::new("git")
+            .arg("add")
+            .arg("-A")
+            .current_dir(&repo_path)
+            .output()?;
+    }
+
     let files = get_diff(repo_path.clone());
 
     if files.is_empty() {
-        bail!("No staged changes found.");
+        bail!("No changes found.");
     }
 
     tui_loop(repo_path.clone(), files);
