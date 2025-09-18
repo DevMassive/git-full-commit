@@ -71,18 +71,15 @@ impl UnstageHunkCommand {
 
         let mut patch = String::new();
         patch.push_str(&format!(
-            "diff --git a/{} b/{}
-",
+            "diff --git a/{} b/{}\n",
             self.file_name, self.file_name
         ));
         patch.push_str(&format!(
-            "--- a/{}
-",
+            "--- a/{}\n",
             self.file_name
         ));
         patch.push_str(&format!(
-            "+++ b/{}
-",
+            "+++ b/{}\n",
             self.file_name
         ));
         patch.push_str(&self.hunk_lines.join("\n"));
@@ -117,8 +114,73 @@ impl UnstageHunkCommand {
         if !status.success() {
             // For debugging, but should not panic in production
             eprintln!(
-                "git apply failed for patch (reverse={reverse}):
-{patch}"
+                "git apply failed for patch (reverse={}):\n{}\n",
+                reverse,
+                patch
+            );
+        }
+    }
+}
+
+struct CheckoutFileCommand {
+    repo_path: PathBuf,
+    file_name: String,
+    patch: String,
+}
+
+impl Command for CheckoutFileCommand {
+    fn execute(&mut self) {
+        OsCommand::new("git")
+            .arg("checkout")
+            .arg("HEAD")
+            .arg("--")
+            .arg(&self.file_name)
+            .current_dir(&self.repo_path)
+            .output()
+            .expect("Failed to checkout file.");
+    }
+
+    fn undo(&mut self) {
+        self.apply_patch(false);
+    }
+}
+
+impl CheckoutFileCommand {
+    fn apply_patch(&self, reverse: bool) {
+        use std::io::Write;
+        use std::process::{Command as OsCommand, Stdio};
+
+        let mut args = vec!["apply"];
+        if reverse {
+            // This command is not meant to be reversed in the traditional sense.
+            // The 'undo' operation applies the stored patch to restore the state.
+        } else {
+            args.push("--cached");
+        }
+        args.push("--unidiff-zero");
+        args.push("-");
+
+        let mut child = OsCommand::new("git")
+            .args(&args)
+            .current_dir(&self.repo_path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Failed to spawn git apply process.");
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(self.patch.as_bytes())
+                .expect("Failed to write to stdin.");
+        }
+
+        let status = child.wait().expect("Failed to wait for git apply process.");
+        if !status.success() {
+            eprintln!(
+                "git apply failed for patch (reverse={}):\n{}\n",
+                reverse,
+                self.patch
             );
         }
     }
@@ -246,9 +308,8 @@ impl AppState {
         }
 
         self.file_cursor = self.file_cursor.min(self.files.len().saturating_sub(1));
-        self.hunk_cursor = self
-            .hunk_cursor
-            .min(self.files[self.file_cursor].hunks.len().saturating_sub(1));
+        self.hunk_cursor =
+            self.hunk_cursor.min(self.files[self.file_cursor].hunks.len().saturating_sub(1));
         self.line_cursor = 0;
         self.scroll = self.get_cursor_line_index();
     }
@@ -261,6 +322,30 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         Some(Input::Character('q')) => {
             state.running = false;
             state.is_bottom = false;
+        }
+        Some(Input::Character('!')) => {
+            if let CursorLevel::File = state.cursor_level {
+                if let Some(file) = state.files.get(state.file_cursor) {
+                    // Get the patch before checking out
+                    let output = OsCommand::new("git")
+                        .arg("diff")
+                        .arg("--staged")
+                        .arg("--")
+                        .arg(&file.file_name)
+                        .current_dir(&state.repo_path)
+                        .output()
+                        .expect("Failed to get diff for file.");
+                    let patch = String::from_utf8_lossy(&output.stdout).to_string();
+
+                    let command = Box::new(CheckoutFileCommand {
+                        repo_path: state.repo_path.clone(),
+                        file_name: file.file_name.clone(),
+                        patch,
+                    });
+                    state.command_history.execute(command);
+                    state.refresh_diff();
+                }
+            }
         }
         Some(Input::Character('\n')) => {
             if state.is_bottom {
