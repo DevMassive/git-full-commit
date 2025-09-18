@@ -826,7 +826,14 @@ fn render(window: &Window, state: &AppState) {
             let pair = if is_selected_file { 5 } else { 1 };
             window.attron(COLOR_PAIR(pair));
             window.mv(i as i32, 0);
-            window.clrtoeol();
+            if is_selected_file {
+                for x in 0..max_x {
+                    window.mvaddch(i as i32, x, ' ');
+                }
+                window.mv(i as i32, 0);
+            } else {
+                window.clrtoeol();
+            }
             window.addstr(&file.file_name);
             window.attroff(COLOR_PAIR(pair));
         }
@@ -834,8 +841,18 @@ fn render(window: &Window, state: &AppState) {
 
     // Render commit message line
     let commit_line_y = num_files as i32;
+    let is_selected = state.file_cursor == num_files;
+    let pair = if is_selected { 5 } else { 1 };
+    window.attron(COLOR_PAIR(pair));
     window.mv(commit_line_y, 0);
-    window.clrtoeol();
+    if is_selected {
+        for x in 0..max_x {
+            window.mvaddch(commit_line_y, x, ' ');
+        }
+        window.mv(commit_line_y, 0);
+    } else {
+        window.clrtoeol();
+    }
 
     let (prefix, message) = if state.is_amend_mode {
         ("Amend: ", &state.amend_message)
@@ -843,14 +860,9 @@ fn render(window: &Window, state: &AppState) {
         ("Commit: ", &state.commit_message)
     };
 
-    if state.file_cursor == num_files {
-        window.attron(COLOR_PAIR(5));
-        window.addstr(prefix);
-        window.attroff(COLOR_PAIR(5));
-    } else {
-        window.addstr(prefix);
-    }
+    window.addstr(prefix);
     window.addstr(message);
+    window.attroff(COLOR_PAIR(pair));
 
     // Render separator
     window.mv((num_files + 1) as i32, 0);
