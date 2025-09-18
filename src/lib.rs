@@ -11,6 +11,8 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, ThemeSet};
 use syntect::parsing::SyntaxSet;
 
+mod commit_storage;
+
 lazy_static! {
     pub static ref SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
     pub static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
@@ -299,6 +301,8 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(repo_path: PathBuf, files: Vec<FileDiff>) -> Self {
+        let commit_message =
+            commit_storage::load_commit_message(&repo_path).unwrap_or_else(|_| String::new());
         Self {
             repo_path,
             scroll: 0,
@@ -309,7 +313,7 @@ impl AppState {
             files,
             cursor_level: CursorLevel::File,
             command_history: CommandHistory::new(),
-            commit_message: String::new(),
+            commit_message,
             is_commit_mode: false,
             commit_cursor: 0,
         }
@@ -387,6 +391,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                         .current_dir(&state.repo_path)
                         .output()
                         .expect("Failed to commit.");
+                    let _ = commit_storage::delete_commit_message(&state.repo_path);
                     state.running = false;
                 } else {
                     state.is_commit_mode = false;
@@ -400,6 +405,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     if let Some((byte_index, _)) = state.commit_message.char_indices().nth(char_index_to_remove) {
                         state.commit_message.remove(byte_index);
                         state.commit_cursor -= 1;
+                        let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
                     }
                 }
                 return state;
@@ -408,6 +414,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 if state.commit_cursor < state.commit_message.chars().count() {
                     if let Some((byte_index, _)) = state.commit_message.char_indices().nth(state.commit_cursor) {
                         state.commit_message.remove(byte_index);
+                        let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
                     }
                 }
                 return state;
@@ -438,6 +445,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                         .map_or(state.commit_message.len(), |(idx, _)| idx);
                     state.commit_message.insert(byte_offset, c);
                     state.commit_cursor += 1;
+                    let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
                 }
                 return state;
             }
@@ -447,6 +455,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
 
     match input {
         Some(Input::Character('q')) => {
+            let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
             state.running = false;
         }
         Some(Input::Character('!')) => {
@@ -720,6 +729,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 curs_set(1);
                 state.commit_message.push(c);
                 state.commit_cursor = state.commit_message.chars().count();
+                let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
             }
         }
         _ => {}

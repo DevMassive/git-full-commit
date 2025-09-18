@@ -162,12 +162,12 @@ fn test_hunk_half_page_scroll() {
         state.cursor_level = CursorLevel::Hunk;
 
         let (max_y, _) = window.get_max_yx();
-        let window_height = max_y as usize;
+        let _window_height = max_y as usize;
 
         let state_after_scroll_down = update_state(state, Some(Input::KeyDown), &window);
         // assert_eq!(state_after_scroll_down.scroll, window_height / 2); // This assertion is broken
 
-        let state_after_scroll_up =
+        let _state_after_scroll_up =
             update_state(state_after_scroll_down, Some(Input::KeyUp), &window);
         // assert_eq!(state_after_scroll_up.scroll, 0); // This assertion is broken
     });
