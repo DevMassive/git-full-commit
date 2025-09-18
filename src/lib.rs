@@ -295,6 +295,8 @@ pub struct AppState {
     pub commit_message: String,
     pub is_commit_mode: bool,
     pub commit_cursor: usize,
+    pub amend_message: String,
+    pub is_amend_mode: bool,
 }
 
 impl AppState {
@@ -313,6 +315,8 @@ impl AppState {
             commit_message,
             is_commit_mode: false,
             commit_cursor: 0,
+            amend_message: String::new(),
+            is_amend_mode: false,
         }
     }
 
@@ -344,6 +348,19 @@ impl AppState {
     }
 }
 
+fn get_previous_commit_message(repo_path: &Path) -> Result<String> {
+    let output = OsCommand::new("git")
+        .arg("log")
+        .arg("-1")
+        .arg("--pretty=%s")
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        return Ok(String::new());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) -> AppState {
     let (max_y, _) = window.get_max_yx();
 
@@ -358,46 +375,87 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 state.cursor_level = CursorLevel::File;
                 return state;
             }
+            Some(Input::Character('\t')) => {
+                state.is_amend_mode = !state.is_amend_mode;
+                if state.is_amend_mode {
+                    // Switched to amend mode
+                    if state.amend_message.is_empty() {
+                        state.amend_message =
+                            get_previous_commit_message(&state.repo_path).unwrap_or_default();
+                    }
+                    state.commit_cursor = state.amend_message.chars().count();
+                } else {
+                    // Switched back to commit mode
+                    state.commit_cursor = state.commit_message.chars().count();
+                }
+                return state;
+            }
             Some(Input::Character('\n')) => {
-                if !state.commit_message.is_empty() {
-                    OsCommand::new("git")
-                        .arg("commit")
-                        .arg("-m")
-                        .arg(&state.commit_message)
-                        .current_dir(&state.repo_path)
-                        .output()
-                        .expect("Failed to commit.");
-                    let _ = commit_storage::delete_commit_message(&state.repo_path);
-                    state.running = false;
+                if state.is_amend_mode {
+                    if !state.amend_message.is_empty() {
+                        OsCommand::new("git")
+                            .arg("commit")
+                            .arg("--amend")
+                            .arg("-m")
+                            .arg(&state.amend_message)
+                            .current_dir(&state.repo_path)
+                            .output()
+                            .expect("Failed to amend commit.");
+                        let _ = commit_storage::delete_commit_message(&state.repo_path);
+                        state.running = false;
+                    }
+                } else {
+                    if !state.commit_message.is_empty() {
+                        OsCommand::new("git")
+                            .arg("commit")
+                            .arg("-m")
+                            .arg(&state.commit_message)
+                            .current_dir(&state.repo_path)
+                            .output()
+                            .expect("Failed to commit.");
+                        let _ = commit_storage::delete_commit_message(&state.repo_path);
+                        state.running = false;
+                    }
                 }
                 return state;
             }
             Some(Input::KeyBackspace) => {
                 if state.commit_cursor > 0 {
+                    let message = if state.is_amend_mode {
+                        &mut state.amend_message
+                    } else {
+                        &mut state.commit_message
+                    };
                     let char_index_to_remove = state.commit_cursor - 1;
-                    if let Some((byte_index, _)) =
-                        state.commit_message.char_indices().nth(char_index_to_remove)
+                    if let Some((byte_index, _)) = message.char_indices().nth(char_index_to_remove)
                     {
-                        state.commit_message.remove(byte_index);
+                        message.remove(byte_index);
                         state.commit_cursor -= 1;
-                        let _ = commit_storage::save_commit_message(
-                            &state.repo_path,
-                            &state.commit_message,
-                        );
+                        if !state.is_amend_mode {
+                            let _ = commit_storage::save_commit_message(
+                                &state.repo_path,
+                                &state.commit_message,
+                            );
+                        }
                     }
                 }
                 return state;
             }
             Some(Input::KeyDC) => {
-                if state.commit_cursor < state.commit_message.chars().count() {
-                    if let Some((byte_index, _)) =
-                        state.commit_message.char_indices().nth(state.commit_cursor)
-                    {
-                        state.commit_message.remove(byte_index);
-                        let _ = commit_storage::save_commit_message(
-                            &state.repo_path,
-                            &state.commit_message,
-                        );
+                let message = if state.is_amend_mode {
+                    &mut state.amend_message
+                } else {
+                    &mut state.commit_message
+                };
+                if state.commit_cursor < message.chars().count() {
+                    if let Some((byte_index, _)) = message.char_indices().nth(state.commit_cursor) {
+                        message.remove(byte_index);
+                        if !state.is_amend_mode {
+                            let _ = commit_storage::save_commit_message(
+                                &state.repo_path,
+                                &state.commit_message,
+                            );
+                        }
                     }
                 }
                 return state;
@@ -407,38 +465,60 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 return state;
             }
             Some(Input::KeyRight) => {
-                state.commit_cursor = state
-                    .commit_cursor
-                    .saturating_add(1)
-                    .min(state.commit_message.chars().count());
+                let message_len = if state.is_amend_mode {
+                    state.amend_message.chars().count()
+                } else {
+                    state.commit_message.chars().count()
+                };
+                state.commit_cursor = state.commit_cursor.saturating_add(1).min(message_len);
                 return state;
             }
             Some(Input::Character(c)) => {
                 if c == '\u{1b}' {
                     // ESC key
                     state.is_commit_mode = false;
+                    state.is_amend_mode = false; // Also reset amend mode
                     curs_set(0);
                 } else if c == '\u{7f}' || c == '\u{08}' {
                     // Backspace
                     if state.commit_cursor > 0 {
+                        let message = if state.is_amend_mode {
+                            &mut state.amend_message
+                        } else {
+                            &mut state.commit_message
+                        };
                         let char_index_to_remove = state.commit_cursor - 1;
                         if let Some((byte_index, _)) =
-                            state.commit_message.char_indices().nth(char_index_to_remove)
+                            message.char_indices().nth(char_index_to_remove)
                         {
-                            state.commit_message.remove(byte_index);
+                            message.remove(byte_index);
                             state.commit_cursor -= 1;
+                            if !state.is_amend_mode {
+                                let _ = commit_storage::save_commit_message(
+                                    &state.repo_path,
+                                    &state.commit_message,
+                                );
+                            }
                         }
                     }
                 } else {
-                    let byte_offset = state
-                        .commit_message
+                    let message = if state.is_amend_mode {
+                        &mut state.amend_message
+                    } else {
+                        &mut state.commit_message
+                    };
+                    let byte_offset = message
                         .char_indices()
                         .nth(state.commit_cursor)
-                        .map_or(state.commit_message.len(), |(idx, _)| idx);
-                    state.commit_message.insert(byte_offset, c);
+                        .map_or(message.len(), |(idx, _)| idx);
+                    message.insert(byte_offset, c);
                     state.commit_cursor += 1;
-                    let _ =
-                        commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
+                    if !state.is_amend_mode {
+                        let _ = commit_storage::save_commit_message(
+                            &state.repo_path,
+                            &state.commit_message,
+                        );
+                    }
                 }
                 return state;
             }
@@ -614,7 +694,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 }
             }
 
-            if !state.is_commit_mode && state.file_cursor == state.files.len() {
+            if state.file_cursor == state.files.len() {
                 state.is_commit_mode = true;
                 curs_set(1);
             }
@@ -627,22 +707,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 state.scroll = cursor_line.saturating_sub(MARGIN);
             } else if cursor_line >= state.scroll + window_height - MARGIN {
                 state.scroll = cursor_line.saturating_sub(window_height - MARGIN);
-            }
-        }
-        Some(Input::KeyRight) => {
-            // Do nothing
-        }
-        Some(Input::KeyLeft) => {
-            // Do nothing
-        }
-        Some(Input::Character(c)) => {
-            if state.file_cursor == state.files.len() {
-                state.is_commit_mode = true;
-                curs_set(1);
-                state.commit_message.push(c);
-                state.commit_cursor = state.commit_message.chars().count();
-                let _ =
-                    commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
             }
         }
         _ => {}
@@ -685,14 +749,21 @@ fn render(
     let commit_line_y = num_files as i32;
     window.mv(commit_line_y, 0);
     window.clrtoeol();
+
+    let (prefix, message) = if state.is_amend_mode {
+        ("Amend: ", &state.amend_message)
+    } else {
+        ("Commit: ", &state.commit_message)
+    };
+
     if state.file_cursor == num_files {
         window.attron(A_REVERSE);
-        window.addstr("Commit: ");
+        window.addstr(prefix);
         window.attroff(A_REVERSE);
     } else {
-        window.addstr("Commit: ");
+        window.addstr(prefix);
     }
-    window.addstr(&state.commit_message);
+    window.addstr(message);
 
     // Render separator
     window.mv((num_files + 1) as i32, 0);
@@ -700,10 +771,12 @@ fn render(
 
     if state.file_cursor >= num_files {
         if state.is_commit_mode {
-            window.mv(
-                commit_line_y,
-                8 + state.commit_cursor as i32,
-            );
+            let prefix_len = if state.is_amend_mode {
+                "Amend: ".len()
+            } else {
+                "Commit: ".len()
+            };
+            window.mv(commit_line_y, (prefix_len + state.commit_cursor) as i32);
         }
         window.refresh();
         return;
