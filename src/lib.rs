@@ -231,8 +231,8 @@ impl Command for RemoveFileCommand {
 }
 
 pub struct CommandHistory {
-    undo_stack: Vec<Box<dyn Command>>,
-    redo_stack: Vec<Box<dyn Command>>,
+    pub undo_stack: Vec<Box<dyn Command>>,
+    pub redo_stack: Vec<Box<dyn Command>>,
 }
 
 impl CommandHistory {
@@ -241,6 +241,11 @@ impl CommandHistory {
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
         }
+    }
+
+    fn clear(&mut self) {
+        self.undo_stack.clear();
+        self.redo_stack.clear();
     }
 
     fn execute(&mut self, mut command: Box<dyn Command>) {
@@ -320,7 +325,7 @@ impl AppState {
         self.line_cursor
     }
 
-    fn refresh_diff(&mut self) {
+    pub fn refresh_diff(&mut self) {
         let files = get_diff(self.repo_path.clone());
         self.files = files;
 
@@ -393,6 +398,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                         .expect("Failed to amend commit.");
                     let _ = commit_storage::delete_commit_message(&state.repo_path);
                     state.amend_message.clear();
+                    state.command_history.clear();
                 } else {
                     if state.commit_message.is_empty() {
                         return state;
@@ -406,6 +412,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                         .expect("Failed to commit.");
                     let _ = commit_storage::delete_commit_message(&state.repo_path);
                     state.commit_message.clear();
+                    state.command_history.clear();
                 }
 
                 OsCommand::new("git")

@@ -357,3 +357,39 @@ fn test_commit_and_exit() {
         assert!(!state.running);
     });
 }
+
+#[test]
+#[serial]
+fn test_commit_clears_history() {
+    run_test_with_pancurses(|window| {
+        let setup = TestSetup::new();
+        let mut state = create_test_state(&setup);
+
+        // Unstage a file to populate history
+        state = update_state(state, Some(Input::Character('\n')), &window);
+        assert_eq!(state.files.len(), 0);
+        assert_eq!(state.command_history.undo_stack.len(), 1);
+
+        // Stage it back
+        run_git(&setup.repo_path, &["add", "test.txt"]);
+        state.refresh_diff();
+        assert_eq!(state.files.len(), 1);
+
+        // Go to commit mode
+        state = update_state(state, Some(Input::KeyDown), &window);
+        assert!(state.is_commit_mode);
+
+        // Type a commit message
+        let msg = "Test commit";
+        for ch in msg.chars() {
+            state = update_state(state, Some(Input::Character(ch)), &window);
+        }
+
+        // Commit
+        state = update_state(state, Some(Input::Character('\n')), &window);
+
+        // Assert history is cleared
+        assert_eq!(state.command_history.undo_stack.len(), 0);
+        assert_eq!(state.command_history.redo_stack.len(), 0);
+    });
+}
