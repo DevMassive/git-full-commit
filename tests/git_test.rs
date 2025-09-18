@@ -1,4 +1,6 @@
-use git_reset_pp::*;
+use git_reset_pp::app_state::AppState;
+use git_reset_pp::git::get_diff;
+use git_reset_pp::ui::update_state;
 use pancurses::{endwin, initscr, Input, Window};
 use serial_test::serial;
 use std::fs;
