@@ -717,8 +717,17 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                             repo_path: state.repo_path.clone(),
                             patch,
                         });
+                        let old_line_cursor = state.line_cursor;
                         state.command_history.execute(command);
                         state.refresh_diff();
+                        if let Some(file) = state.files.get(state.file_cursor) {
+                            state.line_cursor = old_line_cursor.min(file.lines.len().saturating_sub(1));
+                            let header_height = if state.files.is_empty() { 0 } else { state.files.len() + 2 };
+                            let content_height = (max_y as usize).saturating_sub(header_height);
+                            if state.line_cursor >= state.scroll + content_height {
+                                state.scroll = state.line_cursor - content_height + 1;
+                            }
+                        }
                     }
                 }
             }
