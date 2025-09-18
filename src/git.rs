@@ -160,7 +160,7 @@ pub fn get_status(repo_path: PathBuf) -> Vec<FileDiff> {
     let output = OsCommand::new("git")
         .arg("status")
         .arg("--porcelain")
-        .current_dir(repo_path)
+        .current_dir(&repo_path)
         .output()
         .expect("Failed to execute git status");
 
@@ -171,7 +171,7 @@ pub fn get_status(repo_path: PathBuf) -> Vec<FileDiff> {
         let status_str = &line[..2];
         let file_name = &line[3..];
 
-        let file_status = match status_str.chars().next().unwrap() {
+        let _file_status = match status_str.chars().next().unwrap() {
             'A' => FileStatus::Added,
             'M' => FileStatus::Modified,
             'D' => FileStatus::Deleted,
@@ -180,16 +180,17 @@ pub fn get_status(repo_path: PathBuf) -> Vec<FileDiff> {
             _ => continue,
         };
 
-        let file_diff = parse_diff(&OsCommand::new("git")
+        let output = OsCommand::new("git")
             .arg("diff")
             .arg("--staged")
             .arg(file_name)
             .current_dir(&repo_path)
             .output()
-            .expect("Failed to execute git diff")
-            .stdout
-        ).remove(0);
-        files.push(file_diff);
+            .expect("Failed to execute git diff");
+        let diff_str = String::from_utf8_lossy(&output.stdout);
+        if let Some(file_diff) = parse_diff(&diff_str).pop() {
+            files.push(file_diff);
+        }
     }
 
     files
