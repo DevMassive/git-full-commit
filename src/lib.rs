@@ -235,11 +235,22 @@ impl AppState {
     fn refresh_diff(&mut self) {
         let files = get_diff(self.repo_path.clone());
         self.files = files;
-        self.file_cursor = 0;
-        self.hunk_cursor = 0;
+
+        if self.files.is_empty() {
+            self.file_cursor = 0;
+            self.hunk_cursor = 0;
+            self.line_cursor = 0;
+            self.scroll = 0;
+            self.cursor_level = CursorLevel::File;
+            return;
+        }
+
+        self.file_cursor = self.file_cursor.min(self.files.len().saturating_sub(1));
+        self.hunk_cursor = self
+            .hunk_cursor
+            .min(self.files[self.file_cursor].hunks.len().saturating_sub(1));
         self.line_cursor = 0;
-        self.scroll = 0;
-        self.cursor_level = CursorLevel::File;
+        self.scroll = self.get_cursor_line_index();
     }
 }
 
