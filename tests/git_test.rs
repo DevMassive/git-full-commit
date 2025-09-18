@@ -102,7 +102,7 @@ fn test_unstage_file() {
 
 #[test]
 #[serial]
-fn test_unstage_hunk_with_undo_redo() {
+fn test_unstage_hunk_by_line_with_undo_redo() {
     run_test_with_pancurses(|window| {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
@@ -110,9 +110,11 @@ fn test_unstage_hunk_with_undo_redo() {
         // Ensure we have a file with a hunk
         assert_eq!(state.files.len(), 1);
         assert_eq!(state.files[0].hunks.len(), 1);
+        let hunk = &state.files[0].hunks[0].clone();
 
-        // Navigate to hunk level
-        state.cursor_level = CursorLevel::Hunk;
+        // Navigate to line level and position cursor in the hunk
+        state.cursor_level = CursorLevel::Line;
+        state.line_cursor = hunk.start_line + 1;
 
         // Unstage hunk
         let state_after_unstage = update_state(state, Some(Input::Character('\n')), &window);
@@ -129,49 +131,6 @@ fn test_unstage_hunk_with_undo_redo() {
     });
 }
 
-#[test]
-#[serial]
-fn test_hunk_half_page_scroll() {
-    run_test_with_pancurses(|window| {
-        let tmp_dir = TempDir::new().unwrap();
-        let repo_path = tmp_dir.path().to_path_buf();
-
-        run_git(&repo_path, &["init"]);
-        run_git(&repo_path, &["config", "user.name", "Test"]);
-        run_git(&repo_path, &["config", "user.email", "test@example.com"]);
-
-        let file_path = repo_path.join("test.txt");
-        let initial_content: String = (0..100)
-            .map(|i| format!("line {i}"))
-            .collect::<Vec<String>>()
-            .join("\n");
-        fs::write(&file_path, initial_content).unwrap();
-
-        run_git(&repo_path, &["add", "test.txt"]);
-        run_git(&repo_path, &["commit", "-m", "initial commit"]);
-
-        let modified_content: String = (0..100)
-            .map(|i| format!("modified line {i}"))
-            .collect::<Vec<String>>()
-            .join("\n");
-        fs::write(&file_path, modified_content).unwrap();
-        run_git(&repo_path, &["add", "test.txt"]);
-
-        let files = get_diff(repo_path.clone());
-        let mut state = AppState::new(repo_path.clone(), files);
-        state.cursor_level = CursorLevel::Hunk;
-
-        let (max_y, _) = window.get_max_yx();
-        let _window_height = max_y as usize;
-
-        let state_after_scroll_down = update_state(state, Some(Input::KeyDown), &window);
-        // assert_eq!(state_after_scroll_down.scroll, window_height / 2); // This assertion is broken
-
-        let _state_after_scroll_up =
-            update_state(state_after_scroll_down, Some(Input::KeyUp), &window);
-        // assert_eq!(state_after_scroll_up.scroll, 0); // This assertion is broken
-    });
-}
 
 #[test]
 #[serial]
@@ -215,5 +174,79 @@ fn test_commit_mode_activation_and_commit() {
             .expect("failed to run git log");
         let last_commit_message = String::from_utf8_lossy(&output.stdout).trim().to_string();
         assert_eq!(last_commit_message, msg);
+    });
+}
+
+#[test]
+#[serial]
+fn test_tab_switching() {
+    run_test_with_pancurses(|window| {
+        let setup = TestSetup::new();
+        let mut state = create_test_state(&setup);
+
+        // Initial state is File cursor
+        assert!(matches!(state.cursor_level, CursorLevel::File));
+
+        // Switch to Line cursor
+        state = update_state(state, Some(Input::Character('\t')), &window);
+        assert!(matches!(state.cursor_level, CursorLevel::Line));
+        assert_eq!(state.line_cursor, state.scroll);
+
+        // Switch back to File cursor
+        state = update_state(state, Some(Input::Character('\t')), &window);
+        assert!(matches!(state.cursor_level, CursorLevel::File));
+        assert_eq!(state.line_cursor, 0);
+    });
+}
+
+#[test]
+#[serial]
+fn test_page_up_down_with_cursor() {
+    run_test_with_pancurses(|window| {
+        let tmp_dir = TempDir::new().unwrap();
+        let repo_path = tmp_dir.path().to_path_buf();
+
+        run_git(&repo_path, &["init"]);
+        run_git(&repo_path, &["config", "user.name", "Test"]);
+        run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+
+        let file_path = repo_path.join("test.txt");
+        let initial_content: String = (0..100)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<String>>()
+            .join("\n");
+        fs::write(&file_path, initial_content).unwrap();
+
+        run_git(&repo_path, &["add", "test.txt"]);
+        run_git(&repo_path, &["commit", "-m", "initial commit"]);
+
+        let modified_content: String = (0..100)
+            .map(|i| format!("modified line {i}"))
+            .collect::<Vec<String>>()
+            .join("\n");
+        fs::write(&file_path, modified_content).unwrap();
+        run_git(&repo_path, &["add", "test.txt"]);
+
+        let files = get_diff(repo_path.clone());
+        let mut state = AppState::new(repo_path.clone(), files);
+        state.cursor_level = CursorLevel::Line;
+
+        let (max_y, _) = window.get_max_yx();
+        let header_height = if state.files.is_empty() {
+            0
+        } else {
+            state.files.len() + 2
+        };
+        let content_height = (max_y as usize).saturating_sub(header_height);
+
+        // Page down
+        state = update_state(state, Some(Input::Character(' ')), &window);
+        assert_eq!(state.scroll, content_height);
+        assert_eq!(state.line_cursor, content_height);
+
+        // Page up
+        state = update_state(state, Some(Input::Character('b')), &window);
+        assert_eq!(state.scroll, 0);
+        assert_eq!(state.line_cursor, 0);
     });
 }
