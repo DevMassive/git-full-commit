@@ -11,7 +11,10 @@ pub struct WordDiffLine(pub Vec<(String, bool)>);
 use crate::app_state::AppState;
 use crate::commit_storage;
 use crate::git::{FileStatus, get_previous_commit_message};
-use crate::command::{ApplyPatchCommand, CheckoutFileCommand, RemoveFileCommand, UnstageFileCommand};
+use crate::command::{
+    ApplyPatchCommand, CheckoutFileCommand, IgnoreFileCommand, RemoveFileCommand,
+    UnstageFileCommand,
+};
 
 fn compute_word_diff(old: &str, new: &str) -> (WordDiffLine, WordDiffLine) {
     let diff = TextDiff::from_unicode_words(old, new);
@@ -682,6 +685,18 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
             let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
             state.running = false;
         }
+        Some(Input::Character('i')) => {
+            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                if let Some(file) = state.files.get(state.file_cursor - 1).cloned() {
+                    let command = Box::new(IgnoreFileCommand {
+                        repo_path: state.repo_path.clone(),
+                        file_name: file.file_name.clone(),
+                    });
+                    state.command_history.execute(command);
+                    state.refresh_diff();
+                }
+            }
+        }
         Some(Input::Character('!')) => {
             if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
                 if let Some(file) = state.files.get(state.file_cursor - 1).cloned() {
@@ -1049,8 +1064,8 @@ mod tests {
         // The cursor moves, but the scroll position stays fixed at the maximum scroll position.
         let lines_count = 100;
         let max_y = 30;
-        let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
-        let max_scroll = lines_count - content_height; // 74
+        let _content_height = (max_y as usize).saturating_sub(1 + 3); // 26
+        let max_scroll = lines_count - _content_height; // 74
 
         let initial_state = create_test_state(lines_count, 1, 80, max_scroll);
 
@@ -1105,12 +1120,129 @@ mod tests {
     fn test_page_up_at_top_moves_cursor_to_zero() {
         // Simulates paging up from near the top of the file.
         let max_y = 30;
-        let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
+        let _content_height = (max_y as usize).saturating_sub(1 + 3); // 26
         let initial_state = create_test_state(100, 1, 10, 0);
 
         let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
 
         assert_eq!(final_state.line_cursor, 0, "Cursor should move to the first line");
         assert_eq!(final_state.scroll, 0, "Scroll should not change");
+    }
+
+    #[test]
+    fn test_ignore_file() {
+        // Setup a temporary git repository
+        let temp_dir = std::env::temp_dir().join("test_repo_for_ignore_v2");
+        if temp_dir.exists() {
+            std::fs::remove_dir_all(&temp_dir).unwrap();
+        }
+        std::fs::create_dir(&temp_dir).unwrap();
+        OsCommand::new("git")
+            .arg("init")
+            .current_dir(&temp_dir)
+            .output()
+            .expect("Failed to init git repo");
+        OsCommand::new("git")
+            .arg("config")
+            .arg("user.name")
+            .arg("Test")
+            .current_dir(&temp_dir)
+            .output()
+            .expect("Failed to set git user.name");
+        OsCommand::new("git")
+            .arg("config")
+            .arg("user.email")
+            .arg("test@example.com")
+            .current_dir(&temp_dir)
+            .output()
+            .expect("Failed to set git user.email");
+        std::fs::write(temp_dir.join("a.txt"), "initial content").unwrap();
+        OsCommand::new("git")
+            .arg("add")
+            .arg("a.txt")
+            .current_dir(&temp_dir)
+            .output()
+            .expect("Failed to git add");
+        OsCommand::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("initial commit")
+            .current_dir(&temp_dir)
+            .output()
+            .expect("Failed to git commit");
+
+        // Create a file to be ignored
+        let file_to_ignore = "some_file.txt";
+        std::fs::write(temp_dir.join(file_to_ignore), "Hello").unwrap();
+
+        // Stage the file
+        OsCommand::new("git")
+            .arg("add")
+            .arg(file_to_ignore)
+            .current_dir(&temp_dir)
+            .output()
+            .expect("Failed to git add");
+
+        // Create initial state
+        let files = crate::git::get_diff(temp_dir.clone());
+        let mut state = AppState::new(temp_dir.clone(), files);
+        state.file_cursor = 1; // Select the file
+
+        // Simulate pressing 'i'
+        let mut updated_state = update_state(state, Some(Input::Character('i')), 80);
+
+        // Check if .gitignore is correct
+        let gitignore_path = temp_dir.join(".gitignore");
+        assert!(gitignore_path.exists(), ".gitignore should be created");
+        let gitignore_content = std::fs::read_to_string(gitignore_path).unwrap();
+        assert!(
+            gitignore_content.contains(file_to_ignore),
+            ".gitignore should contain the ignored file"
+        );
+
+        // After ignoring, the file should be gone from the diff,
+        // and the .gitignore file should be the only change.
+        assert_eq!(
+            updated_state.files.len(),
+            1,
+            "File list should only contain .gitignore"
+        );
+        assert_eq!(
+            updated_state.files[0].file_name, ".gitignore",
+            "The remaining file should be .gitignore"
+        );
+
+        // Simulate undo
+        updated_state.command_history.undo();
+        updated_state.refresh_diff();
+
+        // After undo, the original file should be back and .gitignore should be gone
+        assert_eq!(
+            updated_state.files.len(),
+            1,
+            "File list should contain the original file again"
+        );
+        assert_eq!(
+            updated_state.files[0].file_name, file_to_ignore,
+            "The file should be the one we ignored"
+        );
+
+        // Simulate undo
+        updated_state.command_history.undo();
+        updated_state.refresh_diff();
+
+        // After undo, the original file should be back and .gitignore should be gone
+        assert_eq!(
+            updated_state.files.len(),
+            1,
+            "File list should contain the original file again"
+        );
+        assert_eq!(
+            updated_state.files[0].file_name, file_to_ignore,
+            "The file should be the one we ignored"
+        );
+
+        // Cleanup
+        std::fs::remove_dir_all(&temp_dir).unwrap();
     }
 }

@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 use std::process::Command as OsCommand;
+use std::fs;
+use std::io::Write;
 
 pub trait Command {
     fn execute(&mut self);
@@ -148,6 +150,51 @@ impl CheckoutFileCommand {
                 reverse, self.patch
             );
         }
+    }
+}
+
+pub struct IgnoreFileCommand {
+    pub repo_path: std::path::PathBuf,
+    pub file_name: String,
+}
+
+impl Command for IgnoreFileCommand {
+    fn execute(&mut self) {
+        let gitignore_path = self.repo_path.join(".gitignore");
+        let mut gitignore = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(gitignore_path)
+            .expect("Failed to open .gitignore");
+        writeln!(gitignore, "{}", self.file_name).expect("Failed to write to .gitignore");
+
+        OsCommand::new("git")
+            .arg("rm")
+            .arg("--cached")
+            .arg(&self.file_name)
+            .current_dir(&self.repo_path)
+            .output()
+            .expect("Failed to unstage file");
+    }
+
+    fn undo(&mut self) {
+        let gitignore_path = self.repo_path.join(".gitignore");
+        if gitignore_path.exists() {
+            let content = fs::read_to_string(&gitignore_path).expect("Failed to read .gitignore");
+            let new_content: String = content
+                .lines()
+                .filter(|line| *line != self.file_name)
+                .collect::<Vec<_>>()
+                .join("\n");
+            fs::write(&gitignore_path, new_content + "\n").expect("Failed to write to .gitignore");
+        }
+
+        OsCommand::new("git")
+            .arg("add")
+            .arg(&self.file_name)
+            .current_dir(&self.repo_path)
+            .output()
+            .expect("Failed to stage file");
     }
 }
 

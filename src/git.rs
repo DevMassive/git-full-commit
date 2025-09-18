@@ -156,6 +156,45 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
     parse_diff(&diff_str)
 }
 
+pub fn get_status(repo_path: PathBuf) -> Vec<FileDiff> {
+    let output = OsCommand::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .current_dir(repo_path)
+        .output()
+        .expect("Failed to execute git status");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut files = Vec::new();
+
+    for line in stdout.lines() {
+        let status_str = &line[..2];
+        let file_name = &line[3..];
+
+        let file_status = match status_str.chars().next().unwrap() {
+            'A' => FileStatus::Added,
+            'M' => FileStatus::Modified,
+            'D' => FileStatus::Deleted,
+            'R' => FileStatus::Renamed,
+            '?' => FileStatus::Added, // Untracked
+            _ => continue,
+        };
+
+        let file_diff = parse_diff(&OsCommand::new("git")
+            .arg("diff")
+            .arg("--staged")
+            .arg(file_name)
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to execute git diff")
+            .stdout
+        ).remove(0);
+        files.push(file_diff);
+    }
+
+    files
+}
+
 pub fn get_previous_commit_diff(repo_path: &Path) -> Result<Vec<FileDiff>> {
     let output = OsCommand::new("git")
         .arg("show")
