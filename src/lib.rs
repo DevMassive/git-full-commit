@@ -51,14 +51,12 @@ impl Command for UnstageFileCommand {
     }
 }
 
-struct UnstageLineCommand {
+struct ApplyPatchCommand {
     repo_path: PathBuf,
-    file_name: String,
-    hunk_header: String,
-    line: String,
+    patch: String,
 }
 
-impl Command for UnstageLineCommand {
+impl Command for ApplyPatchCommand {
     fn execute(&mut self) {
         self.apply_patch(true);
     }
@@ -68,22 +66,10 @@ impl Command for UnstageLineCommand {
     }
 }
 
-impl UnstageLineCommand {
+impl ApplyPatchCommand {
     fn apply_patch(&self, reverse: bool) {
         use std::io::Write;
         use std::process::{Command as OsCommand, Stdio};
-
-        let mut patch = String::new();
-        patch.push_str(&format!(
-            "diff --git a/{} b/{}\n",
-            self.file_name, self.file_name
-        ));
-        patch.push_str(&format!("--- a/{}\n", self.file_name));
-        patch.push_str(&format!("+++ b/{}\n", self.file_name));
-        patch.push_str(&self.hunk_header);
-        patch.push('\n');
-        patch.push_str(&self.line);
-        patch.push('\n');
 
         let mut args = vec!["apply"];
         if reverse {
@@ -100,89 +86,21 @@ impl UnstageLineCommand {
             .current_dir(&self.repo_path)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .expect("Failed to spawn git apply process.");
 
         if let Some(mut stdin) = child.stdin.take() {
             stdin
-                .write_all(patch.as_bytes())
+                .write_all(self.patch.as_bytes())
                 .expect("Failed to write to stdin.");
         }
 
-        let status = child.wait().expect("Failed to wait for git apply process.");
-        if !status.success() {
-            // For debugging, but should not panic in production
+        let output = child.wait_with_output().expect("Failed to wait for git apply process.");
+        if !output.status.success() {
             eprintln!(
-                "git apply failed for patch (reverse={}):\n{}\n",
-                reverse, patch
-            );
-        }
-    }
-}
-
-struct UnstageHunkCommand {
-    repo_path: PathBuf,
-    file_name: String,
-    hunk_lines: Vec<String>,
-}
-
-impl Command for UnstageHunkCommand {
-    fn execute(&mut self) {
-        self.apply_patch(true);
-    }
-
-    fn undo(&mut self) {
-        self.apply_patch(false);
-    }
-}
-
-impl UnstageHunkCommand {
-    fn apply_patch(&self, reverse: bool) {
-        use std::io::Write;
-        use std::process::{Command as OsCommand, Stdio};
-
-        let mut patch = String::new();
-        patch.push_str(&format!(
-            "diff --git a/{} b/{}\n",
-            self.file_name, self.file_name
-        ));
-        patch.push_str(&format!("--- a/{}\n", self.file_name));
-        patch.push_str(&format!("+++ b/{}\n", self.file_name));
-        patch.push_str(&self.hunk_lines.join("\n"));
-        patch.push('\n');
-
-        let mut args = vec!["apply"];
-        if reverse {
-            args.push("--cached");
-            args.push("--reverse");
-        } else {
-            args.push("--cached");
-        }
-        args.push("--unidiff-zero");
-        args.push("-");
-
-        let mut child = OsCommand::new("git")
-            .args(&args)
-            .current_dir(&self.repo_path)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("Failed to spawn git apply process.");
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(patch.as_bytes())
-                .expect("Failed to write to stdin.");
-        }
-
-        let status = child.wait().expect("Failed to wait for git apply process.");
-        if !status.success() {
-            // For debugging, but should not panic in production
-            eprintln!(
-                "git apply failed for patch (reverse={}):\n{}\n",
-                reverse, patch
+                "git apply failed for patch (reverse={}):\n{}\n--- stderr ---\n{}\n---",
+                reverse, self.patch, String::from_utf8_lossy(&output.stderr)
             );
         }
     }
@@ -693,10 +611,19 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     let hunk_end = hunk_start + hunk.lines.len();
                     line_index >= hunk_start && line_index < hunk_end
                 }) {
-                    let command = Box::new(UnstageHunkCommand {
+                    let mut patch = String::new();
+                    patch.push_str(&format!(
+                        "diff --git a/{} b/{}\n",
+                        file.file_name, file.file_name
+                    ));
+                    patch.push_str(&format!("--- a/{}\n", file.file_name));
+                    patch.push_str(&format!("+++ b/{}\n", file.file_name));
+                    patch.push_str(&hunk.lines.join("\n"));
+                    patch.push('\n');
+
+                    let command = Box::new(ApplyPatchCommand {
                         repo_path: state.repo_path.clone(),
-                        file_name: file.file_name.clone(),
-                        hunk_lines: hunk.lines.clone(),
+                        patch,
                     });
                     state.command_history.execute(command);
                     state.refresh_diff();
@@ -713,29 +640,85 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         Some(Input::Character('1')) => {
             if let Some(file) = state.files.get(state.file_cursor) {
                 let line_index = state.line_cursor;
-                if let Some(line) = file.lines.get(line_index) {
-                    if line.starts_with('+') || line.starts_with('-') {
-                        // Find the hunk header for the current line
-                        let mut hunk_header = None;
-                        for hunk in &file.hunks {
-                            if line_index >= hunk.start_line
-                                && line_index < hunk.start_line + hunk.lines.len()
-                            {
-                                hunk_header = Some(hunk.lines[0].clone());
+                if let Some(line_to_unstage) = file.lines.get(line_index) {
+                    if !line_to_unstage.starts_with('+') && !line_to_unstage.starts_with('-') {
+                        return state;
+                    }
+
+                    if let Some(hunk) = file.hunks.iter().find(|hunk| {
+                        let hunk_start = hunk.start_line;
+                        let hunk_end = hunk_start + hunk.lines.len();
+                        line_index >= hunk_start && line_index < hunk_end
+                    }) {
+                        let hunk_header = &hunk.lines[0];
+                        let mut parts = hunk_header.split(' ');
+                        let old_range = parts.nth(1).unwrap();
+                        let new_range = parts.next().unwrap();
+
+                        let mut old_range_parts = old_range.split(',');
+                        let old_start: u32 = old_range_parts
+                            .next()
+                            .unwrap()
+                            .trim_start_matches('-')
+                            .parse()
+                            .unwrap();
+
+                        let mut new_range_parts = new_range.split(',');
+                        let new_start: u32 = new_range_parts
+                            .next()
+                            .unwrap()
+                            .trim_start_matches('+')
+                            .parse()
+                            .unwrap();
+
+                        let mut current_old_line = old_start;
+                        let mut current_new_line = new_start;
+                        let mut patch_old_line = 0;
+                        let mut patch_new_line = 0;
+
+                        for (i, line) in hunk.lines.iter().skip(1).enumerate() {
+                            let current_line_index_in_file = hunk.start_line + 1 + i;
+
+                            if current_line_index_in_file == line_index {
+                                patch_old_line = current_old_line;
+                                patch_new_line = current_new_line;
                                 break;
+                            }
+
+                            if line.starts_with('-') {
+                                current_old_line += 1;
+                            } else if line.starts_with('+') {
+                                current_new_line += 1;
+                            } else {
+                                current_old_line += 1;
+                                current_new_line += 1;
                             }
                         }
 
-                        if let Some(hunk_header) = hunk_header {
-                            let command = Box::new(UnstageLineCommand {
-                                repo_path: state.repo_path.clone(),
-                                file_name: file.file_name.clone(),
-                                hunk_header,
-                                line: line.clone(),
-                            });
-                            state.command_history.execute(command);
-                            state.refresh_diff();
-                        }
+                        let new_hunk_header = if line_to_unstage.starts_with('-') {
+                            format!("@@ -{},1 +{},0 @@", patch_old_line, patch_new_line)
+                        } else {
+                            format!("@@ -{},0 +{},1 @@", patch_old_line, patch_new_line)
+                        };
+
+                        let mut patch = String::new();
+                        patch.push_str(&format!(
+                            "diff --git a/{} b/{}\n",
+                            file.file_name, file.file_name
+                        ));
+                        patch.push_str(&format!("--- a/{}\n", file.file_name));
+                        patch.push_str(&format!("+++ b/{}\n", file.file_name));
+                        patch.push_str(&new_hunk_header);
+                        patch.push('\n');
+                        patch.push_str(line_to_unstage);
+                        patch.push('\n');
+
+                        let command = Box::new(ApplyPatchCommand {
+                            repo_path: state.repo_path.clone(),
+                            patch,
+                        });
+                        state.command_history.execute(command);
+                        state.refresh_diff();
                     }
                 }
             }
