@@ -292,7 +292,6 @@ pub struct AppState {
     pub files: Vec<FileDiff>,
     pub cursor_level: CursorLevel,
     pub command_history: CommandHistory,
-    pub is_bottom: bool,
 }
 
 impl AppState {
@@ -307,7 +306,6 @@ impl AppState {
             files,
             cursor_level: CursorLevel::File,
             command_history: CommandHistory::new(),
-            is_bottom: false,
         }
     }
 
@@ -365,7 +363,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
     match input {
         Some(Input::Character('q')) => {
             state.running = false;
-            state.is_bottom = false;
         }
         Some(Input::Character('!')) => {
             if let CursorLevel::File = state.cursor_level {
@@ -401,11 +398,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
         }
         Some(Input::Character('\n')) => {
-            if state.is_bottom {
-                state.running = false;
-                return state;
-            }
-
             if let CursorLevel::File = state.cursor_level {
                 if let Some(file) = state.files.get(state.file_cursor) {
                     let command = Box::new(UnstageFileCommand {
@@ -439,7 +431,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         }
         Some(Input::Character(' ')) => {
             // Page down
-            state.is_bottom = false;
             if let Some(file) = state.files.get(state.file_cursor) {
                 let header_height = if state.files.is_empty() {
                     0
@@ -454,7 +445,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         }
         Some(Input::Character('b')) => {
             // Page up
-            state.is_bottom = false;
             let header_height = if state.files.is_empty() {
                 0
             } else {
@@ -464,7 +454,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             state.scroll = state.scroll.saturating_sub(content_height);
         }
         Some(Input::KeyUp) => {
-            state.is_bottom = false;
             match state.cursor_level {
                 CursorLevel::File => {
                     state.file_cursor = state.file_cursor.saturating_sub(1);
@@ -517,75 +506,42 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
         }
         Some(Input::KeyDown) => {
-            if state.is_bottom {
-                state.running = false;
-                return state;
-            }
-
-            let at_bottom_of_file_list = state.file_cursor == state.files.len().saturating_sub(1);
-            let at_bottom_of_hunk_list = if let Some(file) = state.files.get(state.file_cursor) {
-                state.hunk_cursor == file.hunks.len().saturating_sub(1)
-            } else {
-                true
-            };
-            let at_bottom_of_line_list = if let Some(file) = state.files.get(state.file_cursor) {
-                if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                    state.line_cursor == hunk.lines.len().saturating_sub(1)
-                } else {
-                    true
+            match state.cursor_level {
+                CursorLevel::File => {
+                    if state.file_cursor < state.files.len().saturating_sub(1) {
+                        state.file_cursor += 1;
+                        state.scroll = 0;
+                        state.hunk_cursor = 0;
+                        state.line_cursor = 0;
+                    }
                 }
-            } else {
-                true
-            };
-
-            let is_at_very_bottom = match state.cursor_level {
-                CursorLevel::File => at_bottom_of_file_list,
-                CursorLevel::Hunk => at_bottom_of_file_list && at_bottom_of_hunk_list,
-                CursorLevel::Line => {
-                    at_bottom_of_file_list && at_bottom_of_hunk_list && at_bottom_of_line_list
-                }
-            };
-
-            if is_at_very_bottom {
-                state.is_bottom = true;
-            } else {
-                match state.cursor_level {
-                    CursorLevel::File => {
-                        if state.file_cursor < state.files.len().saturating_sub(1) {
+                CursorLevel::Hunk => {
+                    if let Some(file) = state.files.get(state.file_cursor) {
+                        if state.hunk_cursor < file.hunks.len().saturating_sub(1) {
+                            state.hunk_cursor += 1;
+                        } else if state.file_cursor < state.files.len().saturating_sub(1) {
                             state.file_cursor += 1;
-                            state.scroll = 0;
                             state.hunk_cursor = 0;
-                            state.line_cursor = 0;
+                            state.scroll = 0;
                         }
                     }
-                    CursorLevel::Hunk => {
-                        if let Some(file) = state.files.get(state.file_cursor) {
-                            if state.hunk_cursor < file.hunks.len().saturating_sub(1) {
+                }
+                CursorLevel::Line => {
+                    if let Some(file) = state.files.get(state.file_cursor) {
+                        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                            if state.line_cursor < hunk.lines.len().saturating_sub(1) {
+                                state.line_cursor += 1;
+                            } else if state.hunk_cursor < file.hunks.len().saturating_sub(1) {
                                 state.hunk_cursor += 1;
+                                state.line_cursor = 1;
                             } else if state.file_cursor < state.files.len().saturating_sub(1) {
                                 state.file_cursor += 1;
                                 state.hunk_cursor = 0;
                                 state.scroll = 0;
-                            }
-                        }
-                    }
-                    CursorLevel::Line => {
-                        if let Some(file) = state.files.get(state.file_cursor) {
-                            if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                                if state.line_cursor < hunk.lines.len().saturating_sub(1) {
-                                    state.line_cursor += 1;
-                                } else if state.hunk_cursor < file.hunks.len().saturating_sub(1) {
-                                    state.hunk_cursor += 1;
+                                if !state.files[state.file_cursor].hunks.is_empty() {
                                     state.line_cursor = 1;
-                                } else if state.file_cursor < state.files.len().saturating_sub(1) {
-                                    state.file_cursor += 1;
-                                    state.hunk_cursor = 0;
-                                    state.scroll = 0;
-                                    if !state.files[state.file_cursor].hunks.is_empty() {
-                                        state.line_cursor = 1;
-                                    } else {
-                                        state.line_cursor = 0;
-                                    }
+                                } else {
+                                    state.line_cursor = 0;
                                 }
                             }
                         }
@@ -619,7 +575,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
         }
         Some(Input::KeyRight) => {
-            state.is_bottom = false;
             match state.cursor_level {
                 CursorLevel::File => {
                     if !state.files.is_empty() {
@@ -642,7 +597,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
         }
         Some(Input::KeyLeft) => {
-            state.is_bottom = false;
             match state.cursor_level {
                 CursorLevel::File => {
                     // Do nothing
@@ -757,10 +711,6 @@ fn render(
             next_color_num,
             next_pair_num,
         );
-    }
-
-    if state.is_bottom {
-        window.mvaddstr(max_y - 1, max_x - 4, "ok?");
     }
 
     window.refresh();
@@ -1039,7 +989,7 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
     files
 }
 
-pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>) -> bool {
+pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>) {
     let window = initscr();
     window.keypad(true);
     noecho();
@@ -1082,7 +1032,6 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>) -> bool {
     }
 
     endwin();
-    state.is_bottom
 }
 
 pub fn run(repo_path: PathBuf) -> Result<()> {
@@ -1096,10 +1045,7 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
         bail!("No staged changes found.");
     }
 
-    let should_commit = tui_loop(repo_path.clone(), files);
-    if !should_commit {
-        std::process::exit(1);
-    }
+    tui_loop(repo_path.clone(), files);
 
     Ok(())
 }
