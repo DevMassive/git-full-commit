@@ -246,6 +246,14 @@ impl CommandHistory {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum FileStatus {
+    Added,
+    Modified,
+    Renamed,
+    Deleted,
+}
+
 #[derive(Debug, Clone)]
 pub struct Hunk {
     pub start_line: usize,
@@ -259,7 +267,7 @@ pub struct FileDiff {
     pub file_name: String,
     pub hunks: Vec<Hunk>,
     pub lines: Vec<String>,
-    pub is_new_file: bool,
+    pub status: FileStatus,
 }
 
 pub struct AppState {
@@ -575,7 +583,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     .expect("Failed to get diff for file.");
                 let patch = String::from_utf8_lossy(&output.stdout).to_string();
 
-                if file.is_new_file {
+                if file.status == FileStatus::Added {
                     let command = Box::new(RemoveFileCommand {
                         repo_path: state.repo_path.clone(),
                         file_name: file.file_name.clone(),
@@ -834,7 +842,13 @@ fn render(window: &Window, state: &AppState) {
             } else {
                 window.clrtoeol();
             }
-            window.addstr(&file.file_name);
+            let status_char = match file.status {
+                FileStatus::Added => 'A',
+                FileStatus::Modified => 'M',
+                FileStatus::Renamed => 'R',
+                FileStatus::Deleted => 'D',
+            };
+            window.addstr(&format!("{} {}", status_char, file.file_name));
             window.attroff(COLOR_PAIR(pair));
         }
     }
@@ -1065,11 +1079,19 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
                 file_name: file_name.to_string(),
                 hunks: Vec::new(),
                 lines: Vec::new(), // Will be filled in later
-                is_new_file: false,
+                status: FileStatus::Modified,
             });
         } else if line.starts_with("new file mode") {
             if let Some(file) = current_file.as_mut() {
-                file.is_new_file = true;
+                file.status = FileStatus::Added;
+            }
+        } else if line.starts_with("deleted file mode") {
+            if let Some(file) = current_file.as_mut() {
+                file.status = FileStatus::Deleted;
+            }
+        } else if line.starts_with("rename from") {
+            if let Some(file) = current_file.as_mut() {
+                file.status = FileStatus::Renamed;
             }
         } else if line.starts_with("@@ ") {
             if let Some(hunk) = current_hunk.take() {
