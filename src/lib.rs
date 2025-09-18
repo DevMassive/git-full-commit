@@ -854,7 +854,9 @@ fn render(window: &Window, state: &AppState) {
 
     // Render separator
     window.mv((num_files + 1) as i32, 0);
+    window.attron(COLOR_PAIR(9));
     window.hline(pancurses::ACS_HLINE(), max_x);
+    window.attroff(COLOR_PAIR(9));
 
     if state.file_cursor >= num_files {
         if state.is_commit_mode {
