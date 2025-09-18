@@ -195,17 +195,18 @@ fn test_commit_mode_activation_and_commit() {
     run_test_with_pancurses(|window| {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
+        state.file_cursor = 1;
 
-        // We start with 1 file, cursor at index 0.
+        // We start with 1 file, cursor at index 1.
         assert_eq!(state.files.len(), 1);
-        assert_eq!(state.file_cursor, 0);
+        assert_eq!(state.file_cursor, 1);
         assert!(!state.is_commit_mode);
 
         // 1. Press KeyDown to move to the commit line.
         state = update_state(state, Some(Input::KeyDown), &window);
 
         // 2. Assert that we are in commit mode.
-        assert_eq!(state.file_cursor, 1); // Cursor is on the commit line
+        assert_eq!(state.file_cursor, 2); // Cursor is on the commit line
         assert!(state.is_commit_mode);
 
         // 3. Type a commit message
@@ -270,7 +271,7 @@ fn test_page_up_down_with_cursor() {
         let header_height = if state.files.is_empty() {
             0
         } else {
-            state.files.len() + 2
+            state.files.len() + 3
         };
         let content_height = (max_y as usize).saturating_sub(header_height);
 
@@ -346,16 +347,16 @@ fn test_commit_and_continue() {
         let file_path = setup.repo_path.join("another.txt");
         fs::write(&file_path, "hello\n").unwrap();
 
-        // We start with 1 file, cursor at index 0.
+        // We start with 1 file, cursor at index 1.
         assert_eq!(state.files.len(), 1);
-        assert_eq!(state.file_cursor, 0);
+        assert_eq!(state.file_cursor, 1);
         assert!(!state.is_commit_mode);
 
         // 1. Press KeyDown to move to the commit line.
         state = update_state(state, Some(Input::KeyDown), &window);
 
         // 2. Assert that we are in commit mode.
-        assert_eq!(state.file_cursor, 1); // Cursor is on the commit line
+        assert_eq!(state.file_cursor, 2); // Cursor is on the commit line
         assert!(state.is_commit_mode);
 
         // 3. Type a commit message
@@ -389,16 +390,16 @@ fn test_commit_and_exit() {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
 
-        // We start with 1 file, cursor at index 0.
+        // We start with 1 file, cursor at index 1.
         assert_eq!(state.files.len(), 1);
-        assert_eq!(state.file_cursor, 0);
+        assert_eq!(state.file_cursor, 1);
         assert!(!state.is_commit_mode);
 
         // 1. Press KeyDown to move to the commit line.
         state = update_state(state, Some(Input::KeyDown), &window);
 
         // 2. Assert that we are in commit mode.
-        assert_eq!(state.file_cursor, 1); // Cursor is on the commit line
+        assert_eq!(state.file_cursor, 2); // Cursor is on the commit line
         assert!(state.is_commit_mode);
 
         // 3. Type a commit message

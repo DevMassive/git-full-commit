@@ -283,17 +283,21 @@ pub struct AppState {
     pub commit_cursor: usize,
     pub amend_message: String,
     pub is_amend_mode: bool,
+    pub previous_commit_hash: String,
+    pub previous_commit_message: String,
 }
 
 impl AppState {
     pub fn new(repo_path: PathBuf, files: Vec<FileDiff>) -> Self {
         let commit_message =
             commit_storage::load_commit_message(&repo_path).unwrap_or_else(|_| String::new());
+        let (previous_commit_hash, previous_commit_message) =
+            get_previous_commit_info(&repo_path).unwrap_or((String::new(), String::new()));
         Self {
             repo_path,
             scroll: 0,
             running: true,
-            file_cursor: 0,
+            file_cursor: 1,
             line_cursor: 0,
             files,
             command_history: CommandHistory::new(),
@@ -302,14 +306,17 @@ impl AppState {
             commit_cursor: 0,
             amend_message: String::new(),
             is_amend_mode: false,
+            previous_commit_hash,
+            previous_commit_message,
         }
     }
 
     pub fn get_cursor_line_index(&self) -> usize {
-        if self.files.is_empty() || self.file_cursor >= self.files.len() {
-            return 0;
+        if self.file_cursor > 0 && self.file_cursor <= self.files.len() {
+            self.line_cursor
+        } else {
+            0
         }
-        self.line_cursor
     }
 
     pub fn refresh_diff(&mut self) {
@@ -317,15 +324,16 @@ impl AppState {
         self.files = files;
 
         if self.files.is_empty() {
-            self.file_cursor = 0;
+            self.file_cursor = 1; // commit message line
             self.line_cursor = 0;
             self.scroll = 0;
             return;
         }
 
-        self.file_cursor = self.file_cursor.min(self.files.len().saturating_sub(1));
+        // 0: prev commit, 1..N: files, N+1: commit message
+        self.file_cursor = self.file_cursor.min(self.files.len() + 1);
         self.line_cursor = 0;
-        self.scroll = self.get_cursor_line_index();
+        self.scroll = 0;
     }
 }
 
@@ -342,6 +350,23 @@ fn get_previous_commit_message(repo_path: &Path) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+fn get_previous_commit_info(repo_path: &Path) -> Result<(String, String)> {
+    let output = OsCommand::new("git")
+        .arg("log")
+        .arg("-1")
+        .arg("--pretty=%h %s")
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        return Ok((String::new(), String::new()));
+    }
+    let full_string = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let mut parts = full_string.splitn(2, ' ');
+    let hash = parts.next().unwrap_or("").to_string();
+    let message = parts.next().unwrap_or("").to_string();
+    Ok((hash, message))
+}
+
 pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) -> AppState {
     let (max_y, _) = window.get_max_yx();
 
@@ -350,7 +375,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             Some(Input::KeyUp) => {
                 state.is_commit_mode = false;
                 curs_set(0);
-                state.file_cursor = state.files.len().saturating_sub(1);
+                state.file_cursor = state.files.len();
                 state.line_cursor = 0;
                 state.scroll = 0;
                 return state;
@@ -573,134 +598,47 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             state.running = false;
         }
         Some(Input::Character('!')) => {
-            if let Some(file) = state.files.get(state.file_cursor) {
-                // Get the patch before doing anything
-                let output = OsCommand::new("git")
-                    .arg("diff")
-                    .arg("--staged")
-                    .arg("--")
-                    .arg(&file.file_name)
-                    .current_dir(&state.repo_path)
-                    .output()
-                    .expect("Failed to get diff for file.");
-                let patch = String::from_utf8_lossy(&output.stdout).to_string();
+            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                if let Some(file) = state.files.get(state.file_cursor - 1).cloned() {
+                    // Get the patch before doing anything
+                    let output = OsCommand::new("git")
+                        .arg("diff")
+                        .arg("--staged")
+                        .arg("--")
+                        .arg(&file.file_name)
+                        .current_dir(&state.repo_path)
+                        .output()
+                        .expect("Failed to get diff for file.");
+                    let patch = String::from_utf8_lossy(&output.stdout).to_string();
 
-                if file.status == FileStatus::Added {
-                    let command = Box::new(RemoveFileCommand {
-                        repo_path: state.repo_path.clone(),
-                        file_name: file.file_name.clone(),
-                        patch,
-                    });
-                    state.command_history.execute(command);
-                } else {
-                    let command = Box::new(CheckoutFileCommand {
-                        repo_path: state.repo_path.clone(),
-                        file_name: file.file_name.clone(),
-                        patch,
-                    });
-                    state.command_history.execute(command);
+                    if file.status == FileStatus::Added {
+                        let command = Box::new(RemoveFileCommand {
+                            repo_path: state.repo_path.clone(),
+                            file_name: file.file_name.clone(),
+                            patch,
+                        });
+                        state.command_history.execute(command);
+                    } else {
+                        let command = Box::new(CheckoutFileCommand {
+                            repo_path: state.repo_path.clone(),
+                            file_name: file.file_name.clone(),
+                            patch,
+                        });
+                        state.command_history.execute(command);
+                    }
+                    state.refresh_diff();
                 }
-                state.refresh_diff();
             }
         }
         Some(Input::Character('\n')) => {
-            if let Some(file) = state.files.get(state.file_cursor) {
-                let line_index = state.line_cursor;
-                if let Some(hunk) = file.hunks.iter().find(|hunk| {
-                    let hunk_start = hunk.start_line;
-                    let hunk_end = hunk_start + hunk.lines.len();
-                    line_index >= hunk_start && line_index < hunk_end
-                }) {
-                    let mut patch = String::new();
-                    patch.push_str(&format!(
-                        "diff --git a/{} b/{}\n",
-                        file.file_name, file.file_name
-                    ));
-                    patch.push_str(&format!("--- a/{}\n", file.file_name));
-                    patch.push_str(&format!("+++ b/{}\n", file.file_name));
-                    patch.push_str(&hunk.lines.join("\n"));
-                    patch.push('\n');
-
-                    let command = Box::new(ApplyPatchCommand {
-                        repo_path: state.repo_path.clone(),
-                        patch,
-                    });
-                    state.command_history.execute(command);
-                    state.refresh_diff();
-                } else {
-                    let command = Box::new(UnstageFileCommand {
-                        repo_path: state.repo_path.clone(),
-                        file_name: file.file_name.clone(),
-                    });
-                    state.command_history.execute(command);
-                    state.refresh_diff();
-                }
-            }
-        }
-        Some(Input::Character('1')) => {
-            if let Some(file) = state.files.get(state.file_cursor) {
-                let line_index = state.line_cursor;
-                if let Some(line_to_unstage) = file.lines.get(line_index) {
-                    if !line_to_unstage.starts_with('+') && !line_to_unstage.starts_with('-') {
-                        return state;
-                    }
-
+            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                if let Some(file) = state.files.get(state.file_cursor - 1).cloned() {
+                    let line_index = state.line_cursor;
                     if let Some(hunk) = file.hunks.iter().find(|hunk| {
                         let hunk_start = hunk.start_line;
                         let hunk_end = hunk_start + hunk.lines.len();
                         line_index >= hunk_start && line_index < hunk_end
                     }) {
-                        let hunk_header = &hunk.lines[0];
-                        let mut parts = hunk_header.split(' ');
-                        let old_range = parts.nth(1).unwrap();
-                        let new_range = parts.next().unwrap();
-
-                        let mut old_range_parts = old_range.split(',');
-                        let old_start: u32 = old_range_parts
-                            .next()
-                            .unwrap()
-                            .trim_start_matches('-')
-                            .parse()
-                            .unwrap();
-
-                        let mut new_range_parts = new_range.split(',');
-                        let new_start: u32 = new_range_parts
-                            .next()
-                            .unwrap()
-                            .trim_start_matches('+')
-                            .parse()
-                            .unwrap();
-
-                        let mut current_old_line = old_start;
-                        let mut current_new_line = new_start;
-                        let mut patch_old_line = 0;
-                        let mut patch_new_line = 0;
-
-                        for (i, line) in hunk.lines.iter().skip(1).enumerate() {
-                            let current_line_index_in_file = hunk.start_line + 1 + i;
-
-                            if current_line_index_in_file == line_index {
-                                patch_old_line = current_old_line;
-                                patch_new_line = current_new_line;
-                                break;
-                            }
-
-                            if line.starts_with('-') {
-                                current_old_line += 1;
-                            } else if line.starts_with('+') {
-                                current_new_line += 1;
-                            } else {
-                                current_old_line += 1;
-                                current_new_line += 1;
-                            }
-                        }
-
-                        let new_hunk_header = if line_to_unstage.starts_with('-') {
-                            format!("@@ -{},1 +{},0 @@", patch_old_line, patch_new_line)
-                        } else {
-                            format!("@@ -{},0 +{},1 @@", patch_old_line, patch_new_line)
-                        };
-
                         let mut patch = String::new();
                         patch.push_str(&format!(
                             "diff --git a/{} b/{}\n",
@@ -708,24 +646,121 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                         ));
                         patch.push_str(&format!("--- a/{}\n", file.file_name));
                         patch.push_str(&format!("+++ b/{}\n", file.file_name));
-                        patch.push_str(&new_hunk_header);
-                        patch.push('\n');
-                        patch.push_str(line_to_unstage);
+                        patch.push_str(&hunk.lines.join("\n"));
                         patch.push('\n');
 
                         let command = Box::new(ApplyPatchCommand {
                             repo_path: state.repo_path.clone(),
                             patch,
                         });
-                        let old_line_cursor = state.line_cursor;
                         state.command_history.execute(command);
                         state.refresh_diff();
-                        if let Some(file) = state.files.get(state.file_cursor) {
-                            state.line_cursor = old_line_cursor.min(file.lines.len().saturating_sub(1));
-                            let header_height = if state.files.is_empty() { 0 } else { state.files.len() + 2 };
-                            let content_height = (max_y as usize).saturating_sub(header_height);
-                            if state.line_cursor >= state.scroll + content_height {
-                                state.scroll = state.line_cursor - content_height + 1;
+                    } else {
+                        let command = Box::new(UnstageFileCommand {
+                            repo_path: state.repo_path.clone(),
+                            file_name: file.file_name.clone(),
+                        });
+                        state.command_history.execute(command);
+                        state.refresh_diff();
+                    }
+                }
+            }
+        }
+        Some(Input::Character('1')) => {
+            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                if let Some(file) = state.files.get(state.file_cursor - 1) {
+                    let line_index = state.line_cursor;
+                    if let Some(line_to_unstage) = file.lines.get(line_index) {
+                        if !line_to_unstage.starts_with('+') && !line_to_unstage.starts_with('-') {
+                            return state;
+                        }
+
+                        if let Some(hunk) = file.hunks.iter().find(|hunk| {
+                            let hunk_start = hunk.start_line;
+                            let hunk_end = hunk_start + hunk.lines.len();
+                            line_index >= hunk_start && line_index < hunk_end
+                        }) {
+                            let hunk_header = &hunk.lines[0];
+                            let mut parts = hunk_header.split(' ');
+                            let old_range = parts.nth(1).unwrap();
+                            let new_range = parts.next().unwrap();
+
+                            let mut old_range_parts = old_range.split(',');
+                            let old_start: u32 = old_range_parts
+                                .next()
+                                .unwrap()
+                                .trim_start_matches('-')
+                                .parse()
+                                .unwrap();
+
+                            let mut new_range_parts = new_range.split(',');
+                            let new_start: u32 = new_range_parts
+                                .next()
+                                .unwrap()
+                                .trim_start_matches('+')
+                                .parse()
+                                .unwrap();
+
+                            let mut current_old_line = old_start;
+                            let mut current_new_line = new_start;
+                            let mut patch_old_line = 0;
+                            let mut patch_new_line = 0;
+
+                            for (i, line) in hunk.lines.iter().skip(1).enumerate() {
+                                let current_line_index_in_file = hunk.start_line + 1 + i;
+
+                                if current_line_index_in_file == line_index {
+                                    patch_old_line = current_old_line;
+                                    patch_new_line = current_new_line;
+                                    break;
+                                }
+
+                                if line.starts_with('-') {
+                                    current_old_line += 1;
+                                } else if line.starts_with('+') {
+                                    current_new_line += 1;
+                                } else {
+                                    current_old_line += 1;
+                                    current_new_line += 1;
+                                }
+                            }
+
+                            let new_hunk_header = if line_to_unstage.starts_with('-') {
+                                format!("@@ -{},1 +{},0 @@", patch_old_line, patch_new_line)
+                            } else {
+                                format!("@@ -{},0 +{},1 @@", patch_old_line, patch_new_line)
+                            };
+
+                            let mut patch = String::new();
+                            patch.push_str(&format!(
+                                "diff --git a/{} b/{}\n",
+                                file.file_name, file.file_name
+                            ));
+                            patch.push_str(&format!("--- a/{}\n", file.file_name));
+                            patch.push_str(&format!("+++ b/{}\n", file.file_name));
+                            patch.push_str(&new_hunk_header);
+                            patch.push('\n');
+                            patch.push_str(line_to_unstage);
+                            patch.push('\n');
+
+                            let command = Box::new(ApplyPatchCommand {
+                                repo_path: state.repo_path.clone(),
+                                patch,
+                            });
+                            let old_line_cursor = state.line_cursor;
+                            state.command_history.execute(command);
+                            state.refresh_diff();
+                            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                                if let Some(file) = state.files.get(state.file_cursor - 1) {
+                                    state.line_cursor =
+                                        old_line_cursor.min(file.lines.len().saturating_sub(1));
+                                    let header_height = state.files.len() + 3;
+                                    let content_height =
+                                        (max_y as usize).saturating_sub(header_height);
+                                    if state.line_cursor >= state.scroll + content_height {
+                                        state.scroll = state.line_cursor - content_height + 1;
+                                    }
+                                }
                             }
                         }
                     }
@@ -751,29 +786,25 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         }
         Some(Input::Character(' ')) => {
             // Page down
-            if let Some(file) = state.files.get(state.file_cursor) {
-                let header_height = if state.files.is_empty() {
-                    0
-                } else {
-                    state.files.len() + 2
-                };
-                let content_height = (max_y as usize).saturating_sub(header_height);
-                let new_scroll = state.scroll.saturating_add(content_height);
-                let max_scroll = file.lines.len().saturating_sub(content_height);
-                state.scroll = new_scroll.min(max_scroll);
-                state.line_cursor = state.scroll;
+            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                if let Some(file) = state.files.get(state.file_cursor - 1) {
+                    let header_height = state.files.len() + 3;
+                    let content_height = (max_y as usize).saturating_sub(header_height);
+                    let new_scroll = state.scroll.saturating_add(content_height);
+                    let max_scroll = file.lines.len().saturating_sub(content_height);
+                    state.scroll = new_scroll.min(max_scroll);
+                    state.line_cursor = state.scroll;
+                }
             }
         }
         Some(Input::Character('b')) => {
             // Page up
-            let header_height = if state.files.is_empty() {
-                0
-            } else {
-                state.files.len() + 2
-            };
-            let content_height = (max_y as usize).saturating_sub(header_height);
-            state.scroll = state.scroll.saturating_sub(content_height);
-            state.line_cursor = state.scroll;
+            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                let header_height = state.files.len() + 3;
+                let content_height = (max_y as usize).saturating_sub(header_height);
+                state.scroll = state.scroll.saturating_sub(content_height);
+                state.line_cursor = state.scroll;
+            }
         }
         Some(Input::KeyUp) => {
             state.file_cursor = state.file_cursor.saturating_sub(1);
@@ -781,13 +812,13 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             state.line_cursor = 0;
         }
         Some(Input::KeyDown) => {
-            if state.file_cursor < state.files.len() {
+            if state.file_cursor < state.files.len() + 1 {
                 state.file_cursor += 1;
                 state.scroll = 0;
                 state.line_cursor = 0;
             }
 
-            if state.file_cursor == state.files.len() {
+            if state.file_cursor == state.files.len() + 1 {
                 state.is_commit_mode = true;
                 curs_set(1);
             }
@@ -800,16 +831,14 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
         }
         Some(Input::Character('j')) => {
-            if let Some(file) = state.files.get(state.file_cursor) {
-                if state.line_cursor < file.lines.len().saturating_sub(1) {
-                    state.line_cursor += 1;
+            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                if let Some(file) = state.files.get(state.file_cursor - 1) {
+                    if state.line_cursor < file.lines.len().saturating_sub(1) {
+                        state.line_cursor += 1;
+                    }
                 }
             }
-            let header_height = if state.files.is_empty() {
-                0
-            } else {
-                state.files.len() + 2
-            };
+            let header_height = state.files.len() + 3;
             let content_height = (max_y as usize).saturating_sub(header_height);
             let cursor_line = state.get_cursor_line_index();
 
@@ -829,19 +858,40 @@ fn render(window: &Window, state: &AppState) {
 
     let num_files = state.files.len();
 
+    // Render previous commit info
+    let prev_commit_line_y = 0;
+    let is_selected_prev_commit = state.file_cursor == 0;
+    let pair = if is_selected_prev_commit { 5 } else { 1 };
+    window.attron(COLOR_PAIR(pair));
+    window.mv(prev_commit_line_y, 0);
+    if is_selected_prev_commit {
+        for x in 0..max_x {
+            window.mvaddch(prev_commit_line_y, x, ' ');
+        }
+        window.mv(prev_commit_line_y, 0);
+    } else {
+        window.clrtoeol();
+    }
+    window.addstr(&format!(
+        "{} {}",
+        &state.previous_commit_hash, &state.previous_commit_message
+    ));
+    window.attroff(COLOR_PAIR(pair));
+
     // Render sticky header
     if !state.files.is_empty() {
         for (i, file) in state.files.iter().enumerate() {
-            let is_selected_file = i == state.file_cursor;
+            let file_line_y = i as i32 + 1;
+            let is_selected_file = state.file_cursor == i + 1;
             let pair = if is_selected_file { 5 } else { 1 };
             let status_pair = if is_selected_file { 6 } else { 2 };
             window.attron(COLOR_PAIR(pair));
-            window.mv(i as i32, 0);
+            window.mv(file_line_y, 0);
             if is_selected_file {
                 for x in 0..max_x {
-                    window.mvaddch(i as i32, x, ' ');
+                    window.mvaddch(file_line_y, x, ' ');
                 }
-                window.mv(i as i32, 0);
+                window.mv(file_line_y, 0);
             } else {
                 window.clrtoeol();
             }
@@ -862,8 +912,8 @@ fn render(window: &Window, state: &AppState) {
     }
 
     // Render commit message line
-    let commit_line_y = num_files as i32;
-    let is_selected = state.file_cursor == num_files;
+    let commit_line_y = (num_files + 1) as i32;
+    let is_selected = state.file_cursor == num_files + 1;
     let pair = if is_selected { 5 } else { 1 };
     window.attron(COLOR_PAIR(pair));
     window.mv(commit_line_y, 0);
@@ -887,12 +937,65 @@ fn render(window: &Window, state: &AppState) {
     window.attroff(COLOR_PAIR(pair));
 
     // Render separator
-    window.mv((num_files + 1) as i32, 0);
+    window.mv((num_files + 2) as i32, 0);
     window.attron(COLOR_PAIR(9));
     window.hline(pancurses::ACS_HLINE(), max_x);
     window.attroff(COLOR_PAIR(9));
 
-    if state.file_cursor >= num_files {
+    if state.file_cursor > 0 && state.file_cursor <= num_files {
+        let header_height = num_files + 3;
+        let content_height = (max_y as usize).saturating_sub(header_height);
+
+        let selected_file = &state.files[state.file_cursor - 1];
+        let lines = &selected_file.lines;
+
+        let cursor_position = state.get_cursor_line_index();
+
+        let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); lines.len()];
+        for hunk in &selected_file.hunks {
+            let mut old_line_counter = hunk.old_start;
+            let mut new_line_counter = hunk.new_start;
+
+            for (hunk_line_index, hunk_line) in hunk.lines.iter().enumerate() {
+                let line_index = hunk.start_line + hunk_line_index;
+                if line_index >= lines.len() {
+                    continue;
+                }
+
+                if hunk_line.starts_with('+') {
+                    line_numbers[line_index] = (None, Some(new_line_counter));
+                    new_line_counter += 1;
+                } else if hunk_line.starts_with('-') {
+                    line_numbers[line_index] = (Some(old_line_counter), None);
+                    old_line_counter += 1;
+                } else if !hunk_line.starts_with("@@") {
+                    line_numbers[line_index] = (Some(old_line_counter), Some(new_line_counter));
+                    old_line_counter += 1;
+                    new_line_counter += 1;
+                }
+            }
+        }
+
+        for (i, line) in lines
+            .iter()
+            .skip(state.scroll)
+            .take(content_height)
+            .enumerate()
+        {
+            let line_index_in_file = i + state.scroll;
+            let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
+            render_line(
+                window,
+                state,
+                line,
+                line_index_in_file,
+                i as i32 + header_height as i32,
+                cursor_position,
+                old_line_num,
+                new_line_num,
+            );
+        }
+    } else if state.file_cursor == num_files + 1 {
         if state.is_commit_mode {
             let (prefix, message) = if state.is_amend_mode {
                 ("Amend: ", &state.amend_message)
@@ -904,63 +1007,8 @@ fn render(window: &Window, state: &AppState) {
             let cursor_display_pos = prefix_width + message_before_cursor.width();
             window.mv(commit_line_y, cursor_display_pos as i32);
         }
-        window.refresh();
-        return;
     }
-
-    let header_height = num_files + 2;
-    let content_height = (max_y as usize).saturating_sub(header_height);
-
-    let selected_file = &state.files[state.file_cursor];
-    let lines = &selected_file.lines;
-
-    let cursor_position = state.get_cursor_line_index();
-
-    let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); lines.len()];
-    for hunk in &selected_file.hunks {
-        let mut old_line_counter = hunk.old_start;
-        let mut new_line_counter = hunk.new_start;
-
-        for (hunk_line_index, hunk_line) in hunk.lines.iter().enumerate() {
-            let line_index = hunk.start_line + hunk_line_index;
-            if line_index >= lines.len() {
-                continue;
-            }
-
-            if hunk_line.starts_with('+') {
-                line_numbers[line_index] = (None, Some(new_line_counter));
-                new_line_counter += 1;
-            } else if hunk_line.starts_with('-') {
-                line_numbers[line_index] = (Some(old_line_counter), None);
-                old_line_counter += 1;
-            } else if !hunk_line.starts_with("@@") {
-                line_numbers[line_index] = (Some(old_line_counter), Some(new_line_counter));
-                old_line_counter += 1;
-                new_line_counter += 1;
-            }
-        }
-    }
-
-    for (i, line) in lines
-        .iter()
-        .skip(state.scroll)
-        .take(content_height)
-        .enumerate()
-    {
-        let line_index_in_file = i + state.scroll;
-        let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
-        render_line(
-            window,
-            state,
-            line,
-            line_index_in_file,
-            i as i32 + header_height as i32,
-            cursor_position,
-            old_line_num,
-            new_line_num,
-        );
-    }
-
+    // On prev commit line (cursor 0) or other cases, just refresh.
     window.refresh();
 }
 
