@@ -74,14 +74,8 @@ impl UnstageHunkCommand {
             "diff --git a/{} b/{}\n",
             self.file_name, self.file_name
         ));
-        patch.push_str(&format!(
-            "--- a/{}\n",
-            self.file_name
-        ));
-        patch.push_str(&format!(
-            "+++ b/{}\n",
-            self.file_name
-        ));
+        patch.push_str(&format!("--- a/{}\n", self.file_name));
+        patch.push_str(&format!("+++ b/{}\n", self.file_name));
         patch.push_str(&self.hunk_lines.join("\n"));
         patch.push('\n');
 
@@ -115,8 +109,7 @@ impl UnstageHunkCommand {
             // For debugging, but should not panic in production
             eprintln!(
                 "git apply failed for patch (reverse={}):\n{}\n",
-                reverse,
-                patch
+                reverse, patch
             );
         }
     }
@@ -179,10 +172,59 @@ impl CheckoutFileCommand {
         if !status.success() {
             eprintln!(
                 "git apply failed for patch (reverse={}):\n{}\n",
-                reverse,
-                self.patch
+                reverse, self.patch
             );
         }
+    }
+}
+
+struct RemoveFileCommand {
+    repo_path: PathBuf,
+    file_name: String,
+    patch: String,
+}
+
+impl Command for RemoveFileCommand {
+    fn execute(&mut self) {
+        OsCommand::new("git")
+            .arg("rm")
+            .arg("-f")
+            .arg(&self.file_name)
+            .current_dir(&self.repo_path)
+            .output()
+            .expect("Failed to remove file.");
+    }
+
+    fn undo(&mut self) {
+        use std::io::Write;
+        use std::process::{Command as OsCommand, Stdio};
+
+        // First, apply the patch to restore the file content
+        let mut child = OsCommand::new("git")
+            .arg("apply")
+            .arg("--unidiff-zero")
+            .arg("-")
+            .current_dir(&self.repo_path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Failed to spawn git apply process.");
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(self.patch.as_bytes())
+                .expect("Failed to write to stdin.");
+        }
+        child.wait().expect("Failed to wait for git apply process.");
+
+        // Then, add the restored file to the index
+        OsCommand::new("git")
+            .arg("add")
+            .arg(&self.file_name)
+            .current_dir(&self.repo_path)
+            .output()
+            .expect("Failed to stage file.");
     }
 }
 
@@ -231,6 +273,7 @@ pub struct FileDiff {
     pub file_name: String,
     pub hunks: Vec<Hunk>,
     pub lines: Vec<String>,
+    pub is_new_file: bool,
 }
 
 pub enum CursorLevel {
@@ -308,8 +351,9 @@ impl AppState {
         }
 
         self.file_cursor = self.file_cursor.min(self.files.len().saturating_sub(1));
-        self.hunk_cursor =
-            self.hunk_cursor.min(self.files[self.file_cursor].hunks.len().saturating_sub(1));
+        self.hunk_cursor = self
+            .hunk_cursor
+            .min(self.files[self.file_cursor].hunks.len().saturating_sub(1));
         self.line_cursor = 0;
         self.scroll = self.get_cursor_line_index();
     }
@@ -326,7 +370,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         Some(Input::Character('!')) => {
             if let CursorLevel::File = state.cursor_level {
                 if let Some(file) = state.files.get(state.file_cursor) {
-                    // Get the patch before checking out
+                    // Get the patch before doing anything
                     let output = OsCommand::new("git")
                         .arg("diff")
                         .arg("--staged")
@@ -337,12 +381,21 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                         .expect("Failed to get diff for file.");
                     let patch = String::from_utf8_lossy(&output.stdout).to_string();
 
-                    let command = Box::new(CheckoutFileCommand {
-                        repo_path: state.repo_path.clone(),
-                        file_name: file.file_name.clone(),
-                        patch,
-                    });
-                    state.command_history.execute(command);
+                    if file.is_new_file {
+                        let command = Box::new(RemoveFileCommand {
+                            repo_path: state.repo_path.clone(),
+                            file_name: file.file_name.clone(),
+                            patch,
+                        });
+                        state.command_history.execute(command);
+                    } else {
+                        let command = Box::new(CheckoutFileCommand {
+                            repo_path: state.repo_path.clone(),
+                            file_name: file.file_name.clone(),
+                            patch,
+                        });
+                        state.command_history.execute(command);
+                    }
                     state.refresh_diff();
                 }
             }
@@ -611,7 +664,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
     state
 }
 
-
 fn render(
     window: &Window,
     state: &AppState,
@@ -727,8 +779,8 @@ fn render_line(
     next_color_num: &mut i16,
     next_pair_num: &mut i16,
 ) {
-    let is_cursor_line = line_index_in_file == cursor_position
-        && matches!(state.cursor_level, CursorLevel::Line);
+    let is_cursor_line =
+        line_index_in_file == cursor_position && matches!(state.cursor_level, CursorLevel::Line);
 
     let is_selected = match state.cursor_level {
         CursorLevel::File => true,
@@ -950,7 +1002,12 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
                 file_name: file_name.to_string(),
                 hunks: Vec::new(),
                 lines: Vec::new(), // Will be filled in later
+                is_new_file: false,
             });
+        } else if line.starts_with("new file mode") {
+            if let Some(file) = current_file.as_mut() {
+                file.is_new_file = true;
+            }
         } else if line.starts_with("@@ ") {
             if let Some(hunk) = current_hunk.take() {
                 if let Some(file) = current_file.as_mut() {
