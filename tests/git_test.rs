@@ -19,6 +19,32 @@ impl TestSetup {
             repo_path,
         }
     }
+
+    fn new_multi_line() -> Self {
+        let tmp_dir = TempDir::new().unwrap();
+        let repo_path = tmp_dir.path().to_path_buf();
+
+        // git init
+        run_git(&repo_path, &["init"]);
+        run_git(&repo_path, &["config", "user.name", "Test"]);
+        run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+
+        // first commit
+        let file_path = repo_path.join("test.txt");
+        fs::write(&file_path, "line1\nline2\nline3\n").unwrap();
+
+        run_git(&repo_path, &["add", "test.txt"]);
+        run_git(&repo_path, &["commit", "-m", "initial commit"]);
+
+        // stage file
+        fs::write(&file_path, "line1\nchanged\nline3\n").unwrap();
+        run_git(&repo_path, &["add", "test.txt"]);
+
+        TestSetup {
+            _tmp_dir: tmp_dir,
+            repo_path,
+        }
+    }
 }
 
 fn setup_git_repo() -> (TempDir, std::path::PathBuf) {
@@ -125,6 +151,50 @@ fn test_unstage_hunk_by_line_with_undo_redo() {
         // Redo
         let state_after_redo = update_state(state_after_undo, Some(Input::Character('r')), &window);
         assert_eq!(state_after_redo.files.len(), 0);
+    });
+}
+
+#[test]
+#[serial]
+fn test_unstage_line_with_undo_redo() {
+    run_test_with_pancurses(|window| {
+        let setup = TestSetup::new_multi_line();
+        let mut state = create_test_state(&setup);
+
+        // We have one file with one hunk. The hunk has 3 lines: one removed, one added, one context.
+        // diff --git a/test.txt b/test.txt
+        // index 3027459..9413563 100644
+        // --- a/test.txt
+        // +++ b/test.txt
+        // @@ -1,3 +1,3 @@
+        //  line1
+        // -line2
+        // +changed
+        //  line3
+        assert_eq!(state.files.len(), 1);
+        assert_eq!(state.files[0].hunks.len(), 1);
+        assert_eq!(state.files[0].lines.len(), 7); // 4 header + 3 hunk lines
+
+        // Let's unstage the "-line2" line. It's at index 5.
+        state.line_cursor = 5;
+
+        // Unstage line
+        let state_after_unstage = update_state(state, Some(Input::Character('1')), &window);
+        assert_eq!(state_after_unstage.files.len(), 1);
+        // The diff should now only contain "+changed"
+        assert_eq!(state_after_unstage.files[0].lines.len(), 6);
+        assert!(state_after_unstage.files[0].lines.iter().any(|l| l.contains("+changed")));
+        assert!(!state_after_unstage.files[0].lines.iter().any(|l| l.contains("-line2")));
+
+        // Undo
+        let state_after_undo = update_state(state_after_unstage, Some(Input::Character('u')), &window);
+        assert_eq!(state_after_undo.files.len(), 1);
+        assert_eq!(state_after_undo.files[0].lines.len(), 7);
+
+        // Redo
+        let state_after_redo = update_state(state_after_undo, Some(Input::Character('r')), &window);
+        assert_eq!(state_after_redo.files.len(), 1);
+        assert_eq!(state_after_redo.files[0].lines.len(), 6);
     });
 }
 

@@ -51,6 +51,76 @@ impl Command for UnstageFileCommand {
     }
 }
 
+struct UnstageLineCommand {
+    repo_path: PathBuf,
+    file_name: String,
+    hunk_header: String,
+    line: String,
+}
+
+impl Command for UnstageLineCommand {
+    fn execute(&mut self) {
+        self.apply_patch(true);
+    }
+
+    fn undo(&mut self) {
+        self.apply_patch(false);
+    }
+}
+
+impl UnstageLineCommand {
+    fn apply_patch(&self, reverse: bool) {
+        use std::io::Write;
+        use std::process::{Command as OsCommand, Stdio};
+
+        let mut patch = String::new();
+        patch.push_str(&format!(
+            "diff --git a/{} b/{}\n",
+            self.file_name, self.file_name
+        ));
+        patch.push_str(&format!("--- a/{}\n", self.file_name));
+        patch.push_str(&format!("+++ b/{}\n", self.file_name));
+        patch.push_str(&self.hunk_header);
+        patch.push('\n');
+        patch.push_str(&self.line);
+        patch.push('\n');
+
+        let mut args = vec!["apply"];
+        if reverse {
+            args.push("--cached");
+            args.push("--reverse");
+        } else {
+            args.push("--cached");
+        }
+        args.push("--unidiff-zero");
+        args.push("-");
+
+        let mut child = OsCommand::new("git")
+            .args(&args)
+            .current_dir(&self.repo_path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Failed to spawn git apply process.");
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(patch.as_bytes())
+                .expect("Failed to write to stdin.");
+        }
+
+        let status = child.wait().expect("Failed to wait for git apply process.");
+        if !status.success() {
+            // For debugging, but should not panic in production
+            eprintln!(
+                "git apply failed for patch (reverse={}):\n{}\n",
+                reverse, patch
+            );
+        }
+    }
+}
+
 struct UnstageHunkCommand {
     repo_path: PathBuf,
     file_name: String,
@@ -579,7 +649,8 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
     }
 
     match input {
-        Some(Input::Character('\u{3}')) => { // Ctrl+C
+        Some(Input::Character('\u{3}')) => {
+            // Ctrl+C
             let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
             state.running = false;
         }
@@ -636,6 +707,36 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     });
                     state.command_history.execute(command);
                     state.refresh_diff();
+                }
+            }
+        }
+        Some(Input::Character('1')) => {
+            if let Some(file) = state.files.get(state.file_cursor) {
+                let line_index = state.line_cursor;
+                if let Some(line) = file.lines.get(line_index) {
+                    if line.starts_with('+') || line.starts_with('-') {
+                        // Find the hunk header for the current line
+                        let mut hunk_header = None;
+                        for hunk in &file.hunks {
+                            if line_index >= hunk.start_line
+                                && line_index < hunk.start_line + hunk.lines.len()
+                            {
+                                hunk_header = Some(hunk.lines[0].clone());
+                                break;
+                            }
+                        }
+
+                        if let Some(hunk_header) = hunk_header {
+                            let command = Box::new(UnstageLineCommand {
+                                repo_path: state.repo_path.clone(),
+                                file_name: file.file_name.clone(),
+                                hunk_header,
+                                line: line.clone(),
+                            });
+                            state.command_history.execute(command);
+                            state.refresh_diff();
+                        }
+                    }
                 }
             }
         }
@@ -712,7 +813,11 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     state.line_cursor += 1;
                 }
             }
-            let header_height = if state.files.is_empty() { 0 } else { state.files.len() + 2 };
+            let header_height = if state.files.is_empty() {
+                0
+            } else {
+                state.files.len() + 2
+            };
             let content_height = (max_y as usize).saturating_sub(header_height);
             let cursor_line = state.get_cursor_line_index();
 
