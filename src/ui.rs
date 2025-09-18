@@ -48,7 +48,8 @@ pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>)
     while state.running {
         render(&window, &state);
         let input = window.getch();
-        state = update_state(state, input, &window);
+        let (max_y, _) = window.get_max_yx();
+        state = update_state(state, input, max_y);
     }
 
     endwin();
@@ -352,13 +353,12 @@ fn render_line(
     }
 }
 
-pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) -> AppState {
-    let (max_y, _) = window.get_max_yx();
-
+pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> AppState {
     if state.is_commit_mode {
         match input {
             Some(Input::KeyUp) => {
                 state.is_commit_mode = false;
+                #[cfg(not(test))]
                 curs_set(0);
                 state.file_cursor = state.files.len();
                 state.line_cursor = 0;
@@ -433,6 +433,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 } else {
                     state.refresh_diff();
                     state.is_commit_mode = false;
+                    #[cfg(not(test))]
                     curs_set(0);
                 }
 
@@ -497,6 +498,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     // ESC key
                     state.is_commit_mode = false;
                     state.is_amend_mode = false; // Also reset amend mode
+                    #[cfg(not(test))]
                     curs_set(0);
                 } else if c == '\u{1}' {
                     // Ctrl-A: beginning of line
@@ -782,18 +784,27 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             };
 
             if lines_count > 0 {
-                let new_scroll = state.scroll.saturating_add(content_height);
-                let max_scroll = lines_count.saturating_sub(content_height);
-                state.scroll = new_scroll.min(max_scroll);
-                state.line_cursor = state.scroll;
+                state.line_cursor = state
+                    .line_cursor
+                    .saturating_add(content_height)
+                    .min(lines_count.saturating_sub(1));
+
+                if state.line_cursor >= state.scroll + content_height {
+                    let new_scroll = state.scroll.saturating_add(content_height);
+                    let max_scroll = lines_count.saturating_sub(content_height);
+                    state.scroll = new_scroll.min(max_scroll);
+                }
             }
         }
         Some(Input::Character('b')) => {
             // Page up
             let header_height = state.files.len() + 3;
             let content_height = (max_y as usize).saturating_sub(header_height);
-            state.scroll = state.scroll.saturating_sub(content_height);
-            state.line_cursor = state.scroll;
+            state.line_cursor = state.line_cursor.saturating_sub(content_height);
+
+            if state.line_cursor < state.scroll {
+                state.scroll = state.scroll.saturating_sub(content_height);
+            }
         }
         Some(Input::KeyUp) => {
             state.file_cursor = state.file_cursor.saturating_sub(1);
@@ -809,6 +820,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
 
             if state.file_cursor == state.files.len() + 1 {
                 state.is_commit_mode = true;
+                #[cfg(not(test))]
                 curs_set(1);
             }
         }
@@ -844,4 +856,133 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
     }
 
     state
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app_state::AppState;
+    use crate::git::{FileDiff, FileStatus, Hunk};
+    use pancurses::Input;
+    use std::path::PathBuf;
+
+    fn create_test_state(
+        lines_count: usize,
+        file_cursor: usize,
+        line_cursor: usize,
+        scroll: usize,
+    ) -> AppState {
+        let mut files = Vec::new();
+        if lines_count > 0 {
+            let lines = (0..lines_count).map(|i| format!("line {}", i)).collect();
+            files.push(FileDiff {
+                file_name: "test_file.rs".to_string(),
+                status: FileStatus::Modified,
+                lines,
+                hunks: vec![Hunk {
+                    old_start: 1,
+                    new_start: 1,
+                    lines: Vec::new(),
+                    start_line: 0,
+                }],
+            });
+        }
+
+        let mut state = AppState::new(PathBuf::from("/tmp"), files);
+        state.file_cursor = file_cursor;
+        state.line_cursor = line_cursor;
+        state.scroll = scroll;
+        // Mock previous commit files to avoid git command execution in tests
+        state.previous_commit_files = vec![];
+        state
+    }
+
+    // --- Page Down Tests ---
+
+    #[test]
+    fn test_page_down_moves_cursor_and_scroll() {
+        // Simulates a normal page down where both cursor and scroll position change.
+        let initial_state = create_test_state(100, 1, 5, 0);
+        let num_files = initial_state.files.len();
+        let max_y = 30; // Results in content_height of 26 (30 - (1 file + 3 header lines))
+
+        let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
+
+        let header_height = num_files + 3;
+        let content_height = (max_y as usize).saturating_sub(header_height); // 26
+
+        assert_eq!(final_state.line_cursor, 5 + content_height, "Cursor should move down by one page");
+        assert_eq!(final_state.scroll, content_height, "Scroll should move down by one page");
+    }
+
+    #[test]
+    fn test_page_down_at_end_moves_cursor_only() {
+        // Simulates paging down when near the end of the file.
+        // The cursor moves, but the scroll position stays fixed at the maximum scroll position.
+        let lines_count = 100;
+        let max_y = 30;
+        let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
+        let max_scroll = lines_count - content_height; // 74
+
+        let initial_state = create_test_state(lines_count, 1, 80, max_scroll);
+
+        let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
+
+        assert_eq!(final_state.line_cursor, lines_count - 1, "Cursor should move to the last line");
+        assert_eq!(final_state.scroll, max_scroll, "Scroll should not change");
+    }
+
+    #[test]
+    fn test_page_down_clamps_cursor_at_end() {
+        // Ensures that paging down past the end of the file clamps the cursor to the last line.
+        let lines_count = 40;
+        let max_y = 30;
+        let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
+        let initial_state = create_test_state(lines_count, 1, 20, 0);
+
+        let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
+
+        assert_eq!(final_state.line_cursor, lines_count - 1, "Cursor should be clamped to the last line");
+    }
+
+    // --- Page Up Tests ---
+
+    #[test]
+    fn test_page_up_moves_cursor_and_scroll() {
+        // Simulates a normal page up where both cursor and scroll change.
+        let max_y = 30;
+        let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
+        let initial_state = create_test_state(100, 1, 60, 50);
+
+        let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
+
+        assert_eq!(final_state.line_cursor, 60 - content_height, "Cursor should move up by one page");
+        assert_eq!(final_state.scroll, 50 - content_height, "Scroll should move up by one page");
+    }
+
+    #[test]
+    fn test_page_up_moves_cursor_only() {
+        // Simulates paging up where the new cursor position is still visible, so only the cursor moves.
+        let max_y = 30;
+        let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
+        let initial_state = create_test_state(100, 1, 46, 20);
+
+        let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
+
+        assert_eq!(final_state.line_cursor, 46 - content_height, "Cursor should move up by one page");
+        assert_eq!(final_state.scroll, 20, "Scroll should not change");
+    }
+
+    #[test]
+    fn test_page_up_at_top_moves_cursor_to_zero() {
+        // Simulates paging up from near the top of the file.
+        let max_y = 30;
+        let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
+        let initial_state = create_test_state(100, 1, 10, 0);
+
+        let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
+
+        assert_eq!(final_state.line_cursor, 0, "Cursor should move to the first line");
+        assert_eq!(final_state.scroll, 0, "Scroll should not change");
+    }
 }

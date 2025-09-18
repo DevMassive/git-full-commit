@@ -108,10 +108,10 @@ where
 #[test]
 #[serial]
 fn test_update_state_quit() {
-    run_test_with_pancurses(|window| {
+    run_test_with_pancurses(|_window| {
         let setup = TestSetup::new();
         let state = create_test_state(&setup);
-        let new_state = update_state(state, Some(Input::Character('\u{3}')), &window);
+        let new_state = update_state(state, Some(Input::Character('\u{3}')), 30);
         assert!(!new_state.running);
     });
 }
@@ -119,10 +119,10 @@ fn test_update_state_quit() {
 #[test]
 #[serial]
 fn test_unstage_file() {
-    run_test_with_pancurses(|window| {
+    run_test_with_pancurses(|_window| {
         let setup = TestSetup::new();
         let state = create_test_state(&setup);
-        let new_state = update_state(state, Some(Input::Character('\n')), &window);
+        let new_state = update_state(state, Some(Input::Character('\n')), 30);
         assert_eq!(new_state.files.len(), 0);
     });
 }
@@ -130,7 +130,7 @@ fn test_unstage_file() {
 #[test]
 #[serial]
 fn test_unstage_hunk_by_line_with_undo_redo() {
-    run_test_with_pancurses(|window| {
+    run_test_with_pancurses(|_window| {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
 
@@ -142,16 +142,16 @@ fn test_unstage_hunk_by_line_with_undo_redo() {
         state.line_cursor = hunk.start_line + 1;
 
         // Unstage hunk
-        let state_after_unstage = update_state(state, Some(Input::Character('\n')), &window);
+        let state_after_unstage = update_state(state, Some(Input::Character('\n')), 30);
         assert_eq!(state_after_unstage.files.len(), 0);
 
         // Undo
-        let state_after_undo = update_state(state_after_unstage, Some(Input::Character('u')), &window);
+        let state_after_undo = update_state(state_after_unstage, Some(Input::Character('u')), 30);
         assert_eq!(state_after_undo.files.len(), 1);
         assert_eq!(state_after_undo.files[0].hunks.len(), 1);
 
         // Redo
-        let state_after_redo = update_state(state_after_undo, Some(Input::Character('r')), &window);
+        let state_after_redo = update_state(state_after_undo, Some(Input::Character('r')), 30);
         assert_eq!(state_after_redo.files.len(), 0);
     });
 }
@@ -159,7 +159,7 @@ fn test_unstage_hunk_by_line_with_undo_redo() {
 #[test]
 #[serial]
 fn test_unstage_line() {
-    run_test_with_pancurses(|window| {
+    run_test_with_pancurses(|_window| {
         let setup = TestSetup::new_multi_line();
         let mut state = create_test_state(&setup);
 
@@ -181,7 +181,7 @@ fn test_unstage_line() {
         state.line_cursor = 7;
 
         // Unstage line
-        let state_after_unstage = update_state(state, Some(Input::Character('1')), &window);
+        let state_after_unstage = update_state(state, Some(Input::Character('1')), 30);
         assert_eq!(state_after_unstage.files.len(), 1);
         // The diff should now only contain "+changed"
         assert_eq!(state_after_unstage.files[0].lines.len(), 8);
@@ -194,7 +194,7 @@ fn test_unstage_line() {
 #[test]
 #[serial]
 fn test_commit_mode_activation_and_commit() {
-    run_test_with_pancurses(|window| {
+    run_test_with_pancurses(|_window| {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
         state.file_cursor = 1;
@@ -205,7 +205,7 @@ fn test_commit_mode_activation_and_commit() {
         assert!(!state.is_commit_mode);
 
         // 1. Press KeyDown to move to the commit line.
-        state = update_state(state, Some(Input::KeyDown), &window);
+        state = update_state(state, Some(Input::KeyDown), 30);
 
         // 2. Assert that we are in commit mode.
         assert_eq!(state.file_cursor, 2); // Cursor is on the commit line
@@ -214,14 +214,14 @@ fn test_commit_mode_activation_and_commit() {
         // 3. Type a commit message
         let msg = "Test commit";
         for ch in msg.chars() {
-            state = update_state(state, Some(Input::Character(ch)), &window);
+            state = update_state(state, Some(Input::Character(ch)), 30);
         }
 
         // 4. Assert the message is correct
         assert_eq!(state.commit_message, msg);
 
         // 5. Press Enter to commit
-        state = update_state(state, Some(Input::Character('\n')), &window);
+        state = update_state(state, Some(Input::Character('\n')), 30);
 
         // 6. Assert the app should exit
         assert!(!state.running);
@@ -278,12 +278,12 @@ fn test_page_up_down_with_cursor() {
         let content_height = (max_y as usize).saturating_sub(header_height);
 
         // Page down
-        state = update_state(state, Some(Input::Character(' ')), &window);
+        state = update_state(state, Some(Input::Character(' ')), max_y);
         assert_eq!(state.scroll, content_height);
         assert_eq!(state.line_cursor, content_height);
 
         // Page up
-        state = update_state(state, Some(Input::Character('b')), &window);
+        state = update_state(state, Some(Input::Character('b')), max_y);
         assert_eq!(state.scroll, 0);
         assert_eq!(state.line_cursor, 0);
     });
@@ -341,7 +341,7 @@ fn test_run_with_unstaged_changes() {
 #[test]
 #[serial]
 fn test_commit_and_continue() {
-    run_test_with_pancurses(|window| {
+    run_test_with_pancurses(|_window| {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
 
@@ -355,7 +355,7 @@ fn test_commit_and_continue() {
         assert!(!state.is_commit_mode);
 
         // 1. Press KeyDown to move to the commit line.
-        state = update_state(state, Some(Input::KeyDown), &window);
+        state = update_state(state, Some(Input::KeyDown), 30);
 
         // 2. Assert that we are in commit mode.
         assert_eq!(state.file_cursor, 2); // Cursor is on the commit line
@@ -364,14 +364,14 @@ fn test_commit_and_continue() {
         // 3. Type a commit message
         let msg = "Test commit";
         for ch in msg.chars() {
-            state = update_state(state, Some(Input::Character(ch)), &window);
+            state = update_state(state, Some(Input::Character(ch)), 30);
         }
 
         // 4. Assert the message is correct
         assert_eq!(state.commit_message, msg);
 
         // 5. Press Enter to commit
-        state = update_state(state, Some(Input::Character('\n')), &window);
+        state = update_state(state, Some(Input::Character('\n')), 30);
 
         // 6. Assert the app should still be running
         assert!(state.running);
@@ -388,7 +388,7 @@ fn test_commit_and_continue() {
 #[test]
 #[serial]
 fn test_commit_and_exit() {
-    run_test_with_pancurses(|window| {
+    run_test_with_pancurses(|_window| {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
 
@@ -398,7 +398,7 @@ fn test_commit_and_exit() {
         assert!(!state.is_commit_mode);
 
         // 1. Press KeyDown to move to the commit line.
-        state = update_state(state, Some(Input::KeyDown), &window);
+        state = update_state(state, Some(Input::KeyDown), 30);
 
         // 2. Assert that we are in commit mode.
         assert_eq!(state.file_cursor, 2); // Cursor is on the commit line
@@ -407,14 +407,14 @@ fn test_commit_and_exit() {
         // 3. Type a commit message
         let msg = "Test commit";
         for ch in msg.chars() {
-            state = update_state(state, Some(Input::Character(ch)), &window);
+            state = update_state(state, Some(Input::Character(ch)), 30);
         }
 
         // 4. Assert the message is correct
         assert_eq!(state.commit_message, msg);
 
         // 5. Press Enter to commit
-        state = update_state(state, Some(Input::Character('\n')), &window);
+        state = update_state(state, Some(Input::Character('\n')), 30);
 
         // 6. Assert the app should exit
         assert!(!state.running);
@@ -424,12 +424,12 @@ fn test_commit_and_exit() {
 #[test]
 #[serial]
 fn test_commit_clears_history() {
-    run_test_with_pancurses(|window| {
+    run_test_with_pancurses(|_window| {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
 
         // Unstage a file to populate history
-        state = update_state(state, Some(Input::Character('\n')), &window);
+        state = update_state(state, Some(Input::Character('\n')), 30);
         assert_eq!(state.files.len(), 0);
         assert_eq!(state.command_history.undo_stack.len(), 1);
 
@@ -439,17 +439,17 @@ fn test_commit_clears_history() {
         assert_eq!(state.files.len(), 1);
 
         // Go to commit mode
-        state = update_state(state, Some(Input::KeyDown), &window);
+        state = update_state(state, Some(Input::KeyDown), 30);
         assert!(state.is_commit_mode);
 
         // Type a commit message
         let msg = "Test commit";
         for ch in msg.chars() {
-            state = update_state(state, Some(Input::Character(ch)), &window);
+            state = update_state(state, Some(Input::Character(ch)), 30);
         }
 
         // Commit
-        state = update_state(state, Some(Input::Character('\n')), &window);
+        state = update_state(state, Some(Input::Character('\n')), 30);
 
         // Assert history is cleared
         assert_eq!(state.command_history.undo_stack.len(), 0);
@@ -460,7 +460,7 @@ fn test_commit_clears_history() {
 #[test]
 #[serial]
 fn test_stage_all() {
-    run_test_with_pancurses(|window| {
+    run_test_with_pancurses(|_window| {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
 
@@ -468,7 +468,7 @@ fn test_stage_all() {
         assert_eq!(state.files.len(), 1);
 
         // Unstage the file
-        state = update_state(state, Some(Input::Character('\n')), &window);
+        state = update_state(state, Some(Input::Character('\n')), 30);
         assert_eq!(state.files.len(), 0);
 
         // Check that there are unstaged changes
@@ -480,7 +480,7 @@ fn test_stage_all() {
         assert!(!output.stdout.is_empty());
 
         // Stage all changes with 'R'
-        state = update_state(state, Some(Input::Character('R')), &window);
+        state = update_state(state, Some(Input::Character('R')), 30);
 
         // Check that the file is staged again
         assert_eq!(state.files.len(), 1);
