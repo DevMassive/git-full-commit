@@ -56,15 +56,7 @@ pub fn get_previous_commit_info(repo_path: &Path) -> Result<(String, String)> {
     Ok((hash, message))
 }
 
-pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
-    let output = OsCommand::new("git")
-        .arg("diff")
-        .arg("--staged")
-        .current_dir(&repo_path)
-        .output()
-        .expect("Failed to execute git diff");
-
-    let diff_str = String::from_utf8_lossy(&output.stdout);
+fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
     let mut files = Vec::new();
     let mut current_file: Option<FileDiff> = None;
     let mut current_hunk: Option<Hunk> = None;
@@ -150,6 +142,29 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
     }
 
     files
+}
+
+pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
+    let output = OsCommand::new("git")
+        .arg("diff")
+        .arg("--staged")
+        .current_dir(&repo_path)
+        .output()
+        .expect("Failed to execute git diff");
+
+    let diff_str = String::from_utf8_lossy(&output.stdout);
+    parse_diff(&diff_str)
+}
+
+pub fn get_previous_commit_diff(repo_path: &Path) -> Result<Vec<FileDiff>> {
+    let output = OsCommand::new("git")
+        .arg("show")
+        .arg("HEAD")
+        .current_dir(repo_path)
+        .output()?;
+
+    let diff_str = String::from_utf8_lossy(&output.stdout);
+    Ok(parse_diff(&diff_str))
 }
 
 pub fn is_git_repository(path: &Path) -> bool {

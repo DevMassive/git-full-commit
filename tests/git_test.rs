@@ -486,3 +486,32 @@ fn test_stage_all() {
         assert_eq!(state.files.len(), 1);
     });
 }
+
+#[test]
+fn test_get_previous_commit_diff() {
+    let setup = TestSetup::new();
+
+    // Commit the staged changes to create a new commit
+    run_git(
+        &setup.repo_path,
+        &["commit", "-m", "second commit"],
+    );
+
+    // Call the function to get the diff of the last commit
+    let diffs = git_reset_pp::git::get_previous_commit_diff(&setup.repo_path).unwrap();
+
+    // There should be one file in the diff
+    assert_eq!(diffs.len(), 1);
+    let file_diff = &diffs[0];
+
+    // Check the file name
+    assert_eq!(file_diff.file_name, "test.txt");
+
+    // Check that there is one hunk
+    assert_eq!(file_diff.hunks.len(), 1);
+    let hunk = &file_diff.hunks[0];
+
+    // Check the content of the hunk
+    assert!(hunk.lines.iter().any(|line| line.contains("-a")));
+    assert!(hunk.lines.iter().any(|line| line.contains("+b")));
+}

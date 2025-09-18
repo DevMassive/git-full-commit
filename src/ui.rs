@@ -144,14 +144,66 @@ fn render(window: &Window, state: &AppState) {
     window.hline(pancurses::ACS_HLINE(), max_x);
     window.attroff(COLOR_PAIR(9));
 
-    if state.file_cursor > 0 && state.file_cursor <= num_files {
-        let header_height = num_files + 3;
-        let content_height = (max_y as usize).saturating_sub(header_height);
+    let header_height = num_files + 3;
+    let content_height = (max_y as usize).saturating_sub(header_height);
+    let cursor_position = state.get_cursor_line_index();
 
+    if state.file_cursor == 0 {
+        // Render previous commit diff
+        let all_lines: Vec<String> = state.previous_commit_files.iter().flat_map(|f| f.lines.clone()).collect();
+        if !all_lines.is_empty() {
+            let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); all_lines.len()];
+            let mut line_offset = 0;
+            for file in &state.previous_commit_files {
+                for hunk in &file.hunks {
+                    let mut old_line_counter = hunk.old_start;
+                    let mut new_line_counter = hunk.new_start;
+
+                    for (hunk_line_index, hunk_line) in hunk.lines.iter().enumerate() {
+                        let line_index = line_offset + hunk.start_line + hunk_line_index;
+                        if line_index >= all_lines.len() {
+                            continue;
+                        }
+
+                        if hunk_line.starts_with('+') {
+                            line_numbers[line_index] = (None, Some(new_line_counter));
+                            new_line_counter += 1;
+                        } else if hunk_line.starts_with('-') {
+                            line_numbers[line_index] = (Some(old_line_counter), None);
+                            old_line_counter += 1;
+                        } else if !hunk_line.starts_with("@@") {
+                            line_numbers[line_index] = (Some(old_line_counter), Some(new_line_counter));
+                            old_line_counter += 1;
+                            new_line_counter += 1;
+                        }
+                    }
+                }
+                line_offset += file.lines.len();
+            }
+
+            for (i, line) in all_lines
+                .iter()
+                .skip(state.scroll)
+                .take(content_height)
+                .enumerate()
+            {
+                let line_index_in_file = i + state.scroll;
+                let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
+                render_line(
+                    window,
+                    state,
+                    line,
+                    line_index_in_file,
+                    i as i32 + header_height as i32,
+                    cursor_position,
+                    old_line_num,
+                    new_line_num,
+                );
+            }
+        }
+    } else if state.file_cursor > 0 && state.file_cursor <= num_files {
         let selected_file = &state.files[state.file_cursor - 1];
         let lines = &selected_file.lines;
-
-        let cursor_position = state.get_cursor_line_index();
 
         let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); lines.len()];
         for hunk in &selected_file.hunks {
@@ -210,7 +262,6 @@ fn render(window: &Window, state: &AppState) {
             window.mv(commit_line_y, cursor_display_pos as i32);
         }
     }
-    // On prev commit line (cursor 0) or other cases, just refresh.
     window.refresh();
 }
 
@@ -720,25 +771,29 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         }
         Some(Input::Character(' ')) => {
             // Page down
-            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                if let Some(file) = state.files.get(state.file_cursor - 1) {
-                    let header_height = state.files.len() + 3;
-                    let content_height = (max_y as usize).saturating_sub(header_height);
-                    let new_scroll = state.scroll.saturating_add(content_height);
-                    let max_scroll = file.lines.len().saturating_sub(content_height);
-                    state.scroll = new_scroll.min(max_scroll);
-                    state.line_cursor = state.scroll;
-                }
+            let header_height = state.files.len() + 3;
+            let content_height = (max_y as usize).saturating_sub(header_height);
+            let lines_count = if state.file_cursor == 0 {
+                state.previous_commit_files.iter().map(|f| f.lines.len()).sum()
+            } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                state.files.get(state.file_cursor - 1).map_or(0, |f| f.lines.len())
+            } else {
+                0
+            };
+
+            if lines_count > 0 {
+                let new_scroll = state.scroll.saturating_add(content_height);
+                let max_scroll = lines_count.saturating_sub(content_height);
+                state.scroll = new_scroll.min(max_scroll);
+                state.line_cursor = state.scroll;
             }
         }
         Some(Input::Character('b')) => {
             // Page up
-            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                let header_height = state.files.len() + 3;
-                let content_height = (max_y as usize).saturating_sub(header_height);
-                state.scroll = state.scroll.saturating_sub(content_height);
-                state.line_cursor = state.scroll;
-            }
+            let header_height = state.files.len() + 3;
+            let content_height = (max_y as usize).saturating_sub(header_height);
+            state.scroll = state.scroll.saturating_sub(content_height);
+            state.line_cursor = state.scroll;
         }
         Some(Input::KeyUp) => {
             state.file_cursor = state.file_cursor.saturating_sub(1);
@@ -765,13 +820,18 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
         }
         Some(Input::Character('j')) => {
-            if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                if let Some(file) = state.files.get(state.file_cursor - 1) {
-                    if state.line_cursor < file.lines.len().saturating_sub(1) {
-                        state.line_cursor += 1;
-                    }
-                }
+            let lines_count = if state.file_cursor == 0 {
+                state.previous_commit_files.iter().map(|f| f.lines.len()).sum()
+            } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                state.files.get(state.file_cursor - 1).map_or(0, |f| f.lines.len())
+            } else {
+                0
+            };
+
+            if lines_count > 0 && state.line_cursor < lines_count.saturating_sub(1) {
+                state.line_cursor += 1;
             }
+
             let header_height = state.files.len() + 3;
             let content_height = (max_y as usize).saturating_sub(header_height);
             let cursor_line = state.get_cursor_line_index();
