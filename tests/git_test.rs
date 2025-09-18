@@ -93,8 +93,7 @@ fn test_update_state_quit() {
 fn test_unstage_file() {
     run_test_with_pancurses(|window| {
         let setup = TestSetup::new();
-        let mut state = create_test_state(&setup);
-        state.cursor_level = CursorLevel::File;
+        let state = create_test_state(&setup);
         let new_state = update_state(state, Some(Input::Character('\n')), &window);
         assert_eq!(new_state.files.len(), 0);
     });
@@ -112,8 +111,6 @@ fn test_unstage_hunk_by_line_with_undo_redo() {
         assert_eq!(state.files[0].hunks.len(), 1);
         let hunk = &state.files[0].hunks[0].clone();
 
-        // Navigate to line level and position cursor in the hunk
-        state.cursor_level = CursorLevel::Line;
         state.line_cursor = hunk.start_line + 1;
 
         // Unstage hunk
@@ -177,27 +174,6 @@ fn test_commit_mode_activation_and_commit() {
     });
 }
 
-#[test]
-#[serial]
-fn test_tab_switching() {
-    run_test_with_pancurses(|window| {
-        let setup = TestSetup::new();
-        let mut state = create_test_state(&setup);
-
-        // Initial state is File cursor
-        assert!(matches!(state.cursor_level, CursorLevel::File));
-
-        // Switch to Line cursor
-        state = update_state(state, Some(Input::Character('\t')), &window);
-        assert!(matches!(state.cursor_level, CursorLevel::Line));
-        assert_eq!(state.line_cursor, state.scroll);
-
-        // Switch back to File cursor
-        state = update_state(state, Some(Input::Character('\t')), &window);
-        assert!(matches!(state.cursor_level, CursorLevel::File));
-        assert_eq!(state.line_cursor, 0);
-    });
-}
 
 #[test]
 #[serial]
@@ -229,7 +205,6 @@ fn test_page_up_down_with_cursor() {
 
         let files = get_diff(repo_path.clone());
         let mut state = AppState::new(repo_path.clone(), files);
-        state.cursor_level = CursorLevel::Line;
 
         let (max_y, _) = window.get_max_yx();
         let header_height = if state.files.is_empty() {

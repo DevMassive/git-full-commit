@@ -278,11 +278,6 @@ pub struct FileDiff {
     pub is_new_file: bool,
 }
 
-pub enum CursorLevel {
-    File,
-    Line,
-}
-
 pub struct AppState {
     pub repo_path: PathBuf,
     pub scroll: usize,
@@ -290,7 +285,6 @@ pub struct AppState {
     pub file_cursor: usize,
     pub line_cursor: usize,
     pub files: Vec<FileDiff>,
-    pub cursor_level: CursorLevel,
     pub command_history: CommandHistory,
     pub commit_message: String,
     pub is_commit_mode: bool,
@@ -310,7 +304,6 @@ impl AppState {
             file_cursor: 0,
             line_cursor: 0,
             files,
-            cursor_level: CursorLevel::File,
             command_history: CommandHistory::new(),
             commit_message,
             is_commit_mode: false,
@@ -324,10 +317,7 @@ impl AppState {
         if self.files.is_empty() || self.file_cursor >= self.files.len() {
             return 0;
         }
-        match self.cursor_level {
-            CursorLevel::File => 0,
-            CursorLevel::Line => self.line_cursor,
-        }
+        self.line_cursor
     }
 
     fn refresh_diff(&mut self) {
@@ -338,7 +328,6 @@ impl AppState {
             self.file_cursor = 0;
             self.line_cursor = 0;
             self.scroll = 0;
-            self.cursor_level = CursorLevel::File;
             return;
         }
 
@@ -372,7 +361,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 state.file_cursor = state.files.len().saturating_sub(1);
                 state.line_cursor = 0;
                 state.scroll = 0;
-                state.cursor_level = CursorLevel::File;
                 return state;
             }
             Some(Input::Character('\t')) => {
@@ -551,94 +539,64 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         }
     }
 
-    if let Some(Input::Character('\t')) = input {
-        match state.cursor_level {
-            CursorLevel::File => {
-                if !state.files.is_empty()
-                    && state.file_cursor < state.files.len()
-                    && !state.files[state.file_cursor].lines.is_empty()
-                {
-                    state.cursor_level = CursorLevel::Line;
-                    state.line_cursor = state.scroll;
-                }
-            }
-            CursorLevel::Line => {
-                state.cursor_level = CursorLevel::File;
-                state.line_cursor = 0;
-            }
-        }
-        return state;
-    }
-
     match input {
         Some(Input::Character('q')) => {
             let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
             state.running = false;
         }
         Some(Input::Character('!')) => {
-            if let CursorLevel::File = state.cursor_level {
-                if let Some(file) = state.files.get(state.file_cursor) {
-                    // Get the patch before doing anything
-                    let output = OsCommand::new("git")
-                        .arg("diff")
-                        .arg("--staged")
-                        .arg("--")
-                        .arg(&file.file_name)
-                        .current_dir(&state.repo_path)
-                        .output()
-                        .expect("Failed to get diff for file.");
-                    let patch = String::from_utf8_lossy(&output.stdout).to_string();
+            if let Some(file) = state.files.get(state.file_cursor) {
+                // Get the patch before doing anything
+                let output = OsCommand::new("git")
+                    .arg("diff")
+                    .arg("--staged")
+                    .arg("--")
+                    .arg(&file.file_name)
+                    .current_dir(&state.repo_path)
+                    .output()
+                    .expect("Failed to get diff for file.");
+                let patch = String::from_utf8_lossy(&output.stdout).to_string();
 
-                    if file.is_new_file {
-                        let command = Box::new(RemoveFileCommand {
-                            repo_path: state.repo_path.clone(),
-                            file_name: file.file_name.clone(),
-                            patch,
-                        });
-                        state.command_history.execute(command);
-                    } else {
-                        let command = Box::new(CheckoutFileCommand {
-                            repo_path: state.repo_path.clone(),
-                            file_name: file.file_name.clone(),
-                            patch,
-                        });
-                        state.command_history.execute(command);
-                    }
-                    state.refresh_diff();
+                if file.is_new_file {
+                    let command = Box::new(RemoveFileCommand {
+                        repo_path: state.repo_path.clone(),
+                        file_name: file.file_name.clone(),
+                        patch,
+                    });
+                    state.command_history.execute(command);
+                } else {
+                    let command = Box::new(CheckoutFileCommand {
+                        repo_path: state.repo_path.clone(),
+                        file_name: file.file_name.clone(),
+                        patch,
+                    });
+                    state.command_history.execute(command);
                 }
+                state.refresh_diff();
             }
         }
         Some(Input::Character('\n')) => {
-            if state.file_cursor < state.files.len() {
-                match state.cursor_level {
-                    CursorLevel::File => {
-                        if let Some(file) = state.files.get(state.file_cursor) {
-                            let command = Box::new(UnstageFileCommand {
-                                repo_path: state.repo_path.clone(),
-                                file_name: file.file_name.clone(),
-                            });
-                            state.command_history.execute(command);
-                            state.refresh_diff();
-                        }
-                    }
-                    CursorLevel::Line => {
-                        if let Some(file) = state.files.get(state.file_cursor) {
-                            let line_index = state.line_cursor;
-                            if let Some(hunk) = file.hunks.iter().find(|hunk| {
-                                let hunk_start = hunk.start_line;
-                                let hunk_end = hunk_start + hunk.lines.len();
-                                line_index >= hunk_start && line_index < hunk_end
-                            }) {
-                                let command = Box::new(UnstageHunkCommand {
-                                    repo_path: state.repo_path.clone(),
-                                    file_name: file.file_name.clone(),
-                                    hunk_lines: hunk.lines.clone(),
-                                });
-                                state.command_history.execute(command);
-                                state.refresh_diff();
-                            }
-                        }
-                    }
+            if let Some(file) = state.files.get(state.file_cursor) {
+                let line_index = state.line_cursor;
+                if let Some(hunk) = file.hunks.iter().find(|hunk| {
+                    let hunk_start = hunk.start_line;
+                    let hunk_end = hunk_start + hunk.lines.len();
+                    line_index >= hunk_start && line_index < hunk_end
+                }) {
+                    let command = Box::new(UnstageHunkCommand {
+                        repo_path: state.repo_path.clone(),
+                        file_name: file.file_name.clone(),
+                        hunk_lines: hunk.lines.clone(),
+                    });
+                    state.command_history.execute(command);
+                    state.refresh_diff();
+                } else {
+                    let command = Box::new(UnstageFileCommand {
+                        repo_path: state.repo_path.clone(),
+                        file_name: file.file_name.clone(),
+                    });
+                    state.command_history.execute(command);
+                    state.refresh_diff();
                 }
             }
         }
@@ -662,9 +620,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 let new_scroll = state.scroll.saturating_add(content_height);
                 let max_scroll = file.lines.len().saturating_sub(content_height);
                 state.scroll = new_scroll.min(max_scroll);
-                if let CursorLevel::Line = state.cursor_level {
-                    state.line_cursor = state.scroll;
-                }
+                state.line_cursor = state.scroll;
             }
         }
         Some(Input::Character('b')) => {
@@ -676,62 +632,44 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             };
             let content_height = (max_y as usize).saturating_sub(header_height);
             state.scroll = state.scroll.saturating_sub(content_height);
-            if let CursorLevel::Line = state.cursor_level {
-                state.line_cursor = state.scroll;
-            }
+            state.line_cursor = state.scroll;
         }
         Some(Input::KeyUp) => {
-            match state.cursor_level {
-                CursorLevel::File => {
-                    state.file_cursor = state.file_cursor.saturating_sub(1);
-                    state.scroll = 0;
-                    state.line_cursor = 0;
-                }
-                CursorLevel::Line => {
-                    state.line_cursor = state.line_cursor.saturating_sub(1);
-                }
-            }
-            let cursor_line = state.get_cursor_line_index();
-            let window_height = max_y as usize;
-            const MARGIN: usize = 3;
-
-            if cursor_line < state.scroll + MARGIN {
-                state.scroll = cursor_line.saturating_sub(MARGIN);
-            } else if cursor_line >= state.scroll + window_height - MARGIN {
-                state.scroll = cursor_line.saturating_sub(window_height - MARGIN);
-            }
+            state.file_cursor = state.file_cursor.saturating_sub(1);
+            state.scroll = 0;
+            state.line_cursor = 0;
         }
         Some(Input::KeyDown) => {
-            match state.cursor_level {
-                CursorLevel::File => {
-                    if state.file_cursor < state.files.len() {
-                        state.file_cursor += 1;
-                        state.scroll = 0;
-                        state.line_cursor = 0;
-                    }
-                }
-                CursorLevel::Line => {
-                    if let Some(file) = state.files.get(state.file_cursor) {
-                        if state.line_cursor < file.lines.len().saturating_sub(1) {
-                            state.line_cursor += 1;
-                        }
-                    }
-                }
+            if state.file_cursor < state.files.len() {
+                state.file_cursor += 1;
+                state.scroll = 0;
+                state.line_cursor = 0;
             }
 
             if state.file_cursor == state.files.len() {
                 state.is_commit_mode = true;
                 curs_set(1);
             }
-
+        }
+        Some(Input::Character('k')) => {
+            state.line_cursor = state.line_cursor.saturating_sub(1);
             let cursor_line = state.get_cursor_line_index();
-            let window_height = max_y as usize;
-            const MARGIN: usize = 3;
+            if cursor_line < state.scroll {
+                state.scroll = cursor_line;
+            }
+        }
+        Some(Input::Character('j')) => {
+            if let Some(file) = state.files.get(state.file_cursor) {
+                if state.line_cursor < file.lines.len().saturating_sub(1) {
+                    state.line_cursor += 1;
+                }
+            }
+            let header_height = if state.files.is_empty() { 0 } else { state.files.len() + 2 };
+            let content_height = (max_y as usize).saturating_sub(header_height);
+            let cursor_line = state.get_cursor_line_index();
 
-            if cursor_line < state.scroll + MARGIN {
-                state.scroll = cursor_line.saturating_sub(MARGIN);
-            } else if cursor_line >= state.scroll + window_height - MARGIN {
-                state.scroll = cursor_line.saturating_sub(window_height - MARGIN);
+            if cursor_line >= state.scroll + content_height {
+                state.scroll = cursor_line - content_height + 1;
             }
         }
         _ => {}
@@ -883,28 +821,22 @@ fn render_line(
     next_color_num: &mut i16,
     next_pair_num: &mut i16,
 ) {
-    let is_cursor_line =
-        line_index_in_file == cursor_position && matches!(state.cursor_level, CursorLevel::Line);
+    let is_cursor_line = line_index_in_file == cursor_position;
 
-    let is_selected = match state.cursor_level {
-        CursorLevel::File => true,
-        CursorLevel::Line => {
-            if let Some(file) = state.files.get(state.file_cursor) {
-                if let Some(hunk) = file.hunks.iter().find(|hunk| {
-                    let hunk_start = hunk.start_line;
-                    let hunk_end = hunk_start + hunk.lines.len();
-                    state.line_cursor >= hunk_start && state.line_cursor < hunk_end
-                }) {
-                    let hunk_start = hunk.start_line;
-                    let hunk_end = hunk_start + hunk.lines.len();
-                    line_index_in_file >= hunk_start && line_index_in_file < hunk_end
-                } else {
-                    is_cursor_line
-                }
-            } else {
-                is_cursor_line
-            }
+    let is_selected = if let Some(file) = state.files.get(state.file_cursor) {
+        if let Some(hunk) = file.hunks.iter().find(|hunk| {
+            let hunk_start = hunk.start_line;
+            let hunk_end = hunk_start + hunk.lines.len();
+            state.line_cursor >= hunk_start && state.line_cursor < hunk_end
+        }) {
+            let hunk_start = hunk.start_line;
+            let hunk_end = hunk_start + hunk.lines.len();
+            line_index_in_file >= hunk_start && line_index_in_file < hunk_end
+        } else {
+            true
         }
+    } else {
+        true
     };
 
     if is_cursor_line {
