@@ -262,6 +262,8 @@ impl CommandHistory {
 pub struct Hunk {
     pub start_line: usize,
     pub lines: Vec<String>,
+    pub old_start: usize,
+    pub new_start: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -913,6 +915,31 @@ fn render(
     let theme = &THEME_SET.themes["Solarized (dark)"];
     let mut h = HighlightLines::new(syntax, theme);
 
+    let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); lines.len()];
+    for hunk in &selected_file.hunks {
+        let mut old_line_counter = hunk.old_start;
+        let mut new_line_counter = hunk.new_start;
+
+        for (hunk_line_index, hunk_line) in hunk.lines.iter().enumerate() {
+            let line_index = hunk.start_line + hunk_line_index;
+            if line_index >= lines.len() {
+                continue;
+            }
+
+            if hunk_line.starts_with('+') {
+                line_numbers[line_index] = (None, Some(new_line_counter));
+                new_line_counter += 1;
+            } else if hunk_line.starts_with('-') {
+                line_numbers[line_index] = (Some(old_line_counter), None);
+                old_line_counter += 1;
+            } else if !hunk_line.starts_with("@@") {
+                line_numbers[line_index] = (Some(old_line_counter), Some(new_line_counter));
+                old_line_counter += 1;
+                new_line_counter += 1;
+            }
+        }
+    }
+
     // Warm up highlighter state
     for line in lines.iter().take(state.scroll) {
         if line.starts_with('+') || line.starts_with('-') {
@@ -938,6 +965,7 @@ fn render(
         .enumerate()
     {
         let line_index_in_file = i + state.scroll;
+        let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
         render_line(
             window,
             state,
@@ -950,6 +978,8 @@ fn render(
             pair_map,
             next_color_num,
             next_pair_num,
+            old_line_num,
+            new_line_num,
         );
     }
 
@@ -968,6 +998,8 @@ fn render_line(
     pair_map: &mut HashMap<(i16, i16), i16>,
     next_color_num: &mut i16,
     next_pair_num: &mut i16,
+    old_line_num: Option<usize>,
+    new_line_num: Option<usize>,
 ) {
     let is_cursor_line = line_index_in_file == cursor_position;
 
@@ -990,6 +1022,16 @@ fn render_line(
     if is_cursor_line {
         window.attron(A_REVERSE);
     }
+
+    let line_num_str = format!(
+        "{:>4} {:>4}",
+        old_line_num.map_or(String::new(), |n| n.to_string()),
+        new_line_num.map_or(String::new(), |n| n.to_string())
+    );
+    let line_content_offset = 10;
+
+    window.mv(line_render_index, 0);
+    window.clrtoeol();
 
     if line.starts_with("--- ") {
         window.attron(A_DIM);
@@ -1017,11 +1059,15 @@ fn render_line(
             window.attron(A_DIM);
         }
 
+        window.attron(COLOR_PAIR(6));
+        window.mvaddstr(line_render_index, 0, &line_num_str);
+        window.attroff(COLOR_PAIR(6));
+
         window.attron(COLOR_PAIR(sign_pair_num as u32));
-        window.mvaddstr(line_render_index, 0, "+");
+        window.mvaddstr(line_render_index, line_content_offset, "+");
         window.attroff(COLOR_PAIR(sign_pair_num as u32));
 
-        window.mv(line_render_index, 1);
+        window.mv(line_render_index, line_content_offset + 1);
         highlight_line(
             window,
             &line[1..],
@@ -1054,11 +1100,15 @@ fn render_line(
             window.attron(A_DIM);
         }
 
+        window.attron(COLOR_PAIR(6));
+        window.mvaddstr(line_render_index, 0, &line_num_str);
+        window.attroff(COLOR_PAIR(6));
+
         window.attron(COLOR_PAIR(sign_pair_num as u32));
-        window.mvaddstr(line_render_index, 0, "-");
+        window.mvaddstr(line_render_index, line_content_offset, "-");
         window.attroff(COLOR_PAIR(sign_pair_num as u32));
 
-        window.mv(line_render_index, 1);
+        window.mv(line_render_index, line_content_offset + 1);
         highlight_line(
             window,
             &line[1..],
@@ -1086,10 +1136,15 @@ fn render_line(
         window.mvaddstr(line_render_index, 0, line);
         window.attroff(COLOR_PAIR(5));
     } else {
-        window.mv(line_render_index, 0);
         if !is_selected {
             window.attron(A_DIM);
         }
+
+        window.attron(COLOR_PAIR(6));
+        window.mvaddstr(line_render_index, 0, &line_num_str);
+        window.attroff(COLOR_PAIR(6));
+
+        window.mv(line_render_index, line_content_offset);
         highlight_line(
             window,
             line,
@@ -1196,9 +1251,24 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
                     file.hunks.push(hunk);
                 }
             }
+
+            let parts: Vec<&str> = line.split(' ').collect();
+            let old_start = parts
+                .get(1)
+                .and_then(|s| s.split(',').next())
+                .and_then(|s| s.trim_start_matches('-').parse::<usize>().ok())
+                .unwrap_or(0);
+            let new_start = parts
+                .get(2)
+                .and_then(|s| s.split(',').next())
+                .and_then(|s| s.trim_start_matches('+').parse::<usize>().ok())
+                .unwrap_or(0);
+
             current_hunk = Some(Hunk {
                 start_line: current_file_line_index,
                 lines: vec![line.to_string()],
+                old_start,
+                new_start,
             });
         } else if let Some(hunk) = current_hunk.as_mut() {
             hunk.lines.push(line.to_string());
