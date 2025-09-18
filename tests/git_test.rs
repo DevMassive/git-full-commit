@@ -393,3 +393,33 @@ fn test_commit_clears_history() {
         assert_eq!(state.command_history.redo_stack.len(), 0);
     });
 }
+
+#[test]
+#[serial]
+fn test_stage_all() {
+    run_test_with_pancurses(|window| {
+        let setup = TestSetup::new();
+        let mut state = create_test_state(&setup);
+
+        // We start with 1 file staged
+        assert_eq!(state.files.len(), 1);
+
+        // Unstage the file
+        state = update_state(state, Some(Input::Character('\n')), &window);
+        assert_eq!(state.files.len(), 0);
+
+        // Check that there are unstaged changes
+        let output = OsCommand::new("git")
+            .arg("diff")
+            .current_dir(&setup.repo_path)
+            .output()
+            .unwrap();
+        assert!(!output.stdout.is_empty());
+
+        // Stage all changes with 'R'
+        state = update_state(state, Some(Input::Character('R')), &window);
+
+        // Check that the file is staged again
+        assert_eq!(state.files.len(), 1);
+    });
+}

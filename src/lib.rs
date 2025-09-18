@@ -615,6 +615,15 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             state.command_history.redo();
             state.refresh_diff();
         }
+        Some(Input::Character('R')) => {
+            OsCommand::new("git")
+                .arg("add")
+                .arg("-A")
+                .current_dir(&state.repo_path)
+                .output()
+                .expect("Failed to git add -A.");
+            state.refresh_diff();
+        }
         Some(Input::Character(' ')) => {
             // Page down
             if let Some(file) = state.files.get(state.file_cursor) {
