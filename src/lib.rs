@@ -867,8 +867,6 @@ fn render_line(
         window.attron(A_DIM);
         window.mvaddstr(line_render_index, 0, line);
         window.attroff(A_DIM);
-    } else if line.starts_with("new file mode ") {
-        window.mvaddstr(line_render_index, 0, "[new]");
     } else if line.starts_with('+') {
         let (sign_pair_num, bg_color) = if is_selected { (1, 18) } else { (3, 18) };
 
@@ -948,16 +946,13 @@ fn render_line(
         window.mvaddstr(line_render_index, 0, line);
         window.attroff(COLOR_PAIR(6));
     } else if line.starts_with("diff --git ") {
-        let file_name_a_b = line.strip_prefix("diff --git ").unwrap();
-        let file_name_a = file_name_a_b.split_whitespace().next().unwrap();
-        let file_name = file_name_a.strip_prefix("a/").unwrap();
         window.attron(COLOR_PAIR(5));
-        window.mvaddstr(line_render_index, 0, file_name);
+        window.mvaddstr(line_render_index, 0, line);
         window.attroff(COLOR_PAIR(5));
     } else if line.starts_with("index ") {
-        let (_, max_x) = window.get_max_yx();
-        window.mv(line_render_index, 0);
-        window.hline(pancurses::ACS_HLINE(), max_x);
+        window.attron(COLOR_PAIR(5));
+        window.mvaddstr(line_render_index, 0, line);
+        window.attroff(COLOR_PAIR(5));
     } else {
         window.mv(line_render_index, 0);
         if !is_selected {
