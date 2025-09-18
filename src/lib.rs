@@ -294,6 +294,7 @@ pub struct AppState {
     pub command_history: CommandHistory,
     pub commit_message: String,
     pub is_commit_mode: bool,
+    pub commit_cursor: usize,
 }
 
 impl AppState {
@@ -310,6 +311,7 @@ impl AppState {
             command_history: CommandHistory::new(),
             commit_message: String::new(),
             is_commit_mode: false,
+            commit_cursor: 0,
         }
     }
 
@@ -366,6 +368,16 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
 
     if state.is_commit_mode {
         match input {
+            Some(Input::KeyUp) => {
+                state.is_commit_mode = false;
+                curs_set(0);
+                state.file_cursor = state.files.len().saturating_sub(1);
+                state.hunk_cursor = 0;
+                state.line_cursor = 0;
+                state.scroll = 0;
+                state.cursor_level = CursorLevel::File;
+                return state;
+            }
             Some(Input::Character('\n')) => {
                 if !state.commit_message.is_empty() {
                     OsCommand::new("git")
@@ -383,19 +395,49 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 return state;
             }
             Some(Input::KeyBackspace) => {
-                state.commit_message.pop();
+                if state.commit_cursor > 0 {
+                    let char_index_to_remove = state.commit_cursor - 1;
+                    if let Some((byte_index, _)) = state.commit_message.char_indices().nth(char_index_to_remove) {
+                        state.commit_message.remove(byte_index);
+                        state.commit_cursor -= 1;
+                    }
+                }
                 return state;
             }
             Some(Input::KeyDC) => {
-                state.commit_message.pop();
+                if state.commit_cursor < state.commit_message.chars().count() {
+                    if let Some((byte_index, _)) = state.commit_message.char_indices().nth(state.commit_cursor) {
+                        state.commit_message.remove(byte_index);
+                    }
+                }
+                return state;
+            }
+            Some(Input::KeyLeft) => {
+                state.commit_cursor = state.commit_cursor.saturating_sub(1);
+                return state;
+            }
+            Some(Input::KeyRight) => {
+                state.commit_cursor = state.commit_cursor.saturating_add(1).min(state.commit_message.chars().count());
                 return state;
             }
             Some(Input::Character(c)) => {
                 if c == '\u{1b}' { // ESC key
                     state.is_commit_mode = false;
                     curs_set(0);
+                } else if c == '\u{7f}' || c == '\u{08}' { // Backspace
+                    if state.commit_cursor > 0 {
+                        let char_index_to_remove = state.commit_cursor - 1;
+                        if let Some((byte_index, _)) = state.commit_message.char_indices().nth(char_index_to_remove) {
+                            state.commit_message.remove(byte_index);
+                            state.commit_cursor -= 1;
+                        }
+                    }
                 } else {
-                    state.commit_message.push(c);
+                    let byte_offset = state.commit_message.char_indices()
+                        .nth(state.commit_cursor)
+                        .map_or(state.commit_message.len(), |(idx, _)| idx);
+                    state.commit_message.insert(byte_offset, c);
+                    state.commit_cursor += 1;
                 }
                 return state;
             }
@@ -677,6 +719,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 state.is_commit_mode = true;
                 curs_set(1);
                 state.commit_message.push(c);
+                state.commit_cursor = state.commit_message.chars().count();
             }
         }
         _ => {}
@@ -721,23 +764,24 @@ fn render(
     window.clrtoeol();
     if state.file_cursor == num_files {
         window.attron(A_REVERSE);
-    }
-    window.addstr(&format!("Commit: {}", state.commit_message));
-    if state.file_cursor == num_files {
+        window.addstr("Commit: ");
         window.attroff(A_REVERSE);
+    } else {
+        window.addstr("Commit: ");
     }
-    if state.is_commit_mode {
-        window.mv(
-            commit_line_y,
-            8 + state.commit_message.chars().count() as i32,
-        );
-    }
+    window.addstr(&state.commit_message);
 
     // Render separator
     window.mv((num_files + 1) as i32, 0);
     window.hline(pancurses::ACS_HLINE(), max_x);
 
     if state.file_cursor >= num_files {
+        if state.is_commit_mode {
+            window.mv(
+                commit_line_y,
+                8 + state.commit_cursor as i32,
+            );
+        }
         window.refresh();
         return;
     }
