@@ -384,7 +384,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                         .output()
                         .expect("Failed to amend commit.");
                     let _ = commit_storage::delete_commit_message(&state.repo_path);
-                    state.amend_message.clear();
                     state.command_history.clear();
                 } else {
                     if state.commit_message.is_empty() {
@@ -401,6 +400,9 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                     state.commit_message.clear();
                     state.command_history.clear();
                 }
+
+                state.amend_message =
+                    get_previous_commit_message(&state.repo_path).unwrap_or_default();
 
                 OsCommand::new("git")
                     .arg("add")
