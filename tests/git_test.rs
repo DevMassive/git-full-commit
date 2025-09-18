@@ -250,3 +250,135 @@ fn test_page_up_down_with_cursor() {
         assert_eq!(state.line_cursor, 0);
     });
 }
+
+#[test]
+#[serial]
+fn test_run_with_unstaged_changes() {
+    let tmp_dir = TempDir::new().unwrap();
+    let repo_path = tmp_dir.path().to_path_buf();
+
+    // git init
+    run_git(&repo_path, &["init"]);
+    run_git(&repo_path, &["config", "user.name", "Test"]);
+    run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+
+    // first commit
+    let file_path = repo_path.join("test.txt");
+    fs::write(&file_path, "a\n").unwrap();
+    run_git(&repo_path, &["add", "test.txt"]);
+    run_git(&repo_path, &["commit", "-m", "initial commit"]);
+
+    // modify file but do not stage
+    fs::write(&file_path, "b\n").unwrap();
+
+    let staged_diff_output = OsCommand::new("git")
+        .arg("diff")
+        .arg("--staged")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    assert!(staged_diff_output.stdout.is_empty());
+
+    // This is the logic from the `run` function before `tui_loop`
+    let staged_diff_output = OsCommand::new("git")
+        .arg("diff")
+        .arg("--staged")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    if staged_diff_output.stdout.is_empty() {
+        OsCommand::new("git")
+            .arg("add")
+            .arg("-A")
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+    }
+
+    let files = get_diff(repo_path.clone());
+    assert!(!files.is_empty());
+}
+
+#[test]
+#[serial]
+fn test_commit_and_continue() {
+    run_test_with_pancurses(|window| {
+        let setup = TestSetup::new();
+        let mut state = create_test_state(&setup);
+
+        // create another file
+        let file_path = setup.repo_path.join("another.txt");
+        fs::write(&file_path, "hello\n").unwrap();
+
+        // We start with 1 file, cursor at index 0.
+        assert_eq!(state.files.len(), 1);
+        assert_eq!(state.file_cursor, 0);
+        assert!(!state.is_commit_mode);
+
+        // 1. Press KeyDown to move to the commit line.
+        state = update_state(state, Some(Input::KeyDown), &window);
+
+        // 2. Assert that we are in commit mode.
+        assert_eq!(state.file_cursor, 1); // Cursor is on the commit line
+        assert!(state.is_commit_mode);
+
+        // 3. Type a commit message
+        let msg = "Test commit";
+        for ch in msg.chars() {
+            state = update_state(state, Some(Input::Character(ch)), &window);
+        }
+
+        // 4. Assert the message is correct
+        assert_eq!(state.commit_message, msg);
+
+        // 5. Press Enter to commit
+        state = update_state(state, Some(Input::Character('\n')), &window);
+
+        // 6. Assert the app should still be running
+        assert!(state.running);
+
+        // 7. Assert the commit message is cleared
+        assert!(state.commit_message.is_empty());
+
+        // 8. Assert the new file is staged
+        assert_eq!(state.files.len(), 1);
+        assert_eq!(state.files[0].file_name, "another.txt");
+    });
+}
+
+#[test]
+#[serial]
+fn test_commit_and_exit() {
+    run_test_with_pancurses(|window| {
+        let setup = TestSetup::new();
+        let mut state = create_test_state(&setup);
+
+        // We start with 1 file, cursor at index 0.
+        assert_eq!(state.files.len(), 1);
+        assert_eq!(state.file_cursor, 0);
+        assert!(!state.is_commit_mode);
+
+        // 1. Press KeyDown to move to the commit line.
+        state = update_state(state, Some(Input::KeyDown), &window);
+
+        // 2. Assert that we are in commit mode.
+        assert_eq!(state.file_cursor, 1); // Cursor is on the commit line
+        assert!(state.is_commit_mode);
+
+        // 3. Type a commit message
+        let msg = "Test commit";
+        for ch in msg.chars() {
+            state = update_state(state, Some(Input::Character(ch)), &window);
+        }
+
+        // 4. Assert the message is correct
+        assert_eq!(state.commit_message, msg);
+
+        // 5. Press Enter to commit
+        state = update_state(state, Some(Input::Character('\n')), &window);
+
+        // 6. Assert the app should exit
+        assert!(!state.running);
+    });
+}
