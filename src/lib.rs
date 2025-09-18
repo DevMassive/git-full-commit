@@ -292,6 +292,8 @@ pub struct AppState {
     pub files: Vec<FileDiff>,
     pub cursor_level: CursorLevel,
     pub command_history: CommandHistory,
+    pub commit_message: String,
+    pub is_commit_mode: bool,
 }
 
 impl AppState {
@@ -306,11 +308,13 @@ impl AppState {
             files,
             cursor_level: CursorLevel::File,
             command_history: CommandHistory::new(),
+            commit_message: String::new(),
+            is_commit_mode: false,
         }
     }
 
     pub fn get_cursor_line_index(&self) -> usize {
-        if self.files.is_empty() {
+        if self.files.is_empty() || self.file_cursor >= self.files.len() {
             return 0;
         }
         let file = &self.files[self.file_cursor];
@@ -360,6 +364,45 @@ impl AppState {
 pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) -> AppState {
     let (max_y, _) = window.get_max_yx();
 
+    if state.is_commit_mode {
+        match input {
+            Some(Input::Character('\n')) => {
+                if !state.commit_message.is_empty() {
+                    OsCommand::new("git")
+                        .arg("commit")
+                        .arg("-m")
+                        .arg(&state.commit_message)
+                        .current_dir(&state.repo_path)
+                        .output()
+                        .expect("Failed to commit.");
+                    state.running = false;
+                } else {
+                    state.is_commit_mode = false;
+                    curs_set(0);
+                }
+                return state;
+            }
+            Some(Input::KeyBackspace) => {
+                state.commit_message.pop();
+                return state;
+            }
+            Some(Input::KeyDC) => {
+                state.commit_message.pop();
+                return state;
+            }
+            Some(Input::Character(c)) => {
+                if c == '\u{1b}' { // ESC key
+                    state.is_commit_mode = false;
+                    curs_set(0);
+                } else {
+                    state.commit_message.push(c);
+                }
+                return state;
+            }
+            _ => return state,
+        }
+    }
+
     match input {
         Some(Input::Character('q')) => {
             state.running = false;
@@ -398,25 +441,27 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
         }
         Some(Input::Character('\n')) => {
-            if let CursorLevel::File = state.cursor_level {
-                if let Some(file) = state.files.get(state.file_cursor) {
-                    let command = Box::new(UnstageFileCommand {
-                        repo_path: state.repo_path.clone(),
-                        file_name: file.file_name.clone(),
-                    });
-                    state.command_history.execute(command);
-                    state.refresh_diff();
-                }
-            } else if let CursorLevel::Hunk = state.cursor_level {
-                if let Some(file) = state.files.get(state.file_cursor) {
-                    if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                        let command = Box::new(UnstageHunkCommand {
+            if state.file_cursor < state.files.len() {
+                if let CursorLevel::File = state.cursor_level {
+                    if let Some(file) = state.files.get(state.file_cursor) {
+                        let command = Box::new(UnstageFileCommand {
                             repo_path: state.repo_path.clone(),
                             file_name: file.file_name.clone(),
-                            hunk_lines: hunk.lines.clone(),
                         });
                         state.command_history.execute(command);
                         state.refresh_diff();
+                    }
+                } else if let CursorLevel::Hunk = state.cursor_level {
+                    if let Some(file) = state.files.get(state.file_cursor) {
+                        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
+                            let command = Box::new(UnstageHunkCommand {
+                                repo_path: state.repo_path.clone(),
+                                file_name: file.file_name.clone(),
+                                hunk_lines: hunk.lines.clone(),
+                            });
+                            state.command_history.execute(command);
+                            state.refresh_diff();
+                        }
                     }
                 }
             }
@@ -435,7 +480,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 let header_height = if state.files.is_empty() {
                     0
                 } else {
-                    state.files.len() + 1
+                    state.files.len() + 2
                 };
                 let content_height = (max_y as usize).saturating_sub(header_height);
                 let new_scroll = state.scroll.saturating_add(content_height);
@@ -448,7 +493,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             let header_height = if state.files.is_empty() {
                 0
             } else {
-                state.files.len() + 1
+                state.files.len() + 2
             };
             let content_height = (max_y as usize).saturating_sub(header_height);
             state.scroll = state.scroll.saturating_sub(content_height);
@@ -508,7 +553,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         Some(Input::KeyDown) => {
             match state.cursor_level {
                 CursorLevel::File => {
-                    if state.file_cursor < state.files.len().saturating_sub(1) {
+                    if state.file_cursor < state.files.len() {
                         state.file_cursor += 1;
                         state.scroll = 0;
                         state.hunk_cursor = 0;
@@ -522,6 +567,12 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                         } else if state.file_cursor < state.files.len().saturating_sub(1) {
                             state.file_cursor += 1;
                             state.hunk_cursor = 0;
+                            state.scroll = 0;
+                        } else {
+                            state.cursor_level = CursorLevel::File;
+                            state.file_cursor += 1;
+                            state.hunk_cursor = 0;
+                            state.line_cursor = 0;
                             state.scroll = 0;
                         }
                     }
@@ -543,6 +594,12 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                                 } else {
                                     state.line_cursor = 0;
                                 }
+                            } else {
+                                state.cursor_level = CursorLevel::File;
+                                state.file_cursor += 1;
+                                state.hunk_cursor = 0;
+                                state.line_cursor = 0;
+                                state.scroll = 0;
                             }
                         }
                     }
@@ -575,6 +632,9 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             }
         }
         Some(Input::KeyRight) => {
+            if state.file_cursor == state.files.len() {
+                return state;
+            }
             match state.cursor_level {
                 CursorLevel::File => {
                     if !state.files.is_empty() {
@@ -612,6 +672,13 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 }
             }
         }
+        Some(Input::Character(c)) => {
+            if state.file_cursor == state.files.len() {
+                state.is_commit_mode = true;
+                curs_set(1);
+                state.commit_message.push(c);
+            }
+        }
         _ => {}
     }
 
@@ -629,6 +696,8 @@ fn render(
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
 
+    let num_files = state.files.len();
+
     // Render sticky header
     if !state.files.is_empty() {
         window.attron(COLOR_PAIR(5));
@@ -644,16 +713,36 @@ fn render(
             }
         }
         window.attroff(COLOR_PAIR(5));
-        window.mv(state.files.len() as i32, 0);
-        window.hline(pancurses::ACS_HLINE(), max_x);
     }
 
-    if state.files.is_empty() {
+    // Render commit message line
+    let commit_line_y = num_files as i32;
+    window.mv(commit_line_y, 0);
+    window.clrtoeol();
+    if state.file_cursor == num_files {
+        window.attron(A_REVERSE);
+    }
+    window.addstr(&format!("Commit: {}", state.commit_message));
+    if state.file_cursor == num_files {
+        window.attroff(A_REVERSE);
+    }
+    if state.is_commit_mode {
+        window.mv(
+            commit_line_y,
+            8 + state.commit_message.chars().count() as i32,
+        );
+    }
+
+    // Render separator
+    window.mv((num_files + 1) as i32, 0);
+    window.hline(pancurses::ACS_HLINE(), max_x);
+
+    if state.file_cursor >= num_files {
         window.refresh();
         return;
     }
 
-    let header_height = state.files.len() + 1;
+    let header_height = num_files + 2;
     let content_height = (max_y as usize).saturating_sub(header_height);
 
     let selected_file = &state.files[state.file_cursor];
