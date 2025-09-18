@@ -986,7 +986,7 @@ fn render(
 
 fn render_line(
     window: &Window,
-    state: &AppState,
+    _state: &AppState,
     line: &str,
     line_index_in_file: usize,
     line_render_index: i32,
@@ -1001,22 +1001,6 @@ fn render_line(
     syntax_set: &SyntaxSet,
 ) {
     let is_cursor_line = line_index_in_file == cursor_position;
-
-    let is_selected = if let Some(file) = state.files.get(state.file_cursor) {
-        if let Some(hunk) = file.hunks.iter().find(|hunk| {
-            let hunk_start = hunk.start_line;
-            let hunk_end = hunk_start + hunk.lines.len();
-            state.line_cursor >= hunk_start && state.line_cursor < hunk_end
-        }) {
-            let hunk_start = hunk.start_line;
-            let hunk_end = hunk_start + hunk.lines.len();
-            line_index_in_file >= hunk_start && line_index_in_file < hunk_end
-        } else {
-            true
-        }
-    } else {
-        true
-    };
 
     if is_cursor_line {
         window.attron(A_REVERSE);
@@ -1041,7 +1025,7 @@ fn render_line(
         window.mvaddstr(line_render_index, 0, line);
         window.attroff(A_DIM);
     } else if line.starts_with('+') {
-        let (sign_pair_num, bg_color) = if is_selected { (1, 18) } else { (3, 18) };
+        let (sign_pair_num, bg_color) = (1, 18);
 
         let bg_pair = *pair_map.entry((-1, bg_color)).or_insert_with(|| {
             let pair_num = *next_pair_num;
@@ -1053,10 +1037,6 @@ fn render_line(
         window.mv(line_render_index, 0);
         window.clrtoeol();
         window.attroff(COLOR_PAIR(bg_pair as u32));
-
-        if !is_selected {
-            window.attron(A_DIM);
-        }
 
         window.attron(COLOR_PAIR(6));
         window.mvaddstr(line_render_index, 0, &line_num_str);
@@ -1078,12 +1058,8 @@ fn render_line(
             bg_color,
             syntax_set,
         );
-
-        if !is_selected {
-            window.attroff(A_DIM);
-        }
     } else if line.starts_with('-') {
-        let (sign_pair_num, bg_color) = if is_selected { (2, 19) } else { (4, 19) };
+        let (sign_pair_num, bg_color) = (2, 19);
 
         let bg_pair = *pair_map.entry((-1, bg_color)).or_insert_with(|| {
             let pair_num = *next_pair_num;
@@ -1095,10 +1071,6 @@ fn render_line(
         window.mv(line_render_index, 0);
         window.clrtoeol();
         window.attroff(COLOR_PAIR(bg_pair as u32));
-
-        if !is_selected {
-            window.attron(A_DIM);
-        }
 
         window.attron(COLOR_PAIR(6));
         window.mvaddstr(line_render_index, 0, &line_num_str);
@@ -1120,10 +1092,6 @@ fn render_line(
             bg_color,
             syntax_set,
         );
-
-        if !is_selected {
-            window.attroff(A_DIM);
-        }
     } else if line.starts_with("@@ ") {
         window.attron(COLOR_PAIR(6));
         window.mvaddstr(line_render_index, 0, line);
@@ -1137,10 +1105,6 @@ fn render_line(
         window.mvaddstr(line_render_index, 0, line);
         window.attroff(COLOR_PAIR(5));
     } else {
-        if !is_selected {
-            window.attron(A_DIM);
-        }
-
         window.attron(COLOR_PAIR(6));
         window.mvaddstr(line_render_index, 0, &line_num_str);
         window.attroff(COLOR_PAIR(6));
@@ -1157,9 +1121,6 @@ fn render_line(
             COLOR_BLACK,
             syntax_set,
         );
-        if !is_selected {
-            window.attroff(A_DIM);
-        }
     }
 
     if is_cursor_line {
@@ -1311,8 +1272,7 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, syntax_set: &SyntaxSet
     init_pair(1, 14, 18);
     init_pair(2, 15, 19);
 
-    init_pair(3, 16, 18);
-    init_pair(4, 17, 19);
+
 
     init_pair(5, COLOR_CYAN, COLOR_BLACK);
     init_pair(6, COLOR_MAGENTA, COLOR_BLACK);
