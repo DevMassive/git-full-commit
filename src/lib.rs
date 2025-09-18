@@ -956,6 +956,14 @@ fn render_line(
     window.mv(line_render_index, 0);
     window.clrtoeol();
 
+    if is_cursor_line {
+        window.attron(COLOR_PAIR(default_pair));
+        for i in 0..window.get_max_x() {
+            window.mvaddch(line_render_index, i, ' ');
+        }
+        window.attroff(COLOR_PAIR(default_pair));
+    }
+
     if line.starts_with("--- ") || line.starts_with("+++ ") {
         window.attron(COLOR_PAIR(grey_pair));
         window.mvaddstr(line_render_index, 0, &line_num_str);
