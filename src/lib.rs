@@ -944,6 +944,7 @@ fn render_line(
     let deletion_pair = if is_cursor_line { 6 } else { 2 };
     let addition_pair = if is_cursor_line { 7 } else { 3 };
     let hunk_header_pair = if is_cursor_line { 8 } else { 4 };
+    let grey_pair = if is_cursor_line { 10 } else { 9 };
 
     let line_num_str = format!(
         "{:>4} {:>4}",
@@ -956,11 +957,10 @@ fn render_line(
     window.clrtoeol();
 
     if line.starts_with("--- ") || line.starts_with("+++ ") {
-        window.attron(COLOR_PAIR(deletion_pair));
+        window.attron(COLOR_PAIR(grey_pair));
         window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.addstr(" ");
-        window.addstr(line);
-        window.attroff(COLOR_PAIR(deletion_pair));
+        window.mvaddstr(line_render_index, line_content_offset, line);
+        window.attroff(COLOR_PAIR(grey_pair));
     } else if line.starts_with('+') {
         window.attron(COLOR_PAIR(addition_pair));
         window.mvaddstr(line_render_index, 0, &line_num_str);
@@ -972,31 +972,37 @@ fn render_line(
         window.mvaddstr(line_render_index, line_content_offset, line);
         window.attroff(COLOR_PAIR(deletion_pair));
     } else if line.starts_with("@@ ") {
-        let mut parts = line.splitn(2, "@@");
-        let at_at = parts.next().unwrap_or("");
-        let rest = parts.next().unwrap_or("");
-        let mut rest_parts = rest.splitn(2, " ");
-        let func = rest_parts.next().unwrap_or("");
-
-        window.attron(COLOR_PAIR(hunk_header_pair));
+        window.attron(COLOR_PAIR(grey_pair));
         window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.addstr(" ");
-        window.addstr(at_at);
-        window.addstr("@@");
-        window.attroff(COLOR_PAIR(hunk_header_pair));
+        window.attroff(COLOR_PAIR(grey_pair));
 
-        window.attron(COLOR_PAIR(addition_pair));
-        window.addstr(func);
-        window.attroff(COLOR_PAIR(addition_pair));
+        if let Some(hunk_end_pos) = line.rfind("@@") {
+            let hunk_header = &line[..hunk_end_pos + 2];
+            let function_signature = &line[hunk_end_pos + 2..];
+
+            window.attron(COLOR_PAIR(hunk_header_pair));
+            window.mvaddstr(line_render_index, line_content_offset, hunk_header);
+            window.attroff(COLOR_PAIR(hunk_header_pair));
+
+            window.attron(COLOR_PAIR(addition_pair));
+            window.addstr(function_signature);
+            window.attroff(COLOR_PAIR(addition_pair));
+        } else {
+            window.attron(COLOR_PAIR(hunk_header_pair));
+            window.mvaddstr(line_render_index, line_content_offset, line);
+            window.attroff(COLOR_PAIR(hunk_header_pair));
+        }
     } else if line.starts_with("diff --git ") {
         window.attron(COLOR_PAIR(default_pair));
-        window.mvaddstr(line_render_index, 0, line);
+        window.mvaddstr(line_render_index, line_content_offset, line);
         window.attroff(COLOR_PAIR(default_pair));
     } else {
-        window.attron(COLOR_PAIR(default_pair));
+        window.attron(COLOR_PAIR(grey_pair));
         window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.addstr(" ");
-        window.addstr(line);
+        window.attroff(COLOR_PAIR(grey_pair));
+
+        window.attron(COLOR_PAIR(default_pair));
+        window.mvaddstr(line_render_index, line_content_offset, line);
         window.attroff(COLOR_PAIR(default_pair));
     }
 }
@@ -1102,24 +1108,28 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>) {
     let color_green = 22;
     let color_cyan = 23;
     let color_selected_bg = 24;
+    let color_grey = 25;
 
     init_color(color_white, 968, 968, 941); // #F7F7F0
     init_color(color_red, 1000, 0, 439); // #FF0070
     init_color(color_green, 525, 812, 0); // #86CF00
     init_color(color_cyan, 0, 769, 961); // #00C4F5
     init_color(color_selected_bg, 133, 133, 133); // #222222
+    init_color(color_grey, 266, 266, 266); // #444444
 
     // Color pairs
     init_pair(1, color_white, COLOR_BLACK); // Default: White on Black
     init_pair(2, color_red, COLOR_BLACK); // Deletion: Red on Black
     init_pair(3, color_green, COLOR_BLACK); // Addition: Green on Black
     init_pair(4, color_cyan, COLOR_BLACK); // Hunk Header: Cyan on Black
+    init_pair(9, color_grey, COLOR_BLACK); // Grey on Black
 
     // Selected line pairs
     init_pair(5, color_white, color_selected_bg); // Default: White on #222222
     init_pair(6, color_red, color_selected_bg); // Deletion: Red on #222222
     init_pair(7, color_green, color_selected_bg); // Addition: Green on #222222
     init_pair(8, color_cyan, color_selected_bg); // Hunk Header: Cyan on #222222
+    init_pair(10, color_grey, color_selected_bg); // Grey on #222222
 
     let mut state = AppState::new(repo_path, files);
 
