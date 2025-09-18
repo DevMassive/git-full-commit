@@ -85,10 +85,7 @@ impl UnstageHunkCommand {
 ",
             self.file_name
         ));
-        patch.push_str(&self.hunk_lines.join(
-            "
-",
-        ));
+        patch.push_str(&self.hunk_lines.join("\n"));
         patch.push('\n');
 
         let mut args = vec!["apply"];
@@ -169,9 +166,9 @@ pub struct Hunk {
 
 #[derive(Debug, Clone)]
 pub struct FileDiff {
-    pub start_line: usize,
     pub file_name: String,
     pub hunks: Vec<Hunk>,
+    pub lines: Vec<String>,
 }
 
 pub enum CursorLevel {
@@ -188,14 +185,13 @@ pub struct AppState {
     pub hunk_cursor: usize,
     pub line_cursor: usize,
     pub files: Vec<FileDiff>,
-    pub lines: Vec<String>,
     pub cursor_level: CursorLevel,
     pub command_history: CommandHistory,
     pub is_bottom: bool,
 }
 
 impl AppState {
-    pub fn new(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) -> Self {
+    pub fn new(repo_path: PathBuf, files: Vec<FileDiff>) -> Self {
         Self {
             repo_path,
             scroll: 0,
@@ -204,8 +200,7 @@ impl AppState {
             hunk_cursor: 0,
             line_cursor: 0,
             files,
-            lines,
-            cursor_level: CursorLevel::Hunk,
+            cursor_level: CursorLevel::File,
             command_history: CommandHistory::new(),
             is_bottom: false,
         }
@@ -215,19 +210,18 @@ impl AppState {
         if self.files.is_empty() {
             return 0;
         }
+        let file = &self.files[self.file_cursor];
         match self.cursor_level {
-            CursorLevel::File => self.files[self.file_cursor].start_line,
+            CursorLevel::File => 0,
             CursorLevel::Hunk => {
-                let file = &self.files[self.file_cursor];
                 if file.hunks.is_empty() {
-                    return file.start_line;
+                    return 0;
                 }
                 file.hunks[self.hunk_cursor].start_line
             }
             CursorLevel::Line => {
-                let file = &self.files[self.file_cursor];
                 if file.hunks.is_empty() {
-                    return file.start_line;
+                    return 0;
                 }
                 let hunk = &file.hunks[self.hunk_cursor];
                 if hunk.lines.is_empty() {
@@ -239,13 +233,13 @@ impl AppState {
     }
 
     fn refresh_diff(&mut self) {
-        let (files, lines) = get_diff(self.repo_path.clone());
+        let files = get_diff(self.repo_path.clone());
         self.files = files;
-        self.lines = lines;
         self.file_cursor = 0;
         self.hunk_cursor = 0;
         self.line_cursor = 0;
         self.scroll = 0;
+        self.cursor_level = CursorLevel::File;
     }
 }
 
@@ -297,7 +291,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
         Some(Input::Character(' ')) => {
             // Page down
             state.is_bottom = false;
-            if let CursorLevel::File = state.cursor_level {
+            if let Some(file) = state.files.get(state.file_cursor) {
                 let header_height = if state.files.is_empty() {
                     0
                 } else {
@@ -305,48 +299,33 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 };
                 let content_height = (max_y as usize).saturating_sub(header_height);
                 let new_scroll = state.scroll.saturating_add(content_height);
-                let max_scroll = state.lines.len().saturating_sub(content_height);
+                let max_scroll = file.lines.len().saturating_sub(content_height);
                 state.scroll = new_scroll.min(max_scroll);
             }
         }
         Some(Input::Character('b')) => {
             // Page up
             state.is_bottom = false;
-            if let CursorLevel::File = state.cursor_level {
-                let header_height = if state.files.is_empty() {
-                    0
-                } else {
-                    state.files.len() + 1
-                };
-                let content_height = (max_y as usize).saturating_sub(header_height);
-                state.scroll = state.scroll.saturating_sub(content_height);
-            }
+            let header_height = if state.files.is_empty() {
+                0
+            } else {
+                state.files.len() + 1
+            };
+            let content_height = (max_y as usize).saturating_sub(header_height);
+            state.scroll = state.scroll.saturating_sub(content_height);
         }
         Some(Input::KeyUp) => {
             state.is_bottom = false;
             match state.cursor_level {
                 CursorLevel::File => {
-                    // Do nothing
+                    state.file_cursor = state.file_cursor.saturating_sub(1);
+                    state.scroll = 0;
+                    state.hunk_cursor = 0;
+                    state.line_cursor = 0;
                 }
                 CursorLevel::Hunk => {
-                    let window_height = max_y as usize;
-                    if let Some(file) = state.files.get(state.file_cursor) {
-                        if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                            let hunk_start = hunk.start_line;
-                            let is_hunk_taller_than_screen = hunk.lines.len() > window_height;
-                            let is_hunk_top_on_screen = hunk_start >= state.scroll;
-
-                            if is_hunk_taller_than_screen && !is_hunk_top_on_screen {
-                                state.scroll = state.scroll.saturating_sub(window_height / 2);
-                            } else if state.hunk_cursor > 0 {
-                                state.hunk_cursor -= 1;
-                            } else if state.file_cursor > 0 {
-                                state.file_cursor -= 1;
-                                if let Some(file) = state.files.get(state.file_cursor) {
-                                    state.hunk_cursor = file.hunks.len().saturating_sub(1);
-                                }
-                            }
-                        }
+                    if state.hunk_cursor > 0 {
+                        state.hunk_cursor -= 1;
                     }
                 }
                 CursorLevel::Line => {
@@ -357,16 +336,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                         if let Some(file) = state.files.get(state.file_cursor) {
                             if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
                                 state.line_cursor = hunk.lines.len().saturating_sub(1);
-                            }
-                        }
-                    } else if state.file_cursor > 0 {
-                        state.file_cursor -= 1;
-                        if let Some(file) = state.files.get(state.file_cursor) {
-                            state.hunk_cursor = file.hunks.len().saturating_sub(1);
-                            if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                                state.line_cursor = hunk.lines.len().saturating_sub(1);
-                            } else {
-                                state.line_cursor = 0;
                             }
                         }
                     }
@@ -404,22 +373,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 return state;
             }
 
-            if let CursorLevel::Hunk = state.cursor_level {
-                let window_height = max_y as usize;
-                if let Some(file) = state.files.get(state.file_cursor) {
-                    if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
-                        let hunk_end = hunk.start_line + hunk.lines.len();
-                        let is_hunk_taller_than_screen = hunk.lines.len() > window_height;
-                        let is_hunk_bottom_on_screen = hunk_end <= state.scroll + window_height;
-
-                        if is_hunk_taller_than_screen && !is_hunk_bottom_on_screen {
-                            state.scroll = state.scroll.saturating_add(window_height / 2);
-                            return state;
-                        }
-                    }
-                }
-            }
-
             let at_bottom_of_file_list = state.file_cursor == state.files.len().saturating_sub(1);
             let at_bottom_of_hunk_list = if let Some(file) = state.files.get(state.file_cursor) {
                 state.hunk_cursor == file.hunks.len().saturating_sub(1)
@@ -449,7 +402,12 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
             } else {
                 match state.cursor_level {
                     CursorLevel::File => {
-                        // Do nothing
+                        if state.file_cursor < state.files.len().saturating_sub(1) {
+                            state.file_cursor += 1;
+                            state.scroll = 0;
+                            state.hunk_cursor = 0;
+                            state.line_cursor = 0;
+                        }
                     }
                     CursorLevel::Hunk => {
                         if let Some(file) = state.files.get(state.file_cursor) {
@@ -458,6 +416,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                             } else if state.file_cursor < state.files.len().saturating_sub(1) {
                                 state.file_cursor += 1;
                                 state.hunk_cursor = 0;
+                                state.scroll = 0;
                             }
                         }
                     }
@@ -472,6 +431,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                                 } else if state.file_cursor < state.files.len().saturating_sub(1) {
                                     state.file_cursor += 1;
                                     state.hunk_cursor = 0;
+                                    state.scroll = 0;
                                     if !state.files[state.file_cursor].hunks.is_empty() {
                                         state.line_cursor = 1;
                                     } else {
@@ -515,40 +475,8 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
                 CursorLevel::File => {
                     if !state.files.is_empty() {
                         state.cursor_level = CursorLevel::Hunk;
+                        state.hunk_cursor = 0;
                         state.line_cursor = 0;
-
-                        let header_height = if state.files.is_empty() {
-                            0
-                        } else {
-                            state.files.len() + 1
-                        };
-                        let content_height = (max_y as usize).saturating_sub(header_height);
-                        let screen_start = state.scroll;
-                        let screen_end = state.scroll + content_height;
-
-                        let mut first_visible_hunk: Option<(usize, usize)> = None;
-
-                        for (file_idx, file) in state.files.iter().enumerate() {
-                            for (hunk_idx, hunk) in file.hunks.iter().enumerate() {
-                                let hunk_start = hunk.start_line;
-                                let hunk_end = hunk.start_line + hunk.lines.len();
-
-                                if hunk_start < screen_end && hunk_end > screen_start {
-                                    first_visible_hunk = Some((file_idx, hunk_idx));
-                                    break;
-                                }
-                            }
-                            if first_visible_hunk.is_some() {
-                                break;
-                            }
-                        }
-
-                        if let Some((file_idx, hunk_idx)) = first_visible_hunk {
-                            state.file_cursor = file_idx;
-                            state.hunk_cursor = hunk_idx;
-                        } else {
-                            state.hunk_cursor = 0;
-                        }
                     }
                 }
                 CursorLevel::Hunk => {
@@ -598,87 +526,6 @@ fn render(
 ) {
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
-    let lines = &state.lines;
-
-    let cursor_position = state.get_cursor_line_index();
-
-    // Find current file based on scroll position
-    let current_file_index = state
-        .files
-        .iter()
-        .rposition(|f| f.start_line <= state.scroll)
-        .unwrap_or(0); // Default to the first file
-
-    let file_name = if !state.files.is_empty() {
-        &state.files[current_file_index].file_name
-    } else {
-        ""
-    };
-
-    let syntax = SYNTAX_SET
-        .find_syntax_by_extension(
-            Path::new(file_name)
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("txt"),
-        )
-        .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
-
-    let theme = &THEME_SET.themes["Solarized (dark)"];
-    let mut h = HighlightLines::new(syntax, theme);
-
-    // Warm up highlighter state
-    let file_start_line = if !state.files.is_empty() {
-        state.files[current_file_index].start_line
-    } else {
-        0
-    };
-
-    for line in lines.iter().take(state.scroll).skip(file_start_line) {
-        if line.starts_with('+') || line.starts_with('-') {
-            let _ = h.highlight_line(&line[1..], &SYNTAX_SET).unwrap();
-        } else if line.starts_with("diff --git")
-            || line.starts_with("index ")
-            || line.starts_with("--- ")
-            || line.starts_with("+++ ")
-            || line.starts_with("@@ ")
-            || line.starts_with("new file mode ")
-        {
-            // Do nothing, just as render_line does
-        } else {
-            // This is a context line
-            let _ = h.highlight_line(line, &SYNTAX_SET).unwrap();
-        }
-    }
-
-    let header_height = if state.files.is_empty() {
-        0
-    } else {
-        state.files.len() + 1
-    };
-    let content_height = (max_y as usize).saturating_sub(header_height);
-
-    for (i, line) in lines
-        .iter()
-        .skip(state.scroll)
-        .take(content_height)
-        .enumerate()
-    {
-        let line_index_in_full_list = i + state.scroll;
-        render_line(
-            window,
-            state,
-            line,
-            line_index_in_full_list,
-            i as i32 + header_height as i32,
-            cursor_position,
-            &mut h,
-            color_map,
-            pair_map,
-            next_color_num,
-            next_pair_num,
-        );
-    }
 
     // Render sticky header
     if !state.files.is_empty() {
@@ -699,6 +546,71 @@ fn render(
         window.hline(pancurses::ACS_HLINE(), max_x);
     }
 
+    if state.files.is_empty() {
+        window.refresh();
+        return;
+    }
+
+    let header_height = state.files.len() + 1;
+    let content_height = (max_y as usize).saturating_sub(header_height);
+
+    let selected_file = &state.files[state.file_cursor];
+    let lines = &selected_file.lines;
+
+    let cursor_position = state.get_cursor_line_index();
+
+    let syntax = SYNTAX_SET
+        .find_syntax_by_extension(
+            Path::new(&selected_file.file_name)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("txt"),
+        )
+        .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
+
+    let theme = &THEME_SET.themes["Solarized (dark)"];
+    let mut h = HighlightLines::new(syntax, theme);
+
+    // Warm up highlighter state
+    for line in lines.iter().take(state.scroll) {
+        if line.starts_with('+') || line.starts_with('-') {
+            let _ = h.highlight_line(&line[1..], &SYNTAX_SET).unwrap();
+        } else if line.starts_with("diff --git")
+            || line.starts_with("index ")
+            || line.starts_with("--- ")
+            || line.starts_with("+++ ")
+            || line.starts_with("@@ ")
+            || line.starts_with("new file mode ")
+        {
+            // Do nothing, just as render_line does
+        } else {
+            // This is a context line
+            let _ = h.highlight_line(line, &SYNTAX_SET).unwrap();
+        }
+    }
+
+    for (i, line) in lines
+        .iter()
+        .skip(state.scroll)
+        .take(content_height)
+        .enumerate()
+    {
+        let line_index_in_file = i + state.scroll;
+        render_line(
+            window,
+            state,
+            line,
+            line_index_in_file,
+            i as i32 + header_height as i32,
+            cursor_position,
+            &mut h,
+            color_map,
+            pair_map,
+            next_color_num,
+            next_pair_num,
+        );
+    }
+
     if state.is_bottom {
         window.mvaddstr(max_y - 1, max_x - 4, "ok?");
     }
@@ -710,7 +622,7 @@ fn render_line(
     window: &Window,
     state: &AppState,
     line: &str,
-    line_index_in_full_list: usize,
+    line_index_in_file: usize,
     line_render_index: i32,
     cursor_position: usize,
     h: &mut HighlightLines,
@@ -719,29 +631,17 @@ fn render_line(
     next_color_num: &mut i16,
     next_pair_num: &mut i16,
 ) {
-    let is_cursor_line = line_index_in_full_list == cursor_position
+    let is_cursor_line = line_index_in_file == cursor_position
         && matches!(state.cursor_level, CursorLevel::Line);
 
     let is_selected = match state.cursor_level {
-        CursorLevel::File => {
-            if let Some(file) = state.files.get(state.file_cursor) {
-                let file_start = file.start_line;
-                let file_end = if state.file_cursor + 1 < state.files.len() {
-                    state.files[state.file_cursor + 1].start_line
-                } else {
-                    state.lines.len()
-                };
-                line_index_in_full_list >= file_start && line_index_in_full_list < file_end
-            } else {
-                false
-            }
-        }
+        CursorLevel::File => true,
         CursorLevel::Hunk => {
             if let Some(file) = state.files.get(state.file_cursor) {
                 if let Some(hunk) = file.hunks.get(state.hunk_cursor) {
                     let hunk_start = hunk.start_line;
                     let hunk_end = hunk_start + hunk.lines.len();
-                    line_index_in_full_list >= hunk_start && line_index_in_full_list < hunk_end
+                    line_index_in_file >= hunk_start && line_index_in_file < hunk_end
                 } else {
                     false
                 }
@@ -918,7 +818,7 @@ fn highlight_line(
     }
 }
 
-pub fn get_diff(repo_path: PathBuf) -> (Vec<FileDiff>, Vec<String>) {
+pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
     let output = OsCommand::new("git")
         .arg("diff")
         .arg("--staged")
@@ -930,8 +830,8 @@ pub fn get_diff(repo_path: PathBuf) -> (Vec<FileDiff>, Vec<String>) {
     let mut files = Vec::new();
     let mut current_file: Option<FileDiff> = None;
     let mut current_hunk: Option<Hunk> = None;
-
-    let mut current_line_index = 0;
+    let mut current_file_lines: Vec<String> = Vec::new();
+    let mut current_file_line_index = 0;
 
     for line in diff_str.lines() {
         if line.starts_with("diff --git") {
@@ -939,7 +839,10 @@ pub fn get_diff(repo_path: PathBuf) -> (Vec<FileDiff>, Vec<String>) {
                 if let Some(hunk) = current_hunk.take() {
                     file.hunks.push(hunk);
                 }
+                file.lines = current_file_lines;
                 files.push(file);
+                current_file_lines = Vec::new();
+                current_file_line_index = 0;
             }
             let file_name_part = line.split(' ').nth(2).unwrap_or("");
             let file_name = if file_name_part.starts_with("a/") {
@@ -948,9 +851,9 @@ pub fn get_diff(repo_path: PathBuf) -> (Vec<FileDiff>, Vec<String>) {
                 file_name_part
             };
             current_file = Some(FileDiff {
-                start_line: current_line_index,
                 file_name: file_name.to_string(),
                 hunks: Vec::new(),
+                lines: Vec::new(), // Will be filled in later
             });
         } else if line.starts_with("@@ ") {
             if let Some(hunk) = current_hunk.take() {
@@ -959,26 +862,31 @@ pub fn get_diff(repo_path: PathBuf) -> (Vec<FileDiff>, Vec<String>) {
                 }
             }
             current_hunk = Some(Hunk {
-                start_line: current_line_index,
+                start_line: current_file_line_index,
                 lines: vec![line.to_string()],
             });
         } else if let Some(hunk) = current_hunk.as_mut() {
             hunk.lines.push(line.to_string());
         }
-        current_line_index += 1;
+
+        if current_file.is_some() {
+            current_file_lines.push(line.to_string());
+            current_file_line_index += 1;
+        }
     }
 
     if let Some(mut file) = current_file.take() {
         if let Some(hunk) = current_hunk.take() {
             file.hunks.push(hunk);
         }
+        file.lines = current_file_lines;
         files.push(file);
     }
 
-    (files, diff_str.lines().map(String::from).collect())
+    files
 }
 
-pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) -> bool {
+pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>) -> bool {
     let window = initscr();
     window.keypad(true);
     noecho();
@@ -1001,7 +909,7 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, lines: Vec<String>) ->
     init_pair(5, COLOR_CYAN, COLOR_BLACK);
     init_pair(6, COLOR_MAGENTA, COLOR_BLACK);
 
-    let mut state = AppState::new(repo_path, files, lines);
+    let mut state = AppState::new(repo_path, files);
     let mut color_map: HashMap<syntect::highlighting::Color, i16> = HashMap::new();
     let mut pair_map: HashMap<(i16, i16), i16> = HashMap::new();
     let mut next_color_num = 20;
@@ -1029,13 +937,13 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
         bail!("fatal: not a git repository (or any of the parent directories): .git");
     }
 
-    let (files, lines) = get_diff(repo_path.clone());
+    let files = get_diff(repo_path.clone());
 
     if files.is_empty() {
         bail!("No staged changes found.");
     }
 
-    let should_commit = tui_loop(repo_path.clone(), files, lines);
+    let should_commit = tui_loop(repo_path.clone(), files);
     if !should_commit {
         std::process::exit(1);
     }
