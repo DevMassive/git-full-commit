@@ -1,11 +1,42 @@
-use pancurses::{COLOR_BLACK, COLOR_PAIR, Input, Window, curs_set, endwin, init_color, init_pair, initscr, noecho, start_color};
+use pancurses::{A_REVERSE, COLOR_BLACK, COLOR_PAIR, Input, Window, curs_set, endwin, init_color, init_pair, initscr, noecho, start_color};
 use unicode_width::UnicodeWidthStr;
 use std::process::Command as OsCommand;
+use similar::TextDiff;
+
+// Represents a line of text with word-level diff information.
+// Each element in the vector is a tuple of (text, is_changed).
+#[derive(Debug, Clone, PartialEq)]
+pub struct WordDiffLine(pub Vec<(String, bool)>);
 
 use crate::app_state::AppState;
 use crate::commit_storage;
 use crate::git::{FileStatus, get_previous_commit_message};
 use crate::command::{ApplyPatchCommand, CheckoutFileCommand, RemoveFileCommand, UnstageFileCommand};
+
+fn compute_word_diff(old: &str, new: &str) -> (WordDiffLine, WordDiffLine) {
+    let diff = TextDiff::from_unicode_words(old, new);
+
+    let mut old_line = WordDiffLine(Vec::new());
+    let mut new_line = WordDiffLine(Vec::new());
+
+    for change in diff.iter_all_changes() {
+        let text = change.value().to_string();
+        match change.tag() {
+            similar::ChangeTag::Delete => {
+                old_line.0.push((text, true));
+            }
+            similar::ChangeTag::Insert => {
+                new_line.0.push((text, true));
+            }
+            similar::ChangeTag::Equal => {
+                old_line.0.push((text.clone(), false));
+                new_line.0.push((text, false));
+            }
+        }
+    }
+
+    (old_line, new_line)
+}
 
 pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>) {
     let window = initscr();
@@ -194,6 +225,7 @@ fn render(window: &Window, state: &AppState) {
                     window,
                     state,
                     line,
+                    None,
                     line_index_in_file,
                     i as i32 + header_height as i32,
                     cursor_position,
@@ -231,24 +263,74 @@ fn render(window: &Window, state: &AppState) {
             }
         }
 
-        for (i, line) in lines
-            .iter()
-            .skip(state.scroll)
-            .take(content_height)
-            .enumerate()
-        {
-            let line_index_in_file = i + state.scroll;
+        let mut i = 0;
+        let mut render_index = 0;
+        while i < lines.len() {
+            if render_index >= content_height {
+                break;
+            }
+
+            let line_index_in_file = i;
+            if line_index_in_file < state.scroll {
+                i += 1;
+                continue;
+            }
+
+            let line = &lines[i];
+            let next_line = lines.get(i + 1);
+
             let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
-            render_line(
-                window,
-                state,
-                line,
-                line_index_in_file,
-                i as i32 + header_height as i32,
-                cursor_position,
-                old_line_num,
-                new_line_num,
-            );
+
+            if line.starts_with('-') && next_line.map_or(false, |nl| nl.starts_with('+')) {
+                let next_line_str = next_line.unwrap();
+                let (old_word_diff, new_word_diff) = compute_word_diff(&line[1..], &next_line_str[1..]);
+
+                let (next_old_line_num, next_new_line_num) = line_numbers[i+1];
+
+                render_line(
+                    window,
+                    state,
+                    line,
+                    Some(&old_word_diff),
+                    line_index_in_file,
+                    render_index as i32 + header_height as i32,
+                    cursor_position,
+                    old_line_num,
+                    new_line_num,
+                );
+                render_index += 1;
+
+                if render_index < content_height {
+                    render_line(
+                        window,
+                        state,
+                        next_line_str,
+                        Some(&new_word_diff),
+                        i + 1,
+                        render_index as i32 + header_height as i32,
+                        cursor_position,
+                        next_old_line_num,
+                        next_new_line_num,
+                    );
+                    render_index += 1;
+                }
+
+                i += 2;
+            } else {
+                render_line(
+                    window,
+                    state,
+                    line,
+                    None,
+                    line_index_in_file,
+                    render_index as i32 + header_height as i32,
+                    cursor_position,
+                    old_line_num,
+                    new_line_num,
+                );
+                render_index += 1;
+                i += 1;
+            }
         }
     } else if state.file_cursor == num_files + 1 {
         if state.is_commit_mode {
@@ -270,6 +352,7 @@ fn render_line(
     window: &Window,
     _state: &AppState,
     line: &str,
+    word_diff_line: Option<&WordDiffLine>,
     line_index_in_file: usize,
     line_render_index: i32,
     cursor_position: usize,
@@ -302,22 +385,35 @@ fn render_line(
         window.attroff(COLOR_PAIR(default_pair));
     }
 
-    if line.starts_with("--- ") || line.starts_with("+++ ") {
-        window.attron(COLOR_PAIR(grey_pair));
-        window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.mvaddstr(line_render_index, line_content_offset, line);
-        window.attroff(COLOR_PAIR(grey_pair));
+    let (base_pair, line_prefix) = if line.starts_with("--- ") || line.starts_with("+++ ") {
+        (grey_pair, "")
     } else if line.starts_with('+') {
-        window.attron(COLOR_PAIR(addition_pair));
-        window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.mvaddstr(line_render_index, line_content_offset, line);
-        window.attroff(COLOR_PAIR(addition_pair));
+        (addition_pair, "+")
     } else if line.starts_with('-') {
-        window.attron(COLOR_PAIR(deletion_pair));
-        window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.mvaddstr(line_render_index, line_content_offset, line);
-        window.attroff(COLOR_PAIR(deletion_pair));
+        (deletion_pair, "-")
     } else if line.starts_with("@@ ") {
+        (hunk_header_pair, "")
+    } else if line.starts_with("diff --git ") {
+        (default_pair, "")
+    } else {
+        (default_pair, " ")
+    };
+
+    let num_pair = if line.starts_with("@@ ") || line.starts_with("--- ") || line.starts_with("+++ ") {
+        grey_pair
+    } else {
+        base_pair
+    };
+
+    window.attron(COLOR_PAIR(num_pair));
+    window.mvaddstr(line_render_index, 0, &line_num_str);
+    window.attroff(COLOR_PAIR(num_pair));
+
+    window.attron(COLOR_PAIR(base_pair));
+    window.mv(line_render_index, line_content_offset);
+
+    if line.starts_with("@@ ") {
+        window.attroff(COLOR_PAIR(base_pair));
         window.attron(COLOR_PAIR(grey_pair));
         window.mvaddstr(line_render_index, 0, &line_num_str);
         window.attroff(COLOR_PAIR(grey_pair));
@@ -338,19 +434,21 @@ fn render_line(
             window.mvaddstr(line_render_index, line_content_offset, line);
             window.attroff(COLOR_PAIR(hunk_header_pair));
         }
-    } else if line.starts_with("diff --git ") {
-        window.attron(COLOR_PAIR(default_pair));
-        window.mvaddstr(line_render_index, line_content_offset, line);
-        window.attroff(COLOR_PAIR(default_pair));
+    } else if let Some(word_diff) = word_diff_line {
+        window.addstr(line_prefix);
+        for (text, is_changed) in &word_diff.0 {
+            if *is_changed {
+                window.attron(A_REVERSE);
+            }
+            window.addstr(text);
+            if *is_changed {
+                window.attroff(A_REVERSE);
+            }
+        }
     } else {
-        window.attron(COLOR_PAIR(grey_pair));
-        window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.attroff(COLOR_PAIR(grey_pair));
-
-        window.attron(COLOR_PAIR(default_pair));
         window.mvaddstr(line_render_index, line_content_offset, line);
-        window.attroff(COLOR_PAIR(default_pair));
     }
+    window.attroff(COLOR_PAIR(base_pair));
 }
 
 pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> AppState {
@@ -865,6 +963,36 @@ mod tests {
     use crate::git::{FileDiff, FileStatus, Hunk};
     use pancurses::Input;
     use std::path::PathBuf;
+
+    #[test]
+    fn test_compute_word_diff() {
+        let old = "The quick brown fox";
+        let new = "The slow brown cat";
+
+        let (old_diff, new_diff) = compute_word_diff(old, new);
+
+        let expected_old = WordDiffLine(vec![
+            ("The".to_string(), false),
+            (" ".to_string(), false),
+            ("quick".to_string(), true),
+            (" ".to_string(), false),
+            ("brown".to_string(), false),
+            (" ".to_string(), false),
+            ("fox".to_string(), true),
+        ]);
+        let expected_new = WordDiffLine(vec![
+            ("The".to_string(), false),
+            (" ".to_string(), false),
+            ("slow".to_string(), true),
+            (" ".to_string(), false),
+            ("brown".to_string(), false),
+            (" ".to_string(), false),
+            ("cat".to_string(), true),
+        ]);
+
+        assert_eq!(old_diff, expected_old);
+        assert_eq!(new_diff, expected_new);
+    }
 
     fn create_test_state(
         lines_count: usize,
