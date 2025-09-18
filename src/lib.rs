@@ -1,5 +1,4 @@
 use anyhow::{Result, bail};
-use lazy_static::lazy_static;
 use pancurses::{
     A_DIM, A_REVERSE, COLOR_BLACK, COLOR_CYAN, COLOR_MAGENTA, COLOR_PAIR, Input, Window, curs_set,
     endwin, init_color, init_pair, initscr, noecho, start_color,
@@ -10,14 +9,10 @@ use std::process::Command as OsCommand;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, ThemeSet};
 use syntect::parsing::SyntaxSet;
+use syntect_assets::assets::HighlightingAssets;
 use unicode_width::UnicodeWidthStr;
 
 mod commit_storage;
-
-lazy_static! {
-    pub static ref SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
-    pub static ref THEME_SET: ThemeSet = ThemeSet::load_defaults();
-}
 
 pub trait Command {
     fn execute(&mut self);
@@ -832,6 +827,8 @@ fn render(
     pair_map: &mut HashMap<(i16, i16), i16>,
     next_color_num: &mut i16,
     next_pair_num: &mut i16,
+    syntax_set: &SyntaxSet,
+    theme_set: &ThemeSet,
 ) {
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
@@ -903,16 +900,16 @@ fn render(
 
     let cursor_position = state.get_cursor_line_index();
 
-    let syntax = SYNTAX_SET
+    let syntax = syntax_set
         .find_syntax_by_extension(
             Path::new(&selected_file.file_name)
                 .extension()
                 .and_then(|s| s.to_str())
                 .unwrap_or("txt"),
         )
-        .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
+        .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
 
-    let theme = &THEME_SET.themes["Solarized (dark)"];
+    let theme = &theme_set.themes["Monokai Extended"];
     let mut h = HighlightLines::new(syntax, theme);
 
     let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); lines.len()];
@@ -943,7 +940,7 @@ fn render(
     // Warm up highlighter state
     for line in lines.iter().take(state.scroll) {
         if line.starts_with('+') || line.starts_with('-') {
-            let _ = h.highlight_line(&line[1..], &SYNTAX_SET).unwrap();
+            let _ = h.highlight_line(&line[1..], syntax_set).unwrap();
         } else if line.starts_with("diff --git")
             || line.starts_with("index ")
             || line.starts_with("--- ")
@@ -954,7 +951,7 @@ fn render(
             // Do nothing, just as render_line does
         } else {
             // This is a context line
-            let _ = h.highlight_line(line, &SYNTAX_SET).unwrap();
+            let _ = h.highlight_line(line, syntax_set).unwrap();
         }
     }
 
@@ -980,6 +977,7 @@ fn render(
             next_pair_num,
             old_line_num,
             new_line_num,
+            syntax_set,
         );
     }
 
@@ -1000,6 +998,7 @@ fn render_line(
     next_pair_num: &mut i16,
     old_line_num: Option<usize>,
     new_line_num: Option<usize>,
+    syntax_set: &SyntaxSet,
 ) {
     let is_cursor_line = line_index_in_file == cursor_position;
 
@@ -1077,6 +1076,7 @@ fn render_line(
             next_color_num,
             next_pair_num,
             bg_color,
+            syntax_set,
         );
 
         if !is_selected {
@@ -1118,6 +1118,7 @@ fn render_line(
             next_color_num,
             next_pair_num,
             bg_color,
+            syntax_set,
         );
 
         if !is_selected {
@@ -1154,6 +1155,7 @@ fn render_line(
             next_color_num,
             next_pair_num,
             COLOR_BLACK,
+            syntax_set,
         );
         if !is_selected {
             window.attroff(A_DIM);
@@ -1174,8 +1176,9 @@ fn highlight_line(
     next_color_num: &mut i16,
     next_pair_num: &mut i16,
     bg_color_num: i16,
+    syntax_set: &SyntaxSet,
 ) {
-    let ranges: Vec<(Style, &str)> = h.highlight_line(line, &SYNTAX_SET).unwrap();
+    let ranges: Vec<(Style, &str)> = h.highlight_line(line, syntax_set).unwrap();
     for (style, text) in ranges {
         let fg_syntect_color = style.foreground;
         let fg_color_num = *color_map.entry(fg_syntect_color).or_insert_with(|| {
@@ -1291,7 +1294,7 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
     files
 }
 
-pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>) {
+pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>, syntax_set: &SyntaxSet, theme_set: &ThemeSet) {
     let window = initscr();
     window.keypad(true);
     noecho();
@@ -1328,6 +1331,8 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>) {
             &mut pair_map,
             &mut next_color_num,
             &mut next_pair_num,
+            syntax_set,
+            theme_set,
         );
         let input = window.getch();
         state = update_state(state, input, &window);
@@ -1339,6 +1344,13 @@ pub fn tui_loop(repo_path: PathBuf, files: Vec<FileDiff>) {
 pub fn run(repo_path: PathBuf) -> Result<()> {
     if !is_git_repository(&repo_path) {
         bail!("fatal: not a git repository (or any of the parent directories): .git");
+    }
+
+    let assets = HighlightingAssets::from_binary();
+    let syntax_set = assets.get_syntax_set().unwrap().clone();
+    let mut theme_set = ThemeSet::new();
+    for theme_name in assets.themes() {
+        theme_set.themes.insert(theme_name.to_string(), assets.get_theme(theme_name).clone());
     }
 
     let staged_diff_output = OsCommand::new("git")
@@ -1361,7 +1373,7 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
         bail!("No changes found.");
     }
 
-    tui_loop(repo_path.clone(), files);
+    tui_loop(repo_path.clone(), files, &syntax_set, &theme_set);
 
     Ok(())
 }
