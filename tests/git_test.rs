@@ -83,7 +83,7 @@ fn test_update_state_quit() {
     run_test_with_pancurses(|window| {
         let setup = TestSetup::new();
         let state = create_test_state(&setup);
-        let new_state = update_state(state, Some(Input::Character('q')), &window);
+        let new_state = update_state(state, Some(Input::Character('\u{3}')), &window);
         assert!(!new_state.running);
     });
 }

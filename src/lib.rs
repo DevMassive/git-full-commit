@@ -579,7 +579,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, window: &Window) 
     }
 
     match input {
-        Some(Input::Character('q')) => {
+        Some(Input::Character('\u{3}')) => { // Ctrl+C
             let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
             state.running = false;
         }
