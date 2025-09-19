@@ -810,8 +810,10 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
     }
 
     match input {
-        Some(Input::Character('\u{3}')) => {
-            // Ctrl+C
+        Some(Input::Character('\u{3}'))
+        | Some(Input::Character('q'))
+        | Some(Input::Character('Q')) => {
+            // Ctrl+C or Q or q
             let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
             state.running = false;
         }
