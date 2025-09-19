@@ -515,3 +515,47 @@ fn test_get_previous_commit_diff() {
     assert!(hunk.lines.iter().any(|line| line.contains("-a")));
     assert!(hunk.lines.iter().any(|line| line.contains("+b")));
 }
+
+#[test]
+#[serial]
+fn test_rename_file() {
+    let tmp_dir = TempDir::new().unwrap();
+    let repo_path = tmp_dir.path().to_path_buf();
+
+    // git init
+    run_git(&repo_path, &["init"]);
+    run_git(&repo_path, &["config", "user.name", "Test"]);
+    run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+
+    // first commit
+    let file_path = repo_path.join("original.txt");
+    fs::write(&file_path, "hello\n").unwrap();
+    run_git(&repo_path, &["add", "original.txt"]);
+    run_git(&repo_path, &["commit", "-m", "initial commit"]);
+
+    // Rename the file
+    run_git(&repo_path, &["mv", "original.txt", "renamed.txt"]);
+
+    // The logic from the `run` function before `tui_loop`
+    let staged_diff_output = OsCommand::new("git")
+        .arg("diff")
+        .arg("--staged")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    if staged_diff_output.stdout.is_empty() {
+        OsCommand::new("git")
+            .arg("add")
+            .arg("-A")
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+    }
+    
+    let files = git_reset_pp::git::get_diff(repo_path.clone());
+    assert!(!files.is_empty());
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].status, git_reset_pp::git::FileStatus::Renamed);
+    assert_eq!(files[0].file_name, "renamed.txt");
+}

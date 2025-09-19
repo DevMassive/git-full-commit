@@ -98,6 +98,13 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
             if let Some(file) = current_file.as_mut() {
                 file.status = FileStatus::Renamed;
             }
+        } else if line.starts_with("rename to") {
+            let new_name = line.split(' ').nth(2).unwrap_or("").trim();
+            if !new_name.is_empty() {
+                if let Some(file) = current_file.as_mut() {
+                    file.file_name = new_name.to_string();
+                }
+            }
         } else if line.starts_with("@@ ") {
             if let Some(hunk) = current_hunk.take() {
                 if let Some(file) = current_file.as_mut() {
@@ -156,45 +163,7 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
     parse_diff(&diff_str)
 }
 
-pub fn get_status(repo_path: PathBuf) -> Vec<FileDiff> {
-    let output = OsCommand::new("git")
-        .arg("status")
-        .arg("--porcelain")
-        .current_dir(&repo_path)
-        .output()
-        .expect("Failed to execute git status");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut files = Vec::new();
-
-    for line in stdout.lines() {
-        let status_str = &line[..2];
-        let file_name = &line[3..];
-
-        let _file_status = match status_str.chars().next().unwrap() {
-            'A' => FileStatus::Added,
-            'M' => FileStatus::Modified,
-            'D' => FileStatus::Deleted,
-            'R' => FileStatus::Renamed,
-            '?' => FileStatus::Added, // Untracked
-            _ => continue,
-        };
-
-        let output = OsCommand::new("git")
-            .arg("diff")
-            .arg("--staged")
-            .arg(file_name)
-            .current_dir(&repo_path)
-            .output()
-            .expect("Failed to execute git diff");
-        let diff_str = String::from_utf8_lossy(&output.stdout);
-        if let Some(file_diff) = parse_diff(&diff_str).pop() {
-            files.push(file_diff);
-        }
-    }
-
-    files
-}
 
 pub fn get_previous_commit_diff(repo_path: &Path) -> Result<Vec<FileDiff>> {
     let output = OsCommand::new("git")
