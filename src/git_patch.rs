@@ -34,29 +34,20 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
         .parse()
         .unwrap();
 
-    let mut current_old_line = old_start;
-    let mut current_new_line = new_start;
-    let mut patch_old_line = 0;
-    let mut patch_new_line = 0;
+    let relative_line_index = line_index - (hunk.start_line + 1);
 
-    for (i, line) in hunk.lines.iter().skip(1).enumerate() {
-        let current_line_index_in_file = hunk.start_line + 1 + i;
+    let old_line_offset = hunk.lines[1..=relative_line_index]
+        .iter()
+        .filter(|l| !l.starts_with('+'))
+        .count();
 
-        if current_line_index_in_file == line_index {
-            patch_old_line = current_old_line;
-            patch_new_line = current_new_line;
-            break;
-        }
+    let new_line_offset = hunk.lines[1..=relative_line_index]
+        .iter()
+        .filter(|l| !l.starts_with('-'))
+        .count();
 
-        if line.starts_with('-') {
-            current_old_line += 1;
-        } else if line.starts_with('+') {
-            current_new_line += 1;
-        } else {
-            current_old_line += 1;
-            current_new_line += 1;
-        }
-    }
+    let patch_old_line = old_start + old_line_offset as u32;
+    let patch_new_line = new_start + new_line_offset as u32;
 
     let new_hunk_header = if line_to_unstage.starts_with('-') {
         format!("@@ -{},1 +{},0 @@", patch_old_line, patch_new_line)
@@ -73,9 +64,10 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
     patch.push_str(line_to_unstage);
     patch.push('\n');
 
+    eprintln!("Generated patch:\n{}", patch);
+
     Some(patch)
 }
-
 pub fn create_unstage_hunk_patch(file: &FileDiff, hunk: &Hunk) -> String {
     let mut patch = String::new();
     patch.push_str(&format!("diff --git a/{0} b/{0}\n", file.file_name));

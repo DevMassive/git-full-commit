@@ -559,3 +559,86 @@ fn test_rename_file() {
     assert_eq!(files[0].status, git_reset_pp::git::FileStatus::Renamed);
     assert_eq!(files[0].file_name, "renamed.txt");
 }
+
+#[test]
+#[serial]
+fn test_create_unstage_line_patch_with_multiple_hunks() {
+    let tmp_dir = TempDir::new().unwrap();
+    let repo_path = tmp_dir.path().to_path_buf();
+
+    // git init
+    run_git(&repo_path, &["init"]);
+    run_git(&repo_path, &["config", "user.name", "Test"]);
+    run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+
+    // Create a large file and commit it
+    let file_path = repo_path.join("large_file.txt");
+    let mut content = String::new();
+    for i in 0..100 {
+        content.push_str(&format!("line {}\n", i));
+    }
+    fs::write(&file_path, &content).unwrap();
+    run_git(&repo_path, &["add", "large_file.txt"]);
+    run_git(&repo_path, &["commit", "-m", "initial commit"]);
+
+    // Modify the file in multiple places to create multiple hunks
+    let mut lines: Vec<String> = content.lines().map(String::from).collect();
+    lines[10] = "modified line 10".to_string();
+    lines[50] = "modified line 50".to_string();
+    lines[90] = "modified line 90".to_string();
+    let modified_content = lines.join("\n");
+    fs::write(&file_path, modified_content).unwrap();
+    run_git(&repo_path, &["add", "large_file.txt"]);
+
+    // Get the diff
+    let files = git_reset_pp::git::get_diff(repo_path.clone());
+    assert_eq!(files.len(), 1);
+    let file_diff = &files[0];
+
+    // Find the line index of the second modification
+    let line_to_unstage_index = file_diff
+        .lines
+        .iter()
+        .position(|line| line.contains("+modified line 50"))
+        .unwrap();
+
+    // Create the patch
+    let patch = git_reset_pp::git_patch::create_unstage_line_patch(
+        file_diff,
+        line_to_unstage_index,
+    )
+    .unwrap();
+
+    // Apply the patch in reverse
+    let patch_path = tmp_dir.path().join("patch.diff");
+    fs::write(&patch_path, patch).unwrap();
+    run_git(
+        &repo_path,
+        &[
+            "apply",
+            "--reverse",
+            patch_path.to_str().unwrap(),
+        ],
+    );
+
+    // Check the staged diff again
+    let files_after_patch = git_reset_pp::git::get_diff(repo_path.clone());
+    assert_eq!(files_after_patch.len(), 1);
+    let file_diff_after_patch = &files_after_patch[0];
+
+    // The line should be unstaged
+    assert!(!file_diff_after_patch
+        .lines
+        .iter()
+        .any(|line| line.contains("+modified line 50")));
+
+    // Other modifications should still be staged
+    assert!(file_diff_after_patch
+        .lines
+        .iter()
+        .any(|line| line.contains("+modified line 10")));
+    assert!(file_diff_after_patch
+        .lines
+        .iter()
+        .any(|line| line.contains("+modified line 90")));
+}
