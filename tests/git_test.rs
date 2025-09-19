@@ -618,7 +618,13 @@ fn test_create_unstage_line_patch_with_multiple_hunks() {
     fs::write(&patch_path, patch).unwrap();
     run_git(
         &repo_path,
-        &["apply", "--reverse", patch_path.to_str().unwrap()],
+        &[
+            "apply",
+            "--unidiff-zero",
+            "--cached",
+            "--reverse",
+            patch_path.to_str().unwrap(),
+        ],
     );
 
     // Check the staged diff again
