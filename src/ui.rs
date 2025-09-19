@@ -333,17 +333,23 @@ fn render(window: &Window, state: &AppState) {
 
             let line = &lines[i];
 
-            if line.starts_with('-') {
+            if line.starts_with('-') && !line.starts_with("--- ") {
                 let mut minus_lines_indices = Vec::new();
                 let mut current_pos = i;
-                while current_pos < lines.len() && lines[current_pos].starts_with('-') {
+                while current_pos < lines.len()
+                    && lines[current_pos].starts_with('-')
+                    && !lines[current_pos].starts_with("--- ")
+                {
                     minus_lines_indices.push(current_pos);
                     current_pos += 1;
                 }
 
                 let mut plus_lines_indices = Vec::new();
                 let mut next_pos = current_pos;
-                while next_pos < lines.len() && lines[next_pos].starts_with('+') {
+                while next_pos < lines.len()
+                    && lines[next_pos].starts_with('+')
+                    && !lines[next_pos].starts_with("+++ ")
+                {
                     plus_lines_indices.push(next_pos);
                     next_pos += 1;
                 }
