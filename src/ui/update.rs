@@ -140,6 +140,10 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             state.scroll = 0;
             state.line_cursor = 0;
             state.is_diff_cursor_active = false;
+
+            if state.file_cursor < state.file_list_scroll {
+                state.file_list_scroll = state.file_cursor;
+            }
         }
         Input::KeyDown => {
             if state.file_cursor < state.files.len() + 1 {
@@ -148,6 +152,14 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                 state.line_cursor = 0;
             }
             state.is_diff_cursor_active = false;
+
+            let num_files = state.files.len();
+            let file_list_total_items = num_files + 2;
+            let file_list_height = (max_y as usize / 3).max(3).min(file_list_total_items);
+
+            if state.file_cursor >= state.file_list_scroll + file_list_height {
+                state.file_list_scroll = state.file_cursor - file_list_height + 1;
+            }
 
             if state.file_cursor == state.files.len() + 1 {
                 state.is_commit_mode = true;
@@ -233,6 +245,67 @@ mod tests {
     use pancurses::Input;
     use std::path::PathBuf;
     use std::process::Command as OsCommand;
+
+    fn create_state_with_files(num_files: usize) -> AppState {
+        let files: Vec<FileDiff> = (0..num_files)
+            .map(|i| FileDiff {
+                file_name: format!("file_{}.txt", i),
+                status: FileStatus::Modified,
+                lines: vec![],
+                hunks: vec![],
+            })
+            .collect();
+
+        let mut state = AppState::new(PathBuf::from("/tmp"), files);
+        state.previous_commit_files = vec![];
+        state
+    }
+
+    #[test]
+    fn test_file_list_scrolling() {
+        let mut state = create_state_with_files(50);
+        let max_y = 30; // file_list_height = 10
+
+        // --- Scroll down ---
+        // Move to cursor 9, scroll should be 0
+        for _ in 0..8 {
+            state = update_state(state, Some(Input::KeyDown), max_y, 80);
+        }
+        assert_eq!(state.file_cursor, 9);
+        assert_eq!(state.file_list_scroll, 0);
+
+        // Move to cursor 10, scroll should be 1
+        state = update_state(state, Some(Input::KeyDown), max_y, 80);
+        assert_eq!(state.file_cursor, 10);
+        assert_eq!(state.file_list_scroll, 1);
+
+        // Move to cursor 20, scroll should be 11
+        for _ in 0..10 {
+            state = update_state(state, Some(Input::KeyDown), max_y, 80);
+        }
+        assert_eq!(state.file_cursor, 20);
+        assert_eq!(state.file_list_scroll, 11);
+
+        // --- Scroll up ---
+        // Move to cursor 11, scroll should be 11
+        for _ in 0..9 {
+             state = update_state(state, Some(Input::KeyUp), max_y, 80);
+        }
+        assert_eq!(state.file_cursor, 11);
+        assert_eq!(state.file_list_scroll, 11);
+
+        // Move to cursor 10, scroll should be 10
+        state = update_state(state, Some(Input::KeyUp), max_y, 80);
+        assert_eq!(state.file_cursor, 10);
+        assert_eq!(state.file_list_scroll, 10);
+
+        // Move to cursor 0, scroll should be 0
+        for _ in 0..10 {
+            state = update_state(state, Some(Input::KeyUp), max_y, 80);
+        }
+        assert_eq!(state.file_cursor, 0);
+        assert_eq!(state.file_list_scroll, 0);
+    }
 
     fn create_test_state(
         lines_count: usize,
