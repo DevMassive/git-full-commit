@@ -6,6 +6,7 @@ use std::path::PathBuf;
 pub struct AppState {
     pub repo_path: PathBuf,
     pub scroll: usize,
+    pub file_list_scroll: usize,
     pub horizontal_scroll: usize,
     pub running: bool,
     pub file_cursor: usize,
@@ -34,6 +35,7 @@ impl AppState {
         Self {
             repo_path,
             scroll: 0,
+            file_list_scroll: 0,
             horizontal_scroll: 0,
             running: true,
             file_cursor: 1,

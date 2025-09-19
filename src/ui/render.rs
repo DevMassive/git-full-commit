@@ -11,46 +11,49 @@ pub fn render(window: &Window, state: &AppState) {
     let (max_y, max_x) = window.get_max_yx();
 
     let num_files = state.files.len();
+    let file_list_total_items = num_files + 2;
+    let file_list_height = (max_y as usize / 3).max(3).min(file_list_total_items);
 
-    // Render previous commit info
-    let prev_commit_line_y = 0;
-    let is_selected_prev_commit = state.file_cursor == 0;
-    let pair = if is_selected_prev_commit { 5 } else { 1 };
-    window.attron(COLOR_PAIR(pair));
-    window.mv(prev_commit_line_y, 0);
-    if is_selected_prev_commit {
-        for x in 0..max_x {
-            window.mvaddch(prev_commit_line_y, x, ' ');
+    for i in 0..file_list_height {
+        let item_index = state.file_list_scroll + i;
+        if item_index >= file_list_total_items {
+            break;
         }
-        window.mv(prev_commit_line_y, 0);
-    } else {
-        window.clrtoeol();
-    }
-    if state.is_amend_mode {
-        window.addstr(" |");
-    } else {
-        window.addstr(format!(" o {}", &state.previous_commit_message));
-    }
-    window.attroff(COLOR_PAIR(pair));
+        let line_y = i as i32;
 
-    // Render sticky header
-    if !state.files.is_empty() {
-        for (i, file) in state.files.iter().enumerate() {
-            let file_line_y = i as i32 + 1;
-            let is_selected_file = state.file_cursor == i + 1;
-            let pair = if is_selected_file { 5 } else { 1 };
-            let status_pair = if is_selected_file { 6 } else { 2 };
+        if item_index == 0 {
+            // Render previous commit info
+            let is_selected = state.file_cursor == 0;
+            let pair = if is_selected { 5 } else { 1 };
             window.attron(COLOR_PAIR(pair));
-            window.mv(file_line_y, 0);
-            if is_selected_file {
+            if is_selected {
                 for x in 0..max_x {
-                    window.mvaddch(file_line_y, x, ' ');
+                    window.mvaddch(line_y, x, ' ');
                 }
-                window.mv(file_line_y, 0);
+            }
+            window.mv(line_y, 0);
+            if state.is_amend_mode {
+                window.addstr(" |");
             } else {
-                window.clrtoeol();
+                window.addstr(format!(" o {}", &state.previous_commit_message));
             }
             window.attroff(COLOR_PAIR(pair));
+        } else if item_index > 0 && item_index <= num_files {
+            let file_index = item_index - 1;
+            let file = &state.files[file_index];
+            let is_selected = state.file_cursor == item_index;
+            let pair = if is_selected { 5 } else { 1 };
+            let status_pair = if is_selected { 6 } else { 2 };
+
+            window.attron(COLOR_PAIR(pair));
+            if is_selected {
+                for x in 0..max_x {
+                    window.mvaddch(line_y, x, ' ');
+                }
+            }
+            window.mv(line_y, 0);
+            window.attroff(COLOR_PAIR(pair));
+
             let status_char = match file.status {
                 FileStatus::Added => 'A',
                 FileStatus::Modified => 'M',
@@ -66,41 +69,47 @@ pub fn render(window: &Window, state: &AppState) {
             window.attron(COLOR_PAIR(pair));
             window.addstr(format!(" {}", file.file_name));
             window.attroff(COLOR_PAIR(pair));
+        } else if item_index == num_files + 1 {
+            // Render commit message line
+            let is_selected = state.file_cursor == num_files + 1;
+            let pair = if is_selected { 5 } else { 1 };
+            window.attron(COLOR_PAIR(pair));
+            if is_selected {
+                for x in 0..max_x {
+                    window.mvaddch(line_y, x, ' ');
+                }
+            }
+            window.mv(line_y, 0);
+
+            let (prefix, message) = if state.is_amend_mode {
+                (" o ", &state.amend_message)
+            } else {
+                (" o ", &state.commit_message)
+            };
+
+            window.addstr(prefix);
+            window.addstr(message);
+            window.attroff(COLOR_PAIR(pair));
+
+            if state.file_cursor == num_files + 1 && state.is_commit_mode {
+                let commit_line_y = line_y;
+                let prefix_width = prefix.width();
+                let message_before_cursor: String =
+                    message.chars().take(state.commit_cursor).collect();
+                let cursor_display_pos = prefix_width + message_before_cursor.width();
+                window.mv(commit_line_y, cursor_display_pos as i32);
+            }
         }
     }
-
-    // Render commit message line
-    let commit_line_y = (num_files + 1) as i32;
-    let is_selected = state.file_cursor == num_files + 1;
-    let pair = if is_selected { 5 } else { 1 };
-    window.attron(COLOR_PAIR(pair));
-    window.mv(commit_line_y, 0);
-    if is_selected {
-        for x in 0..max_x {
-            window.mvaddch(commit_line_y, x, ' ');
-        }
-        window.mv(commit_line_y, 0);
-    } else {
-        window.clrtoeol();
-    }
-
-    let (prefix, message) = if state.is_amend_mode {
-        (" o ", &state.amend_message)
-    } else {
-        (" o ", &state.commit_message)
-    };
-
-    window.addstr(prefix);
-    window.addstr(message);
-    window.attroff(COLOR_PAIR(pair));
 
     // Render separator
-    window.mv((num_files + 2) as i32, 0);
+    let separator_y = file_list_height as i32;
+    window.mv(separator_y, 0);
     window.attron(COLOR_PAIR(9));
     window.hline(pancurses::ACS_HLINE(), max_x);
     window.attroff(COLOR_PAIR(9));
 
-    let header_height = num_files + 3;
+    let header_height = file_list_height + 1;
     let content_height = (max_y as usize).saturating_sub(header_height);
     let cursor_position = state.get_cursor_line_index();
 
@@ -295,16 +304,6 @@ pub fn render(window: &Window, state: &AppState) {
                 i += 1;
             }
         }
-    } else if state.file_cursor == num_files + 1 && state.is_commit_mode {
-        let (prefix, message) = if state.is_amend_mode {
-            (" o ", &state.amend_message)
-        } else {
-            (" o ", &state.commit_message)
-        };
-        let prefix_width = prefix.width();
-        let message_before_cursor: String = message.chars().take(state.commit_cursor).collect();
-        let cursor_display_pos = prefix_width + message_before_cursor.width();
-        window.mv(commit_line_y, cursor_display_pos as i32);
     }
     window.refresh();
 }
