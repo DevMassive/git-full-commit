@@ -1,6 +1,6 @@
-use git_reset_pp::app_state::AppState;
-use git_reset_pp::git::{self, apply_patch, get_diff};
-use git_reset_pp::ui::update::update_state;
+use git_full_commit::app_state::AppState;
+use git_full_commit::git::{self, apply_patch, get_diff};
+use git_full_commit::ui::update::update_state;
 use pancurses::{Input, Window, endwin, initscr};
 use serial_test::serial;
 use std::fs;
@@ -504,7 +504,7 @@ fn test_get_previous_commit_diff() {
     run_git(&setup.repo_path, &["commit", "-m", "second commit"]);
 
     // Call the function to get the diff of the last commit
-    let diffs = git_reset_pp::git::get_previous_commit_diff(&setup.repo_path).unwrap();
+    let diffs = git_full_commit::git::get_previous_commit_diff(&setup.repo_path).unwrap();
 
     // There should be one file in the diff
     assert_eq!(diffs.len(), 1);
@@ -559,10 +559,10 @@ fn test_rename_file() {
             .unwrap();
     }
 
-    let files = git_reset_pp::git::get_diff(repo_path.clone());
+    let files = git_full_commit::git::get_diff(repo_path.clone());
     assert!(!files.is_empty());
     assert_eq!(files.len(), 1);
-    assert_eq!(files[0].status, git_reset_pp::git::FileStatus::Renamed);
+    assert_eq!(files[0].status, git_full_commit::git::FileStatus::Renamed);
     assert_eq!(files[0].file_name, "renamed.txt");
 }
 
@@ -597,7 +597,7 @@ fn test_create_unstage_line_patch_with_multiple_hunks() {
     run_git(&repo_path, &["add", "large_file.txt"]);
 
     // Get the diff
-    let files = git_reset_pp::git::get_diff(repo_path.clone());
+    let files = git_full_commit::git::get_diff(repo_path.clone());
     assert_eq!(files.len(), 1);
     let file_diff = &files[0];
 
@@ -610,14 +610,14 @@ fn test_create_unstage_line_patch_with_multiple_hunks() {
 
     // Create the patch
     let patch =
-        git_reset_pp::git_patch::create_unstage_line_patch(file_diff, line_to_unstage_index)
+        git_full_commit::git_patch::create_unstage_line_patch(file_diff, line_to_unstage_index)
             .unwrap();
 
     // Apply the patch in reverse
     apply_patch(&repo_path, &patch, true, true).expect("Failed to apply patch in reverse.");
 
     // Check the staged diff again
-    let files_after_patch = git_reset_pp::git::get_diff(repo_path.clone());
+    let files_after_patch = git_full_commit::git::get_diff(repo_path.clone());
     assert_eq!(files_after_patch.len(), 1);
     let file_diff_after_patch = &files_after_patch[0];
 
