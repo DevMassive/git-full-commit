@@ -179,3 +179,53 @@ pub fn get_previous_commit_diff(repo_path: &Path) -> Result<Vec<FileDiff>> {
 pub fn is_git_repository(path: &Path) -> bool {
     path.join(".git").is_dir()
 }
+
+pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg(message)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+pub fn amend_commit(repo_path: &Path, message: &str) -> Result<()> {
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("--amend")
+        .arg("-m")
+        .arg(message)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+pub fn add_all(repo_path: &Path) -> Result<()> {
+    OsCommand::new("git")
+        .arg("add")
+        .arg("-A")
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+pub fn get_staged_diff_output(repo_path: &Path) -> Result<std::process::Output> {
+    let output = OsCommand::new("git")
+        .arg("diff")
+        .arg("--staged")
+        .current_dir(repo_path)
+        .output()?;
+    Ok(output)
+}
+
+pub fn get_file_diff_patch(repo_path: &Path, file_name: &str) -> Result<String> {
+    let output = OsCommand::new("git")
+        .arg("diff")
+        .arg("--staged")
+        .arg("--")
+        .arg(file_name)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}

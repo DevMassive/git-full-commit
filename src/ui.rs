@@ -1,8 +1,9 @@
 mod color;
 mod diff_view;
+pub mod commit_view;
 mod render;
+pub mod scroll;
 pub mod update;
-
 use crate::app_state::AppState;
 use color::setup_colors;
 use pancurses::{curs_set, endwin, initscr, noecho, start_color};
