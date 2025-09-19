@@ -6,6 +6,7 @@ use crate::command::CommandHistory;
 pub struct AppState {
     pub repo_path: PathBuf,
     pub scroll: usize,
+    pub horizontal_scroll: usize,
     pub running: bool,
     pub file_cursor: usize,
     pub line_cursor: usize,
@@ -31,6 +32,7 @@ impl AppState {
         Self {
             repo_path,
             scroll: 0,
+            horizontal_scroll: 0,
             running: true,
             file_cursor: 1,
             line_cursor: 0,

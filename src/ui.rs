@@ -1,15 +1,36 @@
 use pancurses::{
-    A_REVERSE, COLOR_BLACK, COLOR_PAIR, Input, Window, curs_set, endwin, init_color, init_pair,
+    chtype, A_REVERSE, COLOR_BLACK, COLOR_PAIR, Input, Window, curs_set, endwin, init_color, init_pair,
     initscr, noecho, start_color,
 };
 use similar::TextDiff;
 use std::process::Command as OsCommand;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 // Represents a line of text with word-level diff information.
 // Each element in the vector is a tuple of (text, is_changed).
 #[derive(Debug, Clone, PartialEq)]
 pub struct WordDiffLine(pub Vec<(String, bool)>);
+
+const LINE_CONTENT_OFFSET: usize = 10;
+
+fn get_scrolled_line(full_line: &str, scroll_offset: usize) -> &str {
+    if scroll_offset == 0 {
+        return full_line;
+    }
+
+    let mut current_width = 0;
+    let mut start_byte_index = 0;
+
+    for (byte_index, ch) in full_line.char_indices() {
+        if current_width >= scroll_offset {
+            start_byte_index = byte_index;
+            return &full_line[start_byte_index..];
+        }
+        current_width += UnicodeWidthChar::width(ch).unwrap_or(0);
+    }
+
+    ""
+}
 
 use crate::app_state::AppState;
 use crate::command::{
@@ -143,8 +164,8 @@ pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>)
     while state.running {
         render(&window, &state);
         let input = window.getch();
-        let (max_y, _) = window.get_max_yx();
-        state = update_state(state, input, max_y);
+        let (max_y, max_x) = window.get_max_yx();
+        state = update_state(state, input, max_y, max_x);
     }
 
     endwin();
@@ -477,7 +498,7 @@ fn render(window: &Window, state: &AppState) {
 
 fn render_line(
     window: &Window,
-    _state: &AppState,
+    state: &AppState,
     line: &str,
     word_diff_line: Option<&WordDiffLine>,
     line_index_in_file: usize,
@@ -488,18 +509,18 @@ fn render_line(
 ) {
     let is_cursor_line = line_index_in_file == cursor_position;
 
-    let default_pair = if is_cursor_line { 5 } else { 1 };
-    let deletion_pair = if is_cursor_line { 6 } else { 2 };
-    let addition_pair = if is_cursor_line { 7 } else { 3 };
-    let hunk_header_pair = if is_cursor_line { 8 } else { 4 };
-    let grey_pair = if is_cursor_line { 10 } else { 9 };
+    let default_pair: chtype = if is_cursor_line { 5 } else { 1 };
+    let deletion_pair: chtype = if is_cursor_line { 6 } else { 2 };
+    let addition_pair: chtype = if is_cursor_line { 7 } else { 3 };
+    let hunk_header_pair: chtype = if is_cursor_line { 8 } else { 4 };
+    let grey_pair: chtype = if is_cursor_line { 10 } else { 9 };
 
     let line_num_str = format!(
         "{:>4} {:>4}",
         old_line_num.map_or(String::new(), |n| n.to_string()),
         new_line_num.map_or(String::new(), |n| n.to_string())
     );
-    let line_content_offset = 10;
+    let line_content_offset = LINE_CONTENT_OFFSET as i32;
 
     window.mv(line_render_index, 0);
     window.clrtoeol();
@@ -536,8 +557,32 @@ fn render_line(
     window.mvaddstr(line_render_index, 0, &line_num_str);
     window.attroff(COLOR_PAIR(num_pair));
 
-    window.attron(COLOR_PAIR(base_pair));
     window.mv(line_render_index, line_content_offset);
+
+    let mut remaining_scroll = state.horizontal_scroll;
+
+    let mut render_part = |win: &Window, text: &str, pair: chtype, attr: pancurses::chtype, remaining_scroll: &mut usize| {
+        if *remaining_scroll == 0 {
+            win.attron(COLOR_PAIR(pair));
+            win.attron(attr);
+            win.addstr(text);
+            win.attroff(attr);
+            win.attroff(COLOR_PAIR(pair));
+        } else {
+            let width = UnicodeWidthStr::width(text);
+            if *remaining_scroll < width {
+                let scrolled_text = get_scrolled_line(text, *remaining_scroll);
+                win.attron(COLOR_PAIR(pair));
+                win.attron(attr);
+                win.addstr(scrolled_text);
+                win.attroff(attr);
+                win.attroff(COLOR_PAIR(pair));
+                *remaining_scroll = 0;
+            } else {
+                *remaining_scroll -= width;
+            }
+        }
+    };
 
     if line.starts_with("@@ ") {
         window.attroff(COLOR_PAIR(base_pair));
@@ -549,36 +594,23 @@ fn render_line(
             let hunk_header = &line[..hunk_end_pos + 2];
             let function_signature = &line[hunk_end_pos + 2..];
 
-            window.attron(COLOR_PAIR(hunk_header_pair));
-            window.mvaddstr(line_render_index, line_content_offset, hunk_header);
-            window.attroff(COLOR_PAIR(hunk_header_pair));
-
-            window.attron(COLOR_PAIR(addition_pair));
-            window.addstr(function_signature);
-            window.attroff(COLOR_PAIR(addition_pair));
+            render_part(window, hunk_header, hunk_header_pair, 0, &mut remaining_scroll);
+            render_part(window, function_signature, addition_pair, 0, &mut remaining_scroll);
         } else {
-            window.attron(COLOR_PAIR(hunk_header_pair));
-            window.mvaddstr(line_render_index, line_content_offset, line);
-            window.attroff(COLOR_PAIR(hunk_header_pair));
+            render_part(window, line, hunk_header_pair, 0, &mut remaining_scroll);
         }
     } else if let Some(word_diff) = word_diff_line {
-        window.addstr(line_prefix);
+        render_part(window, line_prefix, base_pair, 0, &mut remaining_scroll);
         for (text, is_changed) in &word_diff.0 {
-            if *is_changed {
-                window.attron(A_REVERSE);
-            }
-            window.addstr(text);
-            if *is_changed {
-                window.attroff(A_REVERSE);
-            }
+            let attr = if *is_changed { A_REVERSE } else { 0 };
+            render_part(window, text, base_pair, attr, &mut remaining_scroll);
         }
     } else {
-        window.mvaddstr(line_render_index, line_content_offset, line);
+        render_part(window, line, base_pair, 0, &mut remaining_scroll);
     }
-    window.attroff(COLOR_PAIR(base_pair));
 }
 
-pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> AppState {
+pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x: i32) -> AppState {
     if state.is_commit_mode {
         match input {
             Some(Input::KeyUp) => {
@@ -1164,6 +1196,14 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
                 state.scroll = cursor_line - content_height + 1;
             }
         }
+        Some(Input::KeyLeft) => {
+            let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
+            state.horizontal_scroll = state.horizontal_scroll.saturating_sub(scroll_amount);
+        }
+        Some(Input::KeyRight) => {
+            let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
+            state.horizontal_scroll = state.horizontal_scroll.saturating_add(scroll_amount);
+        }
         _ => {}
     }
 
@@ -1298,7 +1338,7 @@ mod tests {
         let max_y = 30;
         let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
 
-        let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
+        let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y, 80);
 
         assert_eq!(
             final_state.scroll, content_height,
@@ -1319,7 +1359,7 @@ mod tests {
         let max_scroll = lines_count - content_height; // 74
         let initial_state = create_test_state(lines_count, 1, 80, max_scroll);
 
-        let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
+        let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y, 80);
 
         assert_eq!(
             final_state.scroll, max_scroll,
@@ -1339,7 +1379,7 @@ mod tests {
         let initial_state = create_test_state(lines_count, 1, 20, 0);
         let max_scroll = lines_count - content_height; // 14
 
-        let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
+        let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y, 80);
 
         assert_eq!(
             final_state.scroll, max_scroll,
@@ -1360,7 +1400,7 @@ mod tests {
         let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
         let initial_state = create_test_state(100, 1, 60, 50);
 
-        let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
+        let final_state = update_state(initial_state, Some(Input::Character('b')), max_y, 80);
 
         assert_eq!(
             final_state.scroll,
@@ -1380,7 +1420,7 @@ mod tests {
         let _content_height = (max_y as usize).saturating_sub(1 + 3); // 26
         let initial_state = create_test_state(100, 1, 20, 15);
 
-        let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
+        let final_state = update_state(initial_state, Some(Input::Character('b')), max_y, 80);
 
         assert_eq!(final_state.scroll, 0, "Scroll should clamp at the top");
         assert_eq!(
@@ -1396,7 +1436,7 @@ mod tests {
         let _content_height = (max_y as usize).saturating_sub(1 + 3); // 26
         let initial_state = create_test_state(100, 1, 10, 0);
 
-        let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
+        let final_state = update_state(initial_state, Some(Input::Character('b')), max_y, 80);
 
         assert_eq!(final_state.scroll, 0, "Scroll should not change");
         assert_eq!(final_state.line_cursor, 10, "Cursor should not change");
@@ -1462,7 +1502,7 @@ mod tests {
         state.file_cursor = 1; // Select the file
 
         // Simulate pressing 'i'
-        let mut updated_state = update_state(state, Some(Input::Character('i')), 80);
+        let mut updated_state = update_state(state, Some(Input::Character('i')), 80, 80);
 
         // Check if .gitignore is correct
         let gitignore_path = temp_dir.join(".gitignore");
@@ -1527,7 +1567,7 @@ mod tests {
         let scroll_amount = (content_height / 2).max(1);
         let initial_state = create_test_state(lines_count, 1, 10, 5);
 
-        let final_state = update_state(initial_state, Some(Input::Character('\u{4}')), max_y);
+        let final_state = update_state(initial_state, Some(Input::Character('\u{4}')), max_y, 80);
 
         let expected_scroll = 5 + scroll_amount;
         assert_eq!(final_state.scroll, expected_scroll);
@@ -1542,7 +1582,7 @@ mod tests {
         let scroll_amount = (content_height / 2).max(1);
         let initial_state = create_test_state(lines_count, 1, 25, 0);
 
-        let final_state = update_state(initial_state, Some(Input::Character('\u{4}')), max_y);
+        let final_state = update_state(initial_state, Some(Input::Character('\u{4}')), max_y, 80);
 
         assert_eq!(final_state.line_cursor, 25 + scroll_amount);
         assert_eq!(final_state.scroll, 13);
@@ -1556,7 +1596,7 @@ mod tests {
         let scroll_amount = (content_height / 2).max(1);
         let initial_state = create_test_state(lines_count, 1, 20, 15);
 
-        let final_state = update_state(initial_state, Some(Input::Character('\u{15}')), max_y);
+        let final_state = update_state(initial_state, Some(Input::Character('\u{15}')), max_y, 80);
 
         assert_eq!(final_state.line_cursor, 20 - scroll_amount);
         assert_eq!(final_state.scroll, 2);
@@ -1569,9 +1609,33 @@ mod tests {
         let _scroll_amount = ((max_y as usize).saturating_sub(1 + 3) / 2).max(1);
         let initial_state = create_test_state(lines_count, 1, 10, 10);
 
-        let final_state = update_state(initial_state, Some(Input::Character('\u{15}')), max_y);
+        let final_state = update_state(initial_state, Some(Input::Character('\u{15}')), max_y, 80);
 
         assert_eq!(final_state.line_cursor, 0); // 10 - 13 saturates at 0
         assert_eq!(final_state.scroll, 0); // 10 - 13 saturates at 0
+    }
+
+    #[test]
+    fn test_horizontal_scroll() {
+        let mut state = create_test_state(10, 1, 0, 0);
+        assert_eq!(state.horizontal_scroll, 0);
+        let max_x = 80;
+        let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
+
+        // Scroll right
+        state = update_state(state, Some(Input::KeyRight), 30, max_x);
+        assert_eq!(state.horizontal_scroll, scroll_amount);
+        state = update_state(state, Some(Input::KeyRight), 30, max_x);
+        assert_eq!(state.horizontal_scroll, scroll_amount * 2);
+
+        // Scroll left
+        state = update_state(state, Some(Input::KeyLeft), 30, max_x);
+        assert_eq!(state.horizontal_scroll, scroll_amount);
+        state = update_state(state, Some(Input::KeyLeft), 30, max_x);
+        assert_eq!(state.horizontal_scroll, 0);
+
+        // Scroll left at 0 should not change
+        state = update_state(state, Some(Input::KeyLeft), 30, max_x);
+        assert_eq!(state.horizontal_scroll, 0);
     }
 }
