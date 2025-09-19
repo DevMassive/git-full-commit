@@ -16,29 +16,87 @@ use crate::command::{
     UnstageFileCommand,
 };
 
-fn compute_word_diff(old: &str, new: &str) -> (WordDiffLine, WordDiffLine) {
+fn compute_word_diffs(old: &str, new: &str) -> (Vec<WordDiffLine>, Vec<WordDiffLine>) {
+    if old.trim().is_empty() || new.trim().is_empty() {
+        let old_lines = old
+            .lines()
+            .map(|l| WordDiffLine(vec![(l.to_string(), false)]))
+            .collect();
+        let new_lines = new
+            .lines()
+            .map(|l| WordDiffLine(vec![(l.to_string(), false)]))
+            .collect();
+        return (old_lines, new_lines);
+    }
+
     let diff = TextDiff::from_unicode_words(old, new);
 
-    let mut old_line = WordDiffLine(Vec::new());
-    let mut new_line = WordDiffLine(Vec::new());
+    if diff.ratio() < 0.7 {
+        let old_lines = old
+            .lines()
+            .map(|l| WordDiffLine(vec![(l.to_string(), false)]))
+            .collect();
+        let new_lines = new
+            .lines()
+            .map(|l| WordDiffLine(vec![(l.to_string(), false)]))
+            .collect();
+        return (old_lines, new_lines);
+    }
+
+    let mut old_line_parts = Vec::new();
+    let mut new_line_parts = Vec::new();
 
     for change in diff.iter_all_changes() {
         let text = change.value().to_string();
         match change.tag() {
-            similar::ChangeTag::Delete => {
-                old_line.0.push((text, true));
-            }
-            similar::ChangeTag::Insert => {
-                new_line.0.push((text, true));
-            }
+            similar::ChangeTag::Delete => old_line_parts.push((text, true)),
+            similar::ChangeTag::Insert => new_line_parts.push((text, true)),
             similar::ChangeTag::Equal => {
-                old_line.0.push((text.clone(), false));
-                new_line.0.push((text, false));
+                old_line_parts.push((text.clone(), false));
+                new_line_parts.push((text, false));
             }
         }
     }
 
-    (old_line, new_line)
+    let mut old_lines = Vec::new();
+    let mut current_line = WordDiffLine(Vec::new());
+    for (text, changed) in old_line_parts {
+        let mut parts = text.split_inclusive('\n').peekable();
+        while let Some(part) = parts.next() {
+            let content = part.strip_suffix('\n').unwrap_or(part);
+            if !content.is_empty() {
+                current_line.0.push((content.to_string(), changed));
+            }
+            if part.ends_with('\n') {
+                old_lines.push(current_line);
+                current_line = WordDiffLine(Vec::new());
+            }
+        }
+    }
+    if !current_line.0.is_empty() {
+        old_lines.push(current_line);
+    }
+
+    let mut new_lines = Vec::new();
+    current_line = WordDiffLine(Vec::new());
+    for (text, changed) in new_line_parts {
+        let mut parts = text.split_inclusive('\n').peekable();
+        while let Some(part) = parts.next() {
+            let content = part.strip_suffix('\n').unwrap_or(part);
+            if !content.is_empty() {
+                current_line.0.push((content.to_string(), changed));
+            }
+            if part.ends_with('\n') {
+                new_lines.push(current_line);
+                current_line = WordDiffLine(Vec::new());
+            }
+        }
+    }
+    if !current_line.0.is_empty() {
+        new_lines.push(current_line);
+    }
+
+    (old_lines, new_lines)
 }
 
 pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>) {
@@ -273,65 +331,122 @@ fn render(window: &Window, state: &AppState) {
                 break;
             }
 
-            let line_index_in_file = i;
-            if line_index_in_file < state.scroll {
-                i += 1;
-                continue;
-            }
-
             let line = &lines[i];
-            let next_line = lines.get(i + 1);
 
-            let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
+            if line.starts_with('-') {
+                let mut minus_lines_indices = Vec::new();
+                let mut current_pos = i;
+                while current_pos < lines.len() && lines[current_pos].starts_with('-') {
+                    minus_lines_indices.push(current_pos);
+                    current_pos += 1;
+                }
 
-            if line.starts_with('-') && next_line.map_or(false, |nl| nl.starts_with('+')) {
-                let next_line_str = next_line.unwrap();
-                let (old_word_diff, new_word_diff) = compute_word_diff(&line[1..], &next_line_str[1..]);
+                let mut plus_lines_indices = Vec::new();
+                let mut next_pos = current_pos;
+                while next_pos < lines.len() && lines[next_pos].starts_with('+') {
+                    plus_lines_indices.push(next_pos);
+                    next_pos += 1;
+                }
 
-                let (next_old_line_num, next_new_line_num) = line_numbers[i+1];
+                if !plus_lines_indices.is_empty() {
+                    let old_text = minus_lines_indices
+                        .iter()
+                        .map(|&idx| &lines[idx][1..])
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let new_text = plus_lines_indices
+                        .iter()
+                        .map(|&idx| &lines[idx][1..])
+                        .collect::<Vec<_>>()
+                        .join("\n");
 
-                render_line(
-                    window,
-                    state,
-                    line,
-                    Some(&old_word_diff),
-                    line_index_in_file,
-                    render_index as i32 + header_height as i32,
-                    cursor_position,
-                    old_line_num,
-                    new_line_num,
-                );
-                render_index += 1;
+                    let (old_word_diffs, new_word_diffs) =
+                        compute_word_diffs(&old_text, &new_text);
 
-                if render_index < content_height {
+                    for (k, &idx) in minus_lines_indices.iter().enumerate() {
+                        if idx < state.scroll {
+                            continue;
+                        }
+                        if render_index >= content_height {
+                            break;
+                        }
+                        let (old_line_num, new_line_num) = line_numbers[idx];
+                        render_line(
+                            window,
+                            state,
+                            &lines[idx],
+                            old_word_diffs.get(k),
+                            idx,
+                            render_index as i32 + header_height as i32,
+                            cursor_position,
+                            old_line_num,
+                            new_line_num,
+                        );
+                        render_index += 1;
+                    }
+
+                    for (k, &idx) in plus_lines_indices.iter().enumerate() {
+                        if idx < state.scroll {
+                            continue;
+                        }
+                        if render_index >= content_height {
+                            break;
+                        }
+                        let (old_line_num, new_line_num) = line_numbers[idx];
+                        render_line(
+                            window,
+                            state,
+                            &lines[idx],
+                            new_word_diffs.get(k),
+                            idx,
+                            render_index as i32 + header_height as i32,
+                            cursor_position,
+                            old_line_num,
+                            new_line_num,
+                        );
+                        render_index += 1;
+                    }
+                    i = next_pos;
+                } else {
+                    for &idx in &minus_lines_indices {
+                        if idx < state.scroll {
+                            continue;
+                        }
+                        if render_index >= content_height {
+                            break;
+                        }
+                        let (old_line_num, new_line_num) = line_numbers[idx];
+                        render_line(
+                            window,
+                            state,
+                            &lines[idx],
+                            None,
+                            idx,
+                            render_index as i32 + header_height as i32,
+                            cursor_position,
+                            old_line_num,
+                            new_line_num,
+                        );
+                        render_index += 1;
+                    }
+                    i = current_pos;
+                }
+            } else {
+                if i >= state.scroll {
+                    let (old_line_num, new_line_num) = line_numbers[i];
                     render_line(
                         window,
                         state,
-                        next_line_str,
-                        Some(&new_word_diff),
-                        i + 1,
+                        line,
+                        None,
+                        i,
                         render_index as i32 + header_height as i32,
                         cursor_position,
-                        next_old_line_num,
-                        next_new_line_num,
+                        old_line_num,
+                        new_line_num,
                     );
                     render_index += 1;
                 }
-
-                i += 2;
-            } else {
-                render_line(
-                    window,
-                    state,
-                    line,
-                    None,
-                    line_index_in_file,
-                    render_index as i32 + header_height as i32,
-                    cursor_position,
-                    old_line_num,
-                    new_line_num,
-                );
-                render_index += 1;
                 i += 1;
             }
         }
@@ -980,13 +1095,16 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn test_compute_word_diff() {
-        let old = "The quick brown fox";
-        let new = "The slow brown cat";
+    fn test_compute_word_diffs() {
+        let old = "The quick brown fox\njumps over the lazy dog";
+        let new = "The slow brown cat\njumps over the lazy dog";
 
-        let (old_diff, new_diff) = compute_word_diff(old, new);
+        let (old_diff, new_diff) = compute_word_diffs(old, new);
 
-        let expected_old = WordDiffLine(vec![
+        assert_eq!(old_diff.len(), 2);
+        assert_eq!(new_diff.len(), 2);
+
+        let expected_old_line1 = WordDiffLine(vec![
             ("The".to_string(), false),
             (" ".to_string(), false),
             ("quick".to_string(), true),
@@ -995,7 +1113,9 @@ mod tests {
             (" ".to_string(), false),
             ("fox".to_string(), true),
         ]);
-        let expected_new = WordDiffLine(vec![
+        assert_eq!(old_diff[0], expected_old_line1);
+
+        let expected_new_line1 = WordDiffLine(vec![
             ("The".to_string(), false),
             (" ".to_string(), false),
             ("slow".to_string(), true),
@@ -1004,9 +1124,55 @@ mod tests {
             (" ".to_string(), false),
             ("cat".to_string(), true),
         ]);
+        assert_eq!(new_diff[0], expected_new_line1);
 
-        assert_eq!(old_diff, expected_old);
-        assert_eq!(new_diff, expected_new);
+        let expected_line2 = WordDiffLine(vec![
+            ("jumps".to_string(), false),
+            (" ".to_string(), false),
+            ("over".to_string(), false),
+            (" ".to_string(), false),
+            ("the".to_string(), false),
+            (" ".to_string(), false),
+            ("lazy".to_string(), false),
+            (" ".to_string(), false),
+            ("dog".to_string(), false),
+        ]);
+        assert_eq!(old_diff[1], expected_line2);
+        assert_eq!(new_diff[1], expected_line2);
+    }
+
+    #[test]
+    fn test_compute_word_diffs_empty() {
+        let old = "";
+        let new = "a";
+        let (old_diff, new_diff) = compute_word_diffs(old, new);
+        assert_eq!(old_diff.len(), 0);
+        assert_eq!(new_diff.len(), 1);
+        assert_eq!(new_diff[0], WordDiffLine(vec![("a".to_string(), false)]));
+
+        let old = "a";
+        let new = "";
+        let (old_diff, new_diff) = compute_word_diffs(old, new);
+        assert_eq!(old_diff.len(), 1);
+        assert_eq!(new_diff.len(), 0);
+        assert_eq!(old_diff[0], WordDiffLine(vec![("a".to_string(), false)]));
+    }
+
+    #[test]
+    fn test_compute_word_diffs_low_similarity() {
+        let old = "completely different";
+        let new = "something else entirely";
+
+        let (old_diff, new_diff) = compute_word_diffs(old, new);
+
+        // Expect no word-level highlighting due to low similarity
+        let expected_old = WordDiffLine(vec![("completely different".to_string(), false)]);
+        let expected_new = WordDiffLine(vec![("something else entirely".to_string(), false)]);
+
+        assert_eq!(old_diff.len(), 1);
+        assert_eq!(old_diff[0], expected_old);
+        assert_eq!(new_diff.len(), 1);
+        assert_eq!(new_diff[0], expected_new);
     }
 
     fn create_test_state(
