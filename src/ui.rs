@@ -531,12 +531,11 @@ fn render_line(
         (default_pair, " ")
     };
 
-    let num_pair =
-        if line.starts_with("@@ ") || line.starts_with("--- ") || line.starts_with("+++ ") {
-            grey_pair
-        } else {
-            base_pair
-        };
+    let num_pair = if line.starts_with('+') || line.starts_with('-') {
+        base_pair
+    } else {
+        grey_pair
+    };
 
     window.attron(COLOR_PAIR(num_pair));
     window.mvaddstr(line_render_index, 0, &line_num_str);
