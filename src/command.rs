@@ -1,7 +1,8 @@
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command as OsCommand;
+
+use crate::git;
 
 pub trait Command {
     fn execute(&mut self);
@@ -15,23 +16,11 @@ pub struct UnstageFileCommand {
 
 impl Command for UnstageFileCommand {
     fn execute(&mut self) {
-        OsCommand::new("git")
-            .arg("reset")
-            .arg("HEAD")
-            .arg("--")
-            .arg(&self.file_name)
-            .current_dir(&self.repo_path)
-            .output()
-            .expect("Failed to unstage file.");
+        git::unstage_file(&self.repo_path, &self.file_name).expect("Failed to unstage file.");
     }
 
     fn undo(&mut self) {
-        OsCommand::new("git")
-            .arg("add")
-            .arg(&self.file_name)
-            .current_dir(&self.repo_path)
-            .output()
-            .expect("Failed to stage file.");
+        git::stage_file(&self.repo_path, &self.file_name).expect("Failed to stage file.");
     }
 }
 
@@ -42,55 +31,13 @@ pub struct ApplyPatchCommand {
 
 impl Command for ApplyPatchCommand {
     fn execute(&mut self) {
-        self.apply_patch(true);
+        git::apply_patch(&self.repo_path, &self.patch, true, true)
+            .expect("Failed to apply patch in reverse.");
     }
 
     fn undo(&mut self) {
-        self.apply_patch(false);
-    }
-}
-
-impl ApplyPatchCommand {
-    fn apply_patch(&self, reverse: bool) {
-        use std::io::Write;
-        use std::process::{Command as OsCommand, Stdio};
-
-        let mut args = vec!["apply"];
-        if reverse {
-            args.push("--cached");
-            args.push("--reverse");
-        } else {
-            args.push("--cached");
-        }
-        args.push("--unidiff-zero");
-        args.push("-");
-
-        let mut child = OsCommand::new("git")
-            .args(&args)
-            .current_dir(&self.repo_path)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("Failed to spawn git apply process.");
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(self.patch.as_bytes())
-                .expect("Failed to write to stdin.");
-        }
-
-        let output = child
-            .wait_with_output()
-            .expect("Failed to wait for git apply process.");
-        if !output.status.success() {
-            eprintln!(
-                "git apply failed for patch (reverse={}):\n{}\n--- stderr ---\n{}\n---",
-                reverse,
-                self.patch,
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
+        git::apply_patch(&self.repo_path, &self.patch, false, true)
+            .expect("Failed to apply patch.");
     }
 }
 
@@ -102,58 +49,12 @@ pub struct CheckoutFileCommand {
 
 impl Command for CheckoutFileCommand {
     fn execute(&mut self) {
-        OsCommand::new("git")
-            .arg("checkout")
-            .arg("HEAD")
-            .arg("--")
-            .arg(&self.file_name)
-            .current_dir(&self.repo_path)
-            .output()
-            .expect("Failed to checkout file.");
+        git::checkout_file(&self.repo_path, &self.file_name).expect("Failed to checkout file.");
     }
 
     fn undo(&mut self) {
-        self.apply_patch(false);
-    }
-}
-
-impl CheckoutFileCommand {
-    fn apply_patch(&self, reverse: bool) {
-        use std::io::Write;
-        use std::process::{Command as OsCommand, Stdio};
-
-        let mut args = vec!["apply"];
-        if reverse {
-            // This command is not meant to be reversed in the traditional sense.
-            // The 'undo' operation applies the stored patch to restore the state.
-        } else {
-            args.push("--cached");
-        }
-        args.push("--unidiff-zero");
-        args.push("-");
-
-        let mut child = OsCommand::new("git")
-            .args(&args)
-            .current_dir(&self.repo_path)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("Failed to spawn git apply process.");
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(self.patch.as_bytes())
-                .expect("Failed to write to stdin.");
-        }
-
-        let status = child.wait().expect("Failed to wait for git apply process.");
-        if !status.success() {
-            eprintln!(
-                "git apply failed for patch (reverse={}):\n{}\n",
-                reverse, self.patch
-            );
-        }
+        git::apply_patch(&self.repo_path, &self.patch, false, false)
+            .expect("Failed to apply patch for checkout undo.");
     }
 }
 
@@ -172,20 +73,9 @@ impl Command for IgnoreFileCommand {
             .expect("Failed to open .gitignore");
         writeln!(gitignore, "{}", self.file_name).expect("Failed to write to .gitignore");
 
-        OsCommand::new("git")
-            .arg("add")
-            .arg(".gitignore")
-            .current_dir(&self.repo_path)
-            .output()
-            .expect("Failed to stage .gitignore");
+        git::stage_path(&self.repo_path, ".gitignore").expect("Failed to stage .gitignore");
 
-        OsCommand::new("git")
-            .arg("rm")
-            .arg("--cached")
-            .arg(&self.file_name)
-            .current_dir(&self.repo_path)
-            .output()
-            .expect("Failed to unstage file");
+        git::rm_cached(&self.repo_path, &self.file_name).expect("Failed to unstage file");
     }
 
     fn undo(&mut self) {
@@ -200,30 +90,16 @@ impl Command for IgnoreFileCommand {
 
             if new_content.is_empty() {
                 fs::remove_file(&gitignore_path).expect("Failed to remove .gitignore");
-                OsCommand::new("git")
-                    .arg("rm")
-                    .arg(".gitignore")
-                    .current_dir(&self.repo_path)
-                    .output()
+                git::rm_file_from_index(&self.repo_path, ".gitignore")
                     .expect("Failed to remove .gitignore from index");
             } else {
                 fs::write(&gitignore_path, new_content + "\n")
                     .expect("Failed to write to .gitignore");
-                OsCommand::new("git")
-                    .arg("add")
-                    .arg(".gitignore")
-                    .current_dir(&self.repo_path)
-                    .output()
-                    .expect("Failed to stage .gitignore");
+                git::stage_path(&self.repo_path, ".gitignore").expect("Failed to stage .gitignore");
             }
         }
 
-        OsCommand::new("git")
-            .arg("add")
-            .arg(&self.file_name)
-            .current_dir(&self.repo_path)
-            .output()
-            .expect("Failed to stage file");
+        git::stage_file(&self.repo_path, &self.file_name).expect("Failed to stage file");
     }
 }
 
@@ -235,45 +111,14 @@ pub struct RemoveFileCommand {
 
 impl Command for RemoveFileCommand {
     fn execute(&mut self) {
-        OsCommand::new("git")
-            .arg("rm")
-            .arg("-f")
-            .arg(&self.file_name)
-            .current_dir(&self.repo_path)
-            .output()
-            .expect("Failed to remove file.");
+        git::rm_file(&self.repo_path, &self.file_name).expect("Failed to remove file.");
     }
 
     fn undo(&mut self) {
-        use std::io::Write;
-        use std::process::{Command as OsCommand, Stdio};
+        git::apply_patch(&self.repo_path, &self.patch, false, false)
+            .expect("Failed to apply patch for remove undo.");
 
-        // First, apply the patch to restore the file content
-        let mut child = OsCommand::new("git")
-            .arg("apply")
-            .arg("--unidiff-zero")
-            .arg("-")
-            .current_dir(&self.repo_path)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("Failed to spawn git apply process.");
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(self.patch.as_bytes())
-                .expect("Failed to write to stdin.");
-        }
-        child.wait().expect("Failed to wait for git apply process.");
-
-        // Then, add the restored file to the index
-        OsCommand::new("git")
-            .arg("add")
-            .arg(&self.file_name)
-            .current_dir(&self.repo_path)
-            .output()
-            .expect("Failed to stage file.");
+        git::stage_file(&self.repo_path, &self.file_name).expect("Failed to stage file.");
     }
 }
 

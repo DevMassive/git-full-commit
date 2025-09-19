@@ -34,7 +34,7 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
                 }
             })
             .unwrap_or(0);
-        format!("@@ -{},0 +{},1 @@", old_line_num, new_line_num)
+        format!("@@ -{old_line_num},0 +{new_line_num},1 @@")
     } else {
         let old_line_num = old_line.unwrap();
         let new_line_num = hunk
@@ -48,7 +48,7 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
                 }
             })
             .unwrap_or(0);
-        format!("@@ -{},1 +{},0 @@", old_line_num, new_line_num)
+        format!("@@ -{old_line_num},1 +{new_line_num},0 @@")
     };
 
     let mut patch = String::new();

@@ -72,7 +72,8 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
                     let mut old_line_counter = hunk.old_start;
                     let mut new_line_counter = hunk.new_start;
                     for (i, hunk_line) in hunk.lines.iter().enumerate() {
-                        if i == 0 { // Skip hunk header
+                        if i == 0 {
+                            // Skip hunk header
                             line_numbers.push((None, None));
                             continue;
                         }
@@ -134,7 +135,8 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
                     let mut old_line_counter = hunk.old_start;
                     let mut new_line_counter = hunk.new_start;
                     for (i, hunk_line) in hunk.lines.iter().enumerate() {
-                        if i == 0 { // Skip hunk header
+                        if i == 0 {
+                            // Skip hunk header
                             line_numbers.push((None, None));
                             continue;
                         }
@@ -190,7 +192,8 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
             let mut old_line_counter = hunk.old_start;
             let mut new_line_counter = hunk.new_start;
             for (i, hunk_line) in hunk.lines.iter().enumerate() {
-                if i == 0 { // Skip hunk header
+                if i == 0 {
+                    // Skip hunk header
                     line_numbers.push((None, None));
                     continue;
                 }
@@ -291,4 +294,112 @@ pub fn get_file_diff_patch(repo_path: &Path, file_name: &str) -> Result<String> 
         .current_dir(repo_path)
         .output()?;
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+pub fn unstage_file(repo_path: &Path, file_name: &str) -> Result<()> {
+    OsCommand::new("git")
+        .arg("reset")
+        .arg("HEAD")
+        .arg("--")
+        .arg(file_name)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+pub fn stage_file(repo_path: &Path, file_name: &str) -> Result<()> {
+    OsCommand::new("git")
+        .arg("add")
+        .arg(file_name)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+pub fn apply_patch(repo_path: &Path, patch: &str, reverse: bool, cached: bool) -> Result<()> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let mut args = vec!["apply"];
+    if cached {
+        args.push("--cached");
+    }
+    if reverse {
+        args.push("--reverse");
+    }
+    args.push("--unidiff-zero");
+    args.push("-");
+
+    let mut child = OsCommand::new("git")
+        .args(&args)
+        .current_dir(repo_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(patch.as_bytes())?;
+    }
+
+    let output = child.wait_with_output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "git apply failed (reverse={}):
+--- stderr ---
+{}",
+            reverse,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
+
+pub fn checkout_file(repo_path: &Path, file_name: &str) -> Result<()> {
+    OsCommand::new("git")
+        .arg("checkout")
+        .arg("HEAD")
+        .arg("--")
+        .arg(file_name)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+pub fn rm_file(repo_path: &Path, file_name: &str) -> Result<()> {
+    OsCommand::new("git")
+        .arg("rm")
+        .arg("-f")
+        .arg(file_name)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+pub fn stage_path(repo_path: &Path, path: &str) -> Result<()> {
+    OsCommand::new("git")
+        .arg("add")
+        .arg(path)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+pub fn rm_cached(repo_path: &Path, path: &str) -> Result<()> {
+    OsCommand::new("git")
+        .arg("rm")
+        .arg("--cached")
+        .arg(path)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+pub fn rm_file_from_index(repo_path: &Path, path: &str) -> Result<()> {
+    OsCommand::new("git")
+        .arg("rm")
+        .arg(path)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
 }
