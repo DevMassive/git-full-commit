@@ -1,7 +1,7 @@
 use crate::app_state::AppState;
 use crate::command::{
-    ApplyPatchCommand, CheckoutFileCommand, IgnoreFileCommand, RemoveFileCommand,
-    UnstageFileCommand,
+    ApplyPatchCommand, CheckoutFileCommand, DiscardHunkCommand, IgnoreFileCommand,
+    RemoveFileCommand, UnstageFileCommand,
 };
 use crate::commit_storage;
 use crate::git;
@@ -84,7 +84,20 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 }
             }
             Input::Character('!') => {
-                if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                if state.is_diff_cursor_active {
+                    if let Some(file) = state.files.get(state.file_cursor - 1) {
+                        let line_index = state.line_cursor;
+                        if let Some(hunk) = git_patch::find_hunk(file, line_index) {
+                            let patch = git_patch::create_unstage_hunk_patch(file, hunk);
+                            let command = Box::new(DiscardHunkCommand {
+                                repo_path: state.repo_path.clone(),
+                                patch,
+                            });
+                            state.command_history.execute(command);
+                            state.refresh_diff();
+                        }
+                    }
+                } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
                     if let Some(file) = state.files.get(state.file_cursor - 1).cloned() {
                         // Get the patch before doing anything
                         let patch = git::get_file_diff_patch(&state.repo_path, &file.file_name)
@@ -602,5 +615,125 @@ mod tests {
             !state_after_second_q.running,
             "App should quit after second 'q'"
         );
+    }
+
+    #[test]
+    fn test_discard_hunk() {
+        // Setup a temporary git repository
+        let temp_dir = std::env::temp_dir().join("test_repo_for_discard_hunk");
+        if temp_dir.exists() {
+            std::fs::remove_dir_all(&temp_dir).unwrap();
+        }
+        std::fs::create_dir(&temp_dir).unwrap();
+        let repo_path = temp_dir;
+
+        OsCommand::new("git")
+            .arg("init")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to init git repo");
+        OsCommand::new("git")
+            .arg("config")
+            .arg("user.name")
+            .arg("Test")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to set git user.name");
+        OsCommand::new("git")
+            .arg("config")
+            .arg("user.email")
+            .arg("test@example.com")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to set git user.email");
+
+        // Create and commit a file
+        let file_path = repo_path.join("test.txt");
+        let initial_content = (1..=20).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        std::fs::write(&file_path, &initial_content).unwrap();
+        OsCommand::new("git")
+            .arg("add")
+            .arg("test.txt")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to git add");
+        OsCommand::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("initial commit")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to git commit");
+
+        // Modify the file to create two hunks
+        let modified_content = {
+            let mut lines: Vec<String> = initial_content.lines().map(String::from).collect();
+            lines[2] = "modified line 3".to_string(); // Hunk 1
+            lines[15] = "modified line 16".to_string(); // Hunk 2
+            lines.join("\n")
+        };
+        std::fs::write(&file_path, &modified_content).unwrap();
+
+        // Stage the changes
+        OsCommand::new("git")
+            .arg("add")
+            .arg("test.txt")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to git add");
+
+        // Create app state
+        let files = crate::git::get_diff(repo_path.clone());
+        let mut state = AppState::new(repo_path.clone(), files);
+        state.file_cursor = 1; // Select the file
+        state.is_diff_cursor_active = true;
+        // Move cursor to the second hunk (around line 16)
+        // The diff output will have headers and context lines, so we need to estimate the line number
+        let line_in_diff = state.files[0]
+            .lines
+            .iter()
+            .position(|l| l.contains("modified line 16"))
+            .unwrap_or(15);
+        state.line_cursor = line_in_diff;
+
+        // Simulate pressing '!' to discard the hunk
+        let mut updated_state = update_state(state, Some(Input::Character('!')), 80, 80);
+
+        // Check that the hunk is gone from both staged and working directory
+        let staged_diff = OsCommand::new("git")
+            .arg("diff")
+            .arg("--staged")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to get staged diff");
+        let staged_diff_str = String::from_utf8_lossy(&staged_diff.stdout);
+        assert!(!staged_diff_str.contains("modified line 16"));
+        assert!(staged_diff_str.contains("modified line 3")); // First hunk should remain
+
+        let working_diff = OsCommand::new("git")
+            .arg("diff")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to get working directory diff");
+        let working_diff_str = String::from_utf8_lossy(&working_diff.stdout);
+        assert!(working_diff_str.is_empty(), "Working directory should be clean");
+
+        // Simulate undo
+        updated_state.command_history.undo();
+        updated_state.refresh_diff();
+
+        // Check that the hunk is back
+        let staged_diff_after_undo = OsCommand::new("git")
+            .arg("diff")
+            .arg("--staged")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to get staged diff");
+        let staged_diff_str_after_undo = String::from_utf8_lossy(&staged_diff_after_undo.stdout);
+        assert!(staged_diff_str_after_undo.contains("modified line 16"));
+        assert!(staged_diff_str_after_undo.contains("modified line 3"));
+
+        // Cleanup
+        std::fs::remove_dir_all(&repo_path).unwrap();
     }
 }

@@ -41,6 +41,31 @@ impl Command for ApplyPatchCommand {
     }
 }
 
+pub struct DiscardHunkCommand {
+    pub repo_path: PathBuf,
+    pub patch: String,
+}
+
+impl Command for DiscardHunkCommand {
+    fn execute(&mut self) {
+        // Unstage
+        git::apply_patch(&self.repo_path, &self.patch, true, true)
+            .expect("Failed to unstage hunk.");
+        // Discard from working tree
+        git::apply_patch(&self.repo_path, &self.patch, true, false)
+            .expect("Failed to discard hunk from working tree.");
+    }
+
+    fn undo(&mut self) {
+        // Re-apply to working tree
+        git::apply_patch(&self.repo_path, &self.patch, false, false)
+            .expect("Failed to re-apply hunk to working tree.");
+        // Stage
+        git::apply_patch(&self.repo_path, &self.patch, false, true)
+            .expect("Failed to stage hunk.");
+    }
+}
+
 pub struct CheckoutFileCommand {
     pub repo_path: PathBuf,
     pub file_name: String,
