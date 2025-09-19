@@ -6,6 +6,7 @@ pub mod app_state;
 pub mod command;
 mod commit_storage;
 pub mod git;
+pub mod git_patch;
 pub mod ui;
 
 pub fn run(repo_path: PathBuf) -> Result<()> {
