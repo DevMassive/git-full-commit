@@ -238,6 +238,7 @@ mod tests {
                     new_start: 1,
                     lines: Vec::new(),
                     start_line: 0,
+                    line_numbers: Vec::new(),
                 }],
             });
         }

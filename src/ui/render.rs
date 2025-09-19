@@ -113,27 +113,12 @@ pub fn render(window: &Window, state: &AppState) {
             let mut line_offset = 0;
             for file in &state.previous_commit_files {
                 for hunk in &file.hunks {
-                    let mut old_line_counter = hunk.old_start;
-                    let mut new_line_counter = hunk.new_start;
-
-                    for (hunk_line_index, hunk_line) in hunk.lines.iter().enumerate() {
+                    for (hunk_line_index, (old, new)) in hunk.line_numbers.iter().enumerate() {
                         let line_index = line_offset + hunk.start_line + hunk_line_index;
                         if line_index >= all_lines.len() {
                             continue;
                         }
-
-                        if hunk_line.starts_with('+') {
-                            line_numbers[line_index] = (None, Some(new_line_counter));
-                            new_line_counter += 1;
-                        } else if hunk_line.starts_with('-') {
-                            line_numbers[line_index] = (Some(old_line_counter), None);
-                            old_line_counter += 1;
-                        } else if !hunk_line.starts_with("@@") {
-                            line_numbers[line_index] =
-                                (Some(old_line_counter), Some(new_line_counter));
-                            old_line_counter += 1;
-                            new_line_counter += 1;
-                        }
+                        line_numbers[line_index] = (*old, *new);
                     }
                 }
                 line_offset += file.lines.len();
@@ -166,26 +151,12 @@ pub fn render(window: &Window, state: &AppState) {
 
         let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); lines.len()];
         for hunk in &selected_file.hunks {
-            let mut old_line_counter = hunk.old_start;
-            let mut new_line_counter = hunk.new_start;
-
-            for (hunk_line_index, hunk_line) in hunk.lines.iter().enumerate() {
+            for (hunk_line_index, (old, new)) in hunk.line_numbers.iter().enumerate() {
                 let line_index = hunk.start_line + hunk_line_index;
                 if line_index >= lines.len() {
                     continue;
                 }
-
-                if hunk_line.starts_with('+') {
-                    line_numbers[line_index] = (None, Some(new_line_counter));
-                    new_line_counter += 1;
-                } else if hunk_line.starts_with('-') {
-                    line_numbers[line_index] = (Some(old_line_counter), None);
-                    old_line_counter += 1;
-                } else if !hunk_line.starts_with("@@") {
-                    line_numbers[line_index] = (Some(old_line_counter), Some(new_line_counter));
-                    old_line_counter += 1;
-                    new_line_counter += 1;
-                }
+                line_numbers[line_index] = (*old, *new);
             }
         }
 
