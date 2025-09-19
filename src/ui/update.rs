@@ -102,11 +102,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
                     if let Some(file) = state.files.get(state.file_cursor - 1).cloned() {
                         let line_index = state.line_cursor;
-                        if let Some(hunk) = file.hunks.iter().find(|hunk| {
-                            let hunk_start = hunk.start_line;
-                            let hunk_end = hunk_start + hunk.lines.len();
-                            line_index >= hunk_start && line_index < hunk_end
-                        }) {
+                        if let Some(hunk) = git_patch::find_hunk(&file, line_index) {
                             let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
 
                             let command = Box::new(ApplyPatchCommand {

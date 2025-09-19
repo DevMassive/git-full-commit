@@ -1,5 +1,13 @@
 use crate::git::{FileDiff, Hunk};
 
+pub fn find_hunk(file: &FileDiff, line_index: usize) -> Option<&Hunk> {
+    file.hunks.iter().find(|hunk| {
+        let hunk_start = hunk.start_line;
+        let hunk_end = hunk_start + hunk.lines.len();
+        line_index >= hunk_start && line_index < hunk_end
+    })
+}
+
 pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<String> {
     let line_to_unstage = file.lines.get(line_index)?;
 
@@ -7,61 +15,40 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
         return None;
     }
 
-    let hunk = file.hunks.iter().find(|hunk| {
-        let hunk_start = hunk.start_line;
-        let hunk_end = hunk_start + hunk.lines.len();
-        line_index >= hunk_start && line_index < hunk_end
-    })?;
+    let hunk = find_hunk(file, line_index)?;
 
-    let hunk_header = &hunk.lines[0];
-    let mut parts = hunk_header.split(' ');
-    let old_range = parts.nth(1).unwrap();
-    let new_range = parts.next().unwrap();
+    let relative_line_index = line_index - hunk.start_line;
 
-    let mut old_range_parts = old_range.split(',');
-    let old_start: u32 = old_range_parts
-        .next()
-        .unwrap()
-        .trim_start_matches('-')
-        .parse()
-        .unwrap();
+    let (old_line, new_line) = hunk.line_numbers[relative_line_index];
 
-    let mut new_range_parts = new_range.split(',');
-    let new_start: u32 = new_range_parts
-        .next()
-        .unwrap()
-        .trim_start_matches('+')
-        .parse()
-        .unwrap();
-
-    let relative_line_index = line_index - (hunk.start_line + 1);
-
-    let mut old_line_counter = hunk.old_start;
-    let mut new_line_counter = hunk.new_start;
-
-    for i in 0..relative_line_index {
-        let l = &hunk.lines[i + 1];
-        if l.starts_with('+') {
-            new_line_counter += 1;
-        } else if l.starts_with('-') {
-            old_line_counter += 1;
-        } else {
-            old_line_counter += 1;
-            new_line_counter += 1;
-        }
-    }
-
-    let (patch_old_line, patch_new_line) = if line_to_unstage.starts_with('+') {
-        (old_line_counter - 1, new_line_counter)
+    let new_hunk_header = if line_to_unstage.starts_with('+') {
+        let new_line_num = new_line.unwrap();
+        let old_line_num = hunk
+            .line_numbers
+            .iter()
+            .find_map(|(ol, nl)| {
+                if nl.is_some() && nl.unwrap() == new_line_num - 1 {
+                    *ol
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
+        format!("@@ -{},0 +{},1 @@", old_line_num, new_line_num)
     } else {
-        // '-'
-        (old_line_counter, new_line_counter - 1)
-    };
-
-    let new_hunk_header = if line_to_unstage.starts_with('-') {
-        format!("@@ -{patch_old_line},1 +{patch_new_line},0 @@")
-    } else {
-        format!("@@ -{patch_old_line},0 +{patch_new_line},1 @@")
+        let old_line_num = old_line.unwrap();
+        let new_line_num = hunk
+            .line_numbers
+            .iter()
+            .find_map(|(ol, nl)| {
+                if ol.is_some() && ol.unwrap() == old_line_num - 1 {
+                    *nl
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
+        format!("@@ -{},1 +{},0 @@", old_line_num, new_line_num)
     };
 
     let mut patch = String::new();
@@ -72,16 +59,6 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
     patch.push('\n');
     patch.push_str(line_to_unstage);
     patch.push('\n');
-
-    eprintln!("line_index: {line_index}");
-    eprintln!("line_to_unstage: {line_to_unstage}");
-    eprintln!("hunk_header: {hunk_header}");
-    eprintln!("old_start: {old_start}, new_start: {new_start}");
-    eprintln!("relative_line_index: {relative_line_index}");
-    // eprintln!("old_line_offset: {old_line_offset}, new_line_offset: {new_line_offset}");
-    eprintln!("patch_old_line: {patch_old_line}, patch_new_line: {patch_new_line}");
-    eprintln!("new_hunk_header: {new_hunk_header}");
-    eprintln!("Generated patch:\n{patch}");
 
     Some(patch)
 }
