@@ -1,5 +1,5 @@
 use git_reset_pp::app_state::AppState;
-use git_reset_pp::git::get_diff;
+use git_reset_pp::git::{self, apply_patch, get_diff};
 use git_reset_pp::ui::update::update_state;
 use pancurses::{Input, Window, endwin, initscr};
 use serial_test::serial;
@@ -614,18 +614,7 @@ fn test_create_unstage_line_patch_with_multiple_hunks() {
             .unwrap();
 
     // Apply the patch in reverse
-    let patch_path = tmp_dir.path().join("patch.diff");
-    fs::write(&patch_path, patch).unwrap();
-    run_git(
-        &repo_path,
-        &[
-            "apply",
-            "--unidiff-zero",
-            "--cached",
-            "--reverse",
-            patch_path.to_str().unwrap(),
-        ],
-    );
+    apply_patch(&repo_path, &patch, true, true).expect("Failed to apply patch in reverse.");
 
     // Check the staged diff again
     let files_after_patch = git_reset_pp::git::get_diff(repo_path.clone());
