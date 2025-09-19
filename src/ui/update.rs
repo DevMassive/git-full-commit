@@ -15,27 +15,194 @@ use pancurses::curs_set;
 use crate::git_patch;
 
 fn unstage_line(state: &mut AppState, max_y: i32) {
-    if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-        if let Some(file) = state.files.get(state.file_cursor - 1) {
-            let line_index = state.line_cursor;
-            if let Some(patch) = git_patch::create_unstage_line_patch(file, line_index) {
-                let command = Box::new(ApplyPatchCommand {
-                    repo_path: state.repo_path.clone(),
-                    patch,
-                });
-                let old_line_cursor = state.line_cursor;
-                state.command_history.execute(command);
-                state.refresh_diff();
-                if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                    if let Some(file) = state.files.get(state.file_cursor - 1) {
-                        state.line_cursor = old_line_cursor.min(file.lines.len().saturating_sub(1));
-                        let header_height = state.files.len() + 3;
-                        let content_height = (max_y as usize).saturating_sub(header_height);
-                        if state.line_cursor >= state.scroll + content_height {
-                            state.scroll = state.line_cursor - content_height + 1;
-                        }
+    if let Some(file) = state.current_file() {
+        let line_index = state.line_cursor;
+        if let Some(patch) = git_patch::create_unstage_line_patch(file, line_index) {
+            let command = Box::new(ApplyPatchCommand {
+                repo_path: state.repo_path.clone(),
+                patch,
+            });
+            let old_line_cursor = state.line_cursor;
+            state.execute_and_refresh(command);
+
+            if let Some(file) = state.current_file() {
+                state.line_cursor = old_line_cursor.min(file.lines.len().saturating_sub(1));
+                let header_height = state.files.len() + 3;
+                let content_height = (max_y as usize).saturating_sub(header_height);
+                if state.line_cursor >= state.scroll + content_height {
+                    state.scroll = state.line_cursor - content_height + 1;
+                }
+            }
+        }
+    }
+}
+
+fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
+    match input {
+        Input::Character('\u{3}') | Input::Character('Q') => {
+            let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
+            state.running = false;
+        }
+        Input::Character('q') => {
+            if state.is_diff_cursor_active {
+                state.is_diff_cursor_active = false;
+            } else {
+                let _ =
+                    commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
+                state.running = false;
+            }
+        }
+        Input::Character('i') => {
+            if let Some(file) = state.current_file().cloned() {
+                if file.file_name != ".gitignore" {
+                    let command = Box::new(IgnoreFileCommand {
+                        repo_path: state.repo_path.clone(),
+                        file_name: file.file_name.clone(),
+                    });
+                    state.execute_and_refresh(command);
+                }
+            }
+        }
+        Input::Character('!') => {
+            if state.is_diff_cursor_active {
+                if let Some(file) = state.current_file() {
+                    let line_index = state.line_cursor;
+                    if let Some(hunk) = git_patch::find_hunk(file, line_index) {
+                        let patch = git_patch::create_unstage_hunk_patch(file, hunk);
+                        let command = Box::new(DiscardHunkCommand {
+                            repo_path: state.repo_path.clone(),
+                            patch,
+                        });
+                        state.execute_and_refresh(command);
                     }
                 }
+            } else if let Some(file) = state.current_file().cloned() {
+                let patch = git::get_file_diff_patch(&state.repo_path, &file.file_name)
+                    .expect("Failed to get diff for file.");
+                let command: Box<dyn crate::command::Command> =
+                    if file.status == git::FileStatus::Added {
+                        Box::new(RemoveFileCommand {
+                            repo_path: state.repo_path.clone(),
+                            file_name: file.file_name.clone(),
+                            patch,
+                        })
+                    } else {
+                        Box::new(CheckoutFileCommand {
+                            repo_path: state.repo_path.clone(),
+                            file_name: file.file_name.clone(),
+                            patch,
+                        })
+                    };
+                state.execute_and_refresh(command);
+            }
+        }
+        Input::Character('\n') => {
+            if let Some(file) = state.current_file().cloned() {
+                let line_index = state.line_cursor;
+                if let Some(hunk) = git_patch::find_hunk(&file, line_index) {
+                    let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
+                    let command = Box::new(ApplyPatchCommand {
+                        repo_path: state.repo_path.clone(),
+                        patch,
+                    });
+                    state.execute_and_refresh(command);
+                } else {
+                    let command = Box::new(UnstageFileCommand {
+                        repo_path: state.repo_path.clone(),
+                        file_name: file.file_name.clone(),
+                    });
+                    state.execute_and_refresh(command);
+                }
+            }
+        }
+        Input::Character('1') => unstage_line(state, max_y),
+        Input::Character('u') => {
+            state.command_history.undo();
+            state.refresh_diff();
+        }
+        Input::Character('r') => {
+            state.command_history.redo();
+            state.refresh_diff();
+        }
+        Input::Character('R') => {
+            git::add_all(&state.repo_path).expect("Failed to git add -A.");
+            state.refresh_diff();
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
+    match input {
+        Input::KeyUp => {
+            state.file_cursor = state.file_cursor.saturating_sub(1);
+            state.scroll = 0;
+            state.line_cursor = 0;
+            state.is_diff_cursor_active = false;
+        }
+        Input::KeyDown => {
+            if state.file_cursor < state.files.len() + 1 {
+                state.file_cursor += 1;
+                state.scroll = 0;
+                state.line_cursor = 0;
+            }
+            state.is_diff_cursor_active = false;
+
+            if state.file_cursor == state.files.len() + 1 {
+                state.is_commit_mode = true;
+                #[cfg(not(test))]
+                curs_set(1);
+            }
+        }
+        Input::Character('k') => {
+            state.is_diff_cursor_active = true;
+            state.line_cursor = state.line_cursor.saturating_sub(1);
+            let cursor_line = state.get_cursor_line_index();
+            if cursor_line < state.scroll {
+                state.scroll = cursor_line;
+            }
+        }
+        Input::Character('j') => {
+            state.is_diff_cursor_active = true;
+            let lines_count = if state.file_cursor == 0 {
+                state
+                    .previous_commit_files
+                    .iter()
+                    .map(|f| f.lines.len())
+                    .sum()
+            } else {
+                state.current_file().map_or(0, |f| f.lines.len())
+            };
+
+            if lines_count > 0 && state.line_cursor < lines_count.saturating_sub(1) {
+                state.line_cursor += 1;
+            }
+
+            let header_height = state.files.len() + 3;
+            let content_height = (max_y as usize).saturating_sub(header_height);
+            let cursor_line = state.get_cursor_line_index();
+
+            if cursor_line >= state.scroll + content_height {
+                state.scroll = cursor_line - content_height + 1;
+            }
+        }
+        Input::KeyLeft => {
+            let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
+            state.horizontal_scroll = state.horizontal_scroll.saturating_sub(scroll_amount);
+        }
+        Input::KeyRight => {
+            let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
+            state.horizontal_scroll = state.horizontal_scroll.saturating_add(scroll_amount);
+        }
+        _ => {
+            if state.file_cursor == state.files.len() + 1 {
+                state.is_commit_mode = true;
+                #[cfg(not(test))]
+                curs_set(1);
+                commit_view::handle_commit_input(state, input);
+            } else {
+                scroll::handle_scroll(state, input, max_y);
             }
         }
     }
@@ -50,192 +217,8 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
     }
 
     if let Some(input) = input {
-        match input {
-            Input::Character('\u{3}') | Input::Character('Q') => {
-                // Ctrl+C or Q
-                let _ =
-                    commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
-                state.running = false;
-            }
-            Input::Character('q') => {
-                if state.is_diff_cursor_active {
-                    state.is_diff_cursor_active = false;
-                } else {
-                    let _ = commit_storage::save_commit_message(
-                        &state.repo_path,
-                        &state.commit_message,
-                    );
-                    state.running = false;
-                }
-            }
-            Input::Character('i') => {
-                if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                    if let Some(file) = state.files.get(state.file_cursor - 1).cloned() {
-                        if file.file_name == ".gitignore" {
-                            return state;
-                        }
-                        let command = Box::new(IgnoreFileCommand {
-                            repo_path: state.repo_path.clone(),
-                            file_name: file.file_name.clone(),
-                        });
-                        state.command_history.execute(command);
-                        state.refresh_diff();
-                    }
-                }
-            }
-            Input::Character('!') => {
-                if state.is_diff_cursor_active {
-                    if let Some(file) = state.files.get(state.file_cursor - 1) {
-                        let line_index = state.line_cursor;
-                        if let Some(hunk) = git_patch::find_hunk(file, line_index) {
-                            let patch = git_patch::create_unstage_hunk_patch(file, hunk);
-                            let command = Box::new(DiscardHunkCommand {
-                                repo_path: state.repo_path.clone(),
-                                patch,
-                            });
-                            state.command_history.execute(command);
-                            state.refresh_diff();
-                        }
-                    }
-                } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                    if let Some(file) = state.files.get(state.file_cursor - 1).cloned() {
-                        // Get the patch before doing anything
-                        let patch = git::get_file_diff_patch(&state.repo_path, &file.file_name)
-                            .expect("Failed to get diff for file.");
-
-                        if file.status == git::FileStatus::Added {
-                            let command = Box::new(RemoveFileCommand {
-                                repo_path: state.repo_path.clone(),
-                                file_name: file.file_name.clone(),
-                                patch,
-                            });
-                            state.command_history.execute(command);
-                        } else {
-                            let command = Box::new(CheckoutFileCommand {
-                                repo_path: state.repo_path.clone(),
-                                file_name: file.file_name.clone(),
-                                patch,
-                            });
-                            state.command_history.execute(command);
-                        }
-                        state.refresh_diff();
-                    }
-                }
-            }
-            Input::Character('\n') => {
-                if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                    if let Some(file) = state.files.get(state.file_cursor - 1).cloned() {
-                        let line_index = state.line_cursor;
-                        if let Some(hunk) = git_patch::find_hunk(&file, line_index) {
-                            let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
-
-                            let command = Box::new(ApplyPatchCommand {
-                                repo_path: state.repo_path.clone(),
-                                patch,
-                            });
-                            state.command_history.execute(command);
-                            state.refresh_diff();
-                        } else {
-                            let command = Box::new(UnstageFileCommand {
-                                repo_path: state.repo_path.clone(),
-                                file_name: file.file_name.clone(),
-                            });
-                            state.command_history.execute(command);
-                            state.refresh_diff();
-                        }
-                    }
-                }
-            }
-            Input::Character('1') => {
-                unstage_line(&mut state, max_y);
-            }
-            Input::Character('u') => {
-                state.command_history.undo();
-                state.refresh_diff();
-            }
-            Input::Character('r') => {
-                state.command_history.redo();
-                state.refresh_diff();
-            }
-            Input::Character('R') => {
-                git::add_all(&state.repo_path).expect("Failed to git add -A.");
-                state.refresh_diff();
-            }
-            Input::KeyUp => {
-                state.file_cursor = state.file_cursor.saturating_sub(1);
-                state.scroll = 0;
-                state.line_cursor = 0;
-                state.is_diff_cursor_active = false;
-            }
-            Input::KeyDown => {
-                if state.file_cursor < state.files.len() + 1 {
-                    state.file_cursor += 1;
-                    state.scroll = 0;
-                    state.line_cursor = 0;
-                }
-                state.is_diff_cursor_active = false;
-
-                if state.file_cursor == state.files.len() + 1 {
-                    state.is_commit_mode = true;
-                    #[cfg(not(test))]
-                    curs_set(1);
-                }
-            }
-            Input::Character('k') => {
-                state.is_diff_cursor_active = true;
-                state.line_cursor = state.line_cursor.saturating_sub(1);
-                let cursor_line = state.get_cursor_line_index();
-                if cursor_line < state.scroll {
-                    state.scroll = cursor_line;
-                }
-            }
-            Input::Character('j') => {
-                state.is_diff_cursor_active = true;
-                let lines_count = if state.file_cursor == 0 {
-                    state
-                        .previous_commit_files
-                        .iter()
-                        .map(|f| f.lines.len())
-                        .sum()
-                } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                    state
-                        .files
-                        .get(state.file_cursor - 1)
-                        .map_or(0, |f| f.lines.len())
-                } else {
-                    0
-                };
-
-                if lines_count > 0 && state.line_cursor < lines_count.saturating_sub(1) {
-                    state.line_cursor += 1;
-                }
-
-                let header_height = state.files.len() + 3;
-                let content_height = (max_y as usize).saturating_sub(header_height);
-                let cursor_line = state.get_cursor_line_index();
-
-                if cursor_line >= state.scroll + content_height {
-                    state.scroll = cursor_line - content_height + 1;
-                }
-            }
-            Input::KeyLeft => {
-                let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
-                state.horizontal_scroll = state.horizontal_scroll.saturating_sub(scroll_amount);
-            }
-            Input::KeyRight => {
-                let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
-                state.horizontal_scroll = state.horizontal_scroll.saturating_add(scroll_amount);
-            }
-            _ => {
-                if state.file_cursor == state.files.len() + 1 {
-                    state.is_commit_mode = true;
-                    #[cfg(not(test))]
-                    curs_set(1);
-                    commit_view::handle_commit_input(&mut state, input);
-                } else {
-                    scroll::handle_scroll(&mut state, input, max_y);
-                }
-            }
+        if !handle_commands(&mut state, input, max_y) {
+            handle_navigation(&mut state, input, max_y, max_x);
         }
     }
 
