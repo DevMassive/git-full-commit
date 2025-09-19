@@ -643,3 +643,70 @@ fn test_create_unstage_line_patch_with_multiple_hunks() {
             .any(|line| line.contains("+modified line 90"))
     );
 }
+
+#[test]
+#[serial]
+fn test_unstage_last_file_allows_commit_message_input() {
+    run_test_with_pancurses(|_window| {
+        let setup = TestSetup::new();
+        let state = create_test_state(&setup);
+
+        // We start with 1 file, not in commit mode.
+        assert_eq!(state.files.len(), 1);
+        assert!(!state.is_commit_mode);
+
+        // Unstage the file by pressing Enter.
+        let state_after_unstage = update_state(state, Some(Input::Character('\n')), 30, 80);
+
+        // After unstaging, file list is empty.
+        assert_eq!(state_after_unstage.files.len(), 0);
+        // The bug is that we are not in commit mode, so we can't type.
+        assert!(!state_after_unstage.is_commit_mode);
+
+        // Now, simulate typing a character.
+        let state_after_typing =
+            update_state(state_after_unstage, Some(Input::Character('T')), 30, 80);
+
+        // With the fix, we should enter commit mode and the message should be updated.
+        assert!(state_after_typing.is_commit_mode);
+        assert_eq!(state_after_typing.commit_message, "T");
+    });
+}
+
+#[test]
+#[serial]
+fn test_unstage_second_file_moves_to_commit() {
+    run_test_with_pancurses(|_window| {
+        // 1. Setup repo with 2 files
+        let tmp_dir = TempDir::new().unwrap();
+        let repo_path = tmp_dir.path().to_path_buf();
+        run_git(&repo_path, &["init"]);
+        run_git(&repo_path, &["config", "user.name", "Test"]);
+        run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+        fs::write(repo_path.join("a.txt"), "a").unwrap();
+        fs::write(repo_path.join("b.txt"), "b").unwrap();
+        run_git(&repo_path, &["add", "a.txt", "b.txt"]);
+
+        // 2. Create state and select second file
+        let files = get_diff(repo_path.clone());
+        let mut state = AppState::new(repo_path.clone(), files);
+        assert_eq!(state.files.len(), 2);
+        state.file_cursor = 2; // Selects b.txt
+
+        // 3. Unstage the file
+        let state_after_unstage = update_state(state, Some(Input::Character('\n')), 30, 80);
+
+        // 4. Check state
+        assert_eq!(state_after_unstage.files.len(), 1);
+        assert_eq!(state_after_unstage.file_cursor, 2); // Cursor is on commit line
+        assert!(!state_after_unstage.is_commit_mode); // This is the bug
+
+        // 5. Simulate typing
+        let state_after_typing =
+            update_state(state_after_unstage, Some(Input::Character('c')), 30, 80);
+
+        // 6. Assert fix
+        assert!(state_after_typing.is_commit_mode);
+        assert_eq!(state_after_typing.commit_message, "c");
+    });
+}

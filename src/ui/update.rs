@@ -214,7 +214,14 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 state.horizontal_scroll = state.horizontal_scroll.saturating_add(scroll_amount);
             }
             _ => {
-                scroll::handle_scroll(&mut state, input, max_y);
+                if state.file_cursor == state.files.len() + 1 {
+                    state.is_commit_mode = true;
+                    #[cfg(not(test))]
+                    curs_set(1);
+                    commit_view::handle_commit_input(&mut state, input);
+                } else {
+                    scroll::handle_scroll(&mut state, input, max_y);
+                }
             }
         }
     }
