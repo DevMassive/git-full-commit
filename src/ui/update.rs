@@ -146,7 +146,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             }
         }
         Input::KeyDown => {
-            if state.file_cursor < state.files.len() + 1 {
+            if state.file_cursor < state.files.len() + 2 {
                 state.file_cursor += 1;
                 state.scroll = 0;
                 state.line_cursor = 0;
@@ -154,7 +154,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             state.is_diff_cursor_active = false;
 
             let num_files = state.files.len();
-            let file_list_total_items = num_files + 2;
+            let file_list_total_items = num_files + 3;
             let file_list_height = (max_y as usize / 3).max(3).min(file_list_total_items);
 
             if state.file_cursor >= state.file_list_scroll + file_list_height {
@@ -791,5 +791,28 @@ mod tests {
 
         // Cleanup
         std::fs::remove_dir_all(&repo_path).unwrap();
+    }
+
+    #[test]
+    fn test_keydown_stops_at_last_line() {
+        let mut state = create_state_with_files(1); // 1 file
+        // Staged changes (0), file_0 (1), commit (2), prev_commit (3)
+        let max_y = 30;
+        let max_x = 80;
+
+        // Cursor starts on the first file
+        assert_eq!(state.file_cursor, 1);
+
+        // KeyDown to commit line
+        handle_navigation(&mut state, Input::KeyDown, max_y, max_x);
+        assert_eq!(state.file_cursor, 2);
+
+        // KeyDown to previous commit line
+        handle_navigation(&mut state, Input::KeyDown, max_y, max_x);
+        assert_eq!(state.file_cursor, 3);
+
+        // KeyDown again, should not move
+        handle_navigation(&mut state, Input::KeyDown, max_y, max_x);
+        assert_eq!(state.file_cursor, 3);
     }
 }

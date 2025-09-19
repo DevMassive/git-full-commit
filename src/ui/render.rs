@@ -11,7 +11,7 @@ pub fn render(window: &Window, state: &AppState) {
     let (max_y, max_x) = window.get_max_yx();
 
     let num_files = state.files.len();
-    let file_list_total_items = num_files + 2;
+    let file_list_total_items = num_files + 3;
     let file_list_height = (max_y as usize / 3).max(3).min(file_list_total_items);
 
     for i in 0..file_list_height {
@@ -22,7 +22,7 @@ pub fn render(window: &Window, state: &AppState) {
         let line_y = i as i32;
 
         if item_index == 0 {
-            // Render previous commit info
+            // Render "Staged changes"
             let is_selected = state.file_cursor == 0;
             let pair = if is_selected { 5 } else { 1 };
             window.attron(COLOR_PAIR(pair));
@@ -32,11 +32,7 @@ pub fn render(window: &Window, state: &AppState) {
                 }
             }
             window.mv(line_y, 0);
-            if state.is_amend_mode {
-                window.addstr(" |");
-            } else {
-                window.addstr(format!(" o {}", &state.previous_commit_message));
-            }
+            window.addstr(" o Staged changes");
             window.attroff(COLOR_PAIR(pair));
         } else if item_index > 0 && item_index <= num_files {
             let file_index = item_index - 1;
@@ -99,6 +95,23 @@ pub fn render(window: &Window, state: &AppState) {
                 let cursor_display_pos = prefix_width + message_before_cursor.width();
                 window.mv(commit_line_y, cursor_display_pos as i32);
             }
+        } else if item_index == num_files + 2 {
+            // Render previous commit info
+            let is_selected = state.file_cursor == num_files + 2;
+            let pair = if is_selected { 5 } else { 1 };
+            window.attron(COLOR_PAIR(pair));
+            if is_selected {
+                for x in 0..max_x {
+                    window.mvaddch(line_y, x, ' ');
+                }
+            }
+            window.mv(line_y, 0);
+            if state.is_amend_mode {
+                window.addstr(" |");
+            } else {
+                window.addstr(format!(" o {}", &state.previous_commit_message));
+            }
+            window.attroff(COLOR_PAIR(pair));
         }
     }
 
@@ -114,6 +127,8 @@ pub fn render(window: &Window, state: &AppState) {
     let cursor_position = state.get_cursor_line_index();
 
     if state.file_cursor == 0 {
+        // "Staged changes" is selected, do nothing for now.
+    } else if state.file_cursor == num_files + 2 {
         // Render previous commit diff
         let all_lines: Vec<String> = state
             .previous_commit_files
