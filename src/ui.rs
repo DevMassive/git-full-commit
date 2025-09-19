@@ -170,10 +170,7 @@ fn render(window: &Window, state: &AppState) {
     } else {
         window.clrtoeol();
     }
-    window.addstr(&format!(
-        "{} {}",
-        &state.previous_commit_hash, &state.previous_commit_message
-    ));
+    window.addstr(&format!(" o {}", &state.previous_commit_message));
     window.attroff(COLOR_PAIR(pair));
 
     // Render sticky header
@@ -200,6 +197,9 @@ fn render(window: &Window, state: &AppState) {
                 FileStatus::Renamed => 'R',
                 FileStatus::Deleted => 'D',
             };
+            window.attron(COLOR_PAIR(pair));
+            window.addstr(" | ");
+            window.attroff(COLOR_PAIR(pair));
             window.attron(COLOR_PAIR(status_pair));
             window.addstr(&format!("{}", status_char));
             window.attroff(COLOR_PAIR(status_pair));
@@ -225,9 +225,9 @@ fn render(window: &Window, state: &AppState) {
     }
 
     let (prefix, message) = if state.is_amend_mode {
-        ("Amend: ", &state.amend_message)
+        (" A ", &state.amend_message)
     } else {
-        ("Commit: ", &state.commit_message)
+        (" o ", &state.commit_message)
     };
 
     window.addstr(prefix);
@@ -466,11 +466,6 @@ fn render(window: &Window, state: &AppState) {
         }
     } else if state.file_cursor == num_files + 1 {
         if state.is_commit_mode {
-            let (prefix, message) = if state.is_amend_mode {
-                ("Amend: ", &state.amend_message)
-            } else {
-                ("Commit: ", &state.commit_message)
-            };
             let prefix_width = prefix.width();
             let message_before_cursor: String = message.chars().take(state.commit_cursor).collect();
             let cursor_display_pos = prefix_width + message_before_cursor.width();
