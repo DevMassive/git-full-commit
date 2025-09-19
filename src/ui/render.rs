@@ -318,11 +318,16 @@ fn render_line(
 ) {
     let is_cursor_line = line_index_in_file == cursor_position;
 
-    let default_pair: chtype = if is_cursor_line { 5 } else { 1 };
-    let deletion_pair: chtype = if is_cursor_line { 6 } else { 2 };
-    let addition_pair: chtype = if is_cursor_line { 7 } else { 3 };
-    let hunk_header_pair: chtype = if is_cursor_line { 8 } else { 4 };
-    let grey_pair: chtype = if is_cursor_line { 10 } else { 9 };
+    let (default_pair, deletion_pair, addition_pair, hunk_header_pair, grey_pair) =
+        if is_cursor_line {
+            if state.is_diff_cursor_active {
+                (5, 6, 7, 8, 10) // Active cursor pairs
+            } else {
+                (11, 12, 13, 14, 15) // Inactive cursor pairs
+            }
+        } else {
+            (1, 2, 3, 4, 9) // Non-cursor pairs
+        };
 
     let line_num_str = format!(
         "{:<4} {:<4}",

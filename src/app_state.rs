@@ -20,6 +20,7 @@ pub struct AppState {
     pub previous_commit_hash: String,
     pub previous_commit_message: String,
     pub previous_commit_files: Vec<FileDiff>,
+    pub is_diff_cursor_active: bool,
 }
 
 impl AppState {
@@ -47,6 +48,7 @@ impl AppState {
             previous_commit_hash,
             previous_commit_message,
             previous_commit_files,
+            is_diff_cursor_active: false,
         }
     }
 

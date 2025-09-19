@@ -51,11 +51,22 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
 
     if let Some(input) = input {
         match input {
-            Input::Character('\u{3}') | Input::Character('q') | Input::Character('Q') => {
-                // Ctrl+C or Q or q
+            Input::Character('\u{3}') | Input::Character('Q') => {
+                // Ctrl+C or Q
                 let _ =
                     commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
                 state.running = false;
+            }
+            Input::Character('q') => {
+                if state.is_diff_cursor_active {
+                    state.is_diff_cursor_active = false;
+                } else {
+                    let _ = commit_storage::save_commit_message(
+                        &state.repo_path,
+                        &state.commit_message,
+                    );
+                    state.running = false;
+                }
             }
             Input::Character('i') => {
                 if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
@@ -141,6 +152,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 state.file_cursor = state.file_cursor.saturating_sub(1);
                 state.scroll = 0;
                 state.line_cursor = 0;
+                state.is_diff_cursor_active = false;
             }
             Input::KeyDown => {
                 if state.file_cursor < state.files.len() + 1 {
@@ -148,6 +160,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                     state.scroll = 0;
                     state.line_cursor = 0;
                 }
+                state.is_diff_cursor_active = false;
 
                 if state.file_cursor == state.files.len() + 1 {
                     state.is_commit_mode = true;
@@ -156,6 +169,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 }
             }
             Input::Character('k') => {
+                state.is_diff_cursor_active = true;
                 state.line_cursor = state.line_cursor.saturating_sub(1);
                 let cursor_line = state.get_cursor_line_index();
                 if cursor_line < state.scroll {
@@ -163,6 +177,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 }
             }
             Input::Character('j') => {
+                state.is_diff_cursor_active = true;
                 let lines_count = if state.file_cursor == 0 {
                     state
                         .previous_commit_files
@@ -555,5 +570,30 @@ mod tests {
         // Scroll left at 0 should not change
         state = update_state(state, Some(Input::KeyLeft), 30, max_x);
         assert_eq!(state.horizontal_scroll, 0);
+    }
+
+    #[test]
+    fn test_q_behavior_with_active_diff_cursor() {
+        let mut state = create_test_state(10, 1, 0, 0);
+        state.is_diff_cursor_active = true;
+
+        // First 'q' should only deactivate the cursor
+        let state_after_first_q = update_state(state, Some(Input::Character('q')), 30, 80);
+        assert!(
+            state_after_first_q.running,
+            "App should still be running after first 'q'"
+        );
+        assert!(
+            !state_after_first_q.is_diff_cursor_active,
+            "Diff cursor should be inactive after first 'q'"
+        );
+
+        // Second 'q' should quit the app
+        let state_after_second_q =
+            update_state(state_after_first_q, Some(Input::Character('q')), 30, 80);
+        assert!(
+            !state_after_second_q.running,
+            "App should quit after second 'q'"
+        );
     }
 }
