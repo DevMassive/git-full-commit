@@ -1,4 +1,4 @@
-use crate::command::CommandHistory;
+use crate::command::{Command, CommandHistory};
 use crate::commit_storage;
 use crate::git::{FileDiff, get_diff, get_previous_commit_diff, get_previous_commit_info};
 use std::path::PathBuf;
@@ -81,5 +81,18 @@ impl AppState {
         self.file_cursor = self.file_cursor.min(self.files.len() + 1);
         self.line_cursor = 0;
         self.scroll = 0;
+    }
+
+    pub fn execute_and_refresh(&mut self, command: Box<dyn Command>) {
+        self.command_history.execute(command);
+        self.refresh_diff();
+    }
+
+    pub fn current_file(&self) -> Option<&FileDiff> {
+        if self.file_cursor > 0 && self.file_cursor <= self.files.len() {
+            self.files.get(self.file_cursor - 1)
+        } else {
+            None
+        }
     }
 }
