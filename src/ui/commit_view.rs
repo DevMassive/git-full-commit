@@ -38,6 +38,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input) {
                     .expect("Failed to amend commit.");
                 let _ = commit_storage::delete_commit_message(&state.repo_path);
                 state.command_history.clear();
+                state.is_amend_mode = false;
             } else {
                 if state.commit_message.is_empty() {
                     return;
@@ -61,6 +62,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input) {
             } else {
                 state.refresh_diff();
                 state.is_commit_mode = false;
+                state.file_cursor = 0;
                 #[cfg(not(test))]
                 curs_set(0);
             }
