@@ -11,7 +11,9 @@ use crate::git;
 use crate::ui::commit_view;
 use crate::ui::diff_view::LINE_CONTENT_OFFSET;
 use crate::ui::scroll;
-use pancurses::{curs_set, Input};
+use pancurses::Input;
+#[cfg(not(test))]
+use pancurses::curs_set;
 
 use crate::git_patch;
 

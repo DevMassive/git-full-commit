@@ -1,7 +1,9 @@
 use crate::app_state::AppState;
 use crate::commit_storage;
 use crate::git;
-use pancurses::{curs_set, Input};
+use pancurses::Input;
+#[cfg(not(test))]
+use pancurses::curs_set;
 
 pub fn handle_commit_input(state: &mut AppState, input: Input) {
     match input {
