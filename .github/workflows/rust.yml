@@ -18,5 +18,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: Build
       run: cargo build --verbose
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y libncurses5-dev libncursesw5-dev xvfb
     - name: Run tests
-      run: cargo test --verbose
+      run: xvfb-run cargo test --verbose -- --nocapture
