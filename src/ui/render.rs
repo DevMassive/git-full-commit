@@ -26,7 +26,11 @@ pub fn render(window: &Window, state: &AppState) {
     } else {
         window.clrtoeol();
     }
-    window.addstr(format!(" o {}", &state.previous_commit_message));
+    if state.is_amend_mode {
+        window.addstr(" |");
+    } else {
+        window.addstr(format!(" o {}", &state.previous_commit_message));
+    }
     window.attroff(COLOR_PAIR(pair));
 
     // Render sticky header
@@ -81,7 +85,7 @@ pub fn render(window: &Window, state: &AppState) {
     }
 
     let (prefix, message) = if state.is_amend_mode {
-        (" A ", &state.amend_message)
+        (" o ", &state.amend_message)
     } else {
         (" o ", &state.commit_message)
     };
@@ -293,7 +297,7 @@ pub fn render(window: &Window, state: &AppState) {
         }
     } else if state.file_cursor == num_files + 1 && state.is_commit_mode {
         let (prefix, message) = if state.is_amend_mode {
-            (" A ", &state.amend_message)
+            (" o ", &state.amend_message)
         } else {
             (" o ", &state.commit_message)
         };
