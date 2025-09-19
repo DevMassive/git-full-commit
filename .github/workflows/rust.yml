@@ -21,4 +21,6 @@ jobs:
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y libncurses5-dev libncursesw5-dev xvfb
     - name: Run tests
-      run: xvfb-run cargo test --verbose -- --nocapture
+      run: |
+        export TERM=xterm
+        xvfb-run cargo test -- --nocapture
