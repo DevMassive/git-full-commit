@@ -50,9 +50,9 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
     let patch_new_line = new_start + new_line_offset as u32;
 
     let new_hunk_header = if line_to_unstage.starts_with('-') {
-        format!("@@ -{},1 +{},0 @@", patch_old_line, patch_new_line)
+        format!("@@ -{patch_old_line},1 +{patch_new_line},0 @@")
     } else {
-        format!("@@ -{},0 +{},1 @@", patch_old_line, patch_new_line)
+        format!("@@ -{patch_old_line},0 +{patch_new_line},1 @@")
     };
 
     let mut patch = String::new();
@@ -64,7 +64,7 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
     patch.push_str(line_to_unstage);
     patch.push('\n');
 
-    eprintln!("Generated patch:\n{}", patch);
+    eprintln!("Generated patch:\n{patch}");
 
     Some(patch)
 }

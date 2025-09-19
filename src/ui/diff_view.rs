@@ -72,8 +72,8 @@ pub fn compute_word_diffs(old: &str, new: &str) -> (Vec<WordDiffLine>, Vec<WordD
     let mut old_lines = Vec::new();
     let mut current_line = WordDiffLine(Vec::new());
     for (text, changed) in old_line_parts {
-        let mut parts = text.split_inclusive('\n').peekable();
-        while let Some(part) = parts.next() {
+        let parts = text.split_inclusive('\n').peekable();
+        for part in parts {
             let content = part.strip_suffix('\n').unwrap_or(part);
             if !content.is_empty() {
                 current_line.0.push((content.to_string(), changed));
@@ -91,8 +91,8 @@ pub fn compute_word_diffs(old: &str, new: &str) -> (Vec<WordDiffLine>, Vec<WordD
     let mut new_lines = Vec::new();
     current_line = WordDiffLine(Vec::new());
     for (text, changed) in new_line_parts {
-        let mut parts = text.split_inclusive('\n').peekable();
-        while let Some(part) = parts.next() {
+        let parts = text.split_inclusive('\n').peekable();
+        for part in parts {
             let content = part.strip_suffix('\n').unwrap_or(part);
             if !content.is_empty() {
                 current_line.0.push((content.to_string(), changed));

@@ -115,21 +115,25 @@ pub fn handle_commit_input(state: &mut AppState, input: Input) {
             state.commit_cursor = state.commit_cursor.saturating_add(1).min(message_len);
         }
         Input::Character(c) => {
-            if c == '\u{1b}' { // ESC key
+            if c == '\u{1b}' {
+                // ESC key
                 state.is_commit_mode = false;
                 state.is_amend_mode = false; // Also reset amend mode
                 #[cfg(not(test))]
                 curs_set(0);
-            } else if c == '\u{1}' { // Ctrl-A: beginning of line
+            } else if c == '\u{1}' {
+                // Ctrl-A: beginning of line
                 state.commit_cursor = 0;
-            } else if c == '\u{5}' { // Ctrl-E: end of line
+            } else if c == '\u{5}' {
+                // Ctrl-E: end of line
                 let message = if state.is_amend_mode {
                     &state.amend_message
                 } else {
                     &state.commit_message
                 };
                 state.commit_cursor = message.chars().count();
-            } else if c == '\u{b}' { // Ctrl-K: kill to end of line
+            } else if c == '\u{b}' {
+                // Ctrl-K: kill to end of line
                 let message = if state.is_amend_mode {
                     &mut state.amend_message
                 } else {
@@ -168,6 +172,6 @@ pub fn handle_commit_input(state: &mut AppState, input: Input) {
                 }
             }
         }
-        _ => {},
+        _ => {}
     }
 }

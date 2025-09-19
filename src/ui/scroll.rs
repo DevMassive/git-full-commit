@@ -70,6 +70,6 @@ pub fn handle_scroll(state: &mut AppState, input: Input, max_y: i32) {
         Input::Character('\u{15}') => {
             scroll_view(state, ScrollDirection::Up, ScrollAmount::Half, max_y);
         }
-        _ => {},
+        _ => {}
     }
 }

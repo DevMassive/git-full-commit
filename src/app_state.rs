@@ -1,7 +1,7 @@
-use std::path::PathBuf;
+use crate::command::CommandHistory;
 use crate::commit_storage;
 use crate::git::{FileDiff, get_diff, get_previous_commit_diff, get_previous_commit_info};
-use crate::command::CommandHistory;
+use std::path::PathBuf;
 
 pub struct AppState {
     pub repo_path: PathBuf,
@@ -28,7 +28,8 @@ impl AppState {
             commit_storage::load_commit_message(&repo_path).unwrap_or_else(|_| String::new());
         let (previous_commit_hash, previous_commit_message) =
             get_previous_commit_info(&repo_path).unwrap_or((String::new(), String::new()));
-        let previous_commit_files = get_previous_commit_diff(&repo_path).unwrap_or_else(|_| Vec::new());
+        let previous_commit_files =
+            get_previous_commit_diff(&repo_path).unwrap_or_else(|_| Vec::new());
         Self {
             repo_path,
             scroll: 0,
@@ -64,7 +65,8 @@ impl AppState {
         self.files = get_diff(self.repo_path.clone());
         (self.previous_commit_hash, self.previous_commit_message) =
             get_previous_commit_info(&self.repo_path).unwrap_or((String::new(), String::new()));
-        self.previous_commit_files = get_previous_commit_diff(&self.repo_path).unwrap_or_else(|_| Vec::new());
+        self.previous_commit_files =
+            get_previous_commit_diff(&self.repo_path).unwrap_or_else(|_| Vec::new());
 
         if self.files.is_empty() {
             self.file_cursor = 1; // commit message line

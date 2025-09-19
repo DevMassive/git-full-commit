@@ -1,6 +1,6 @@
 mod color;
-mod diff_view;
 pub mod commit_view;
+mod diff_view;
 mod render;
 pub mod scroll;
 pub mod update;

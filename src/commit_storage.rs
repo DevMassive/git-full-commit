@@ -14,7 +14,7 @@ fn get_commit_message_file_path(repo_path: &Path) -> Result<PathBuf, io::Error> 
     let mut hasher = DefaultHasher::new();
     repo_path.hash(&mut hasher);
     let repo_hash = hasher.finish();
-    Ok(storage_dir.join(format!("{}", repo_hash)))
+    Ok(storage_dir.join(format!("{repo_hash}")))
 }
 
 pub fn save_commit_message(repo_path: &Path, message: &str) -> Result<(), io::Error> {

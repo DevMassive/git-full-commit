@@ -1,9 +1,6 @@
 use crate::app_state::AppState;
 use crate::command::{
-    ApplyPatchCommand,
-    CheckoutFileCommand,
-    IgnoreFileCommand,
-    RemoveFileCommand,
+    ApplyPatchCommand, CheckoutFileCommand, IgnoreFileCommand, RemoveFileCommand,
     UnstageFileCommand,
 };
 use crate::commit_storage;
@@ -31,8 +28,7 @@ fn unstage_line(state: &mut AppState, max_y: i32) {
                 state.refresh_diff();
                 if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
                     if let Some(file) = state.files.get(state.file_cursor - 1) {
-                        state.line_cursor =
-                            old_line_cursor.min(file.lines.len().saturating_sub(1));
+                        state.line_cursor = old_line_cursor.min(file.lines.len().saturating_sub(1));
                         let header_height = state.files.len() + 3;
                         let content_height = (max_y as usize).saturating_sub(header_height);
                         if state.line_cursor >= state.scroll + content_height {
@@ -57,7 +53,8 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
         match input {
             Input::Character('\u{3}') | Input::Character('q') | Input::Character('Q') => {
                 // Ctrl+C or Q or q
-                let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
+                let _ =
+                    commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
                 state.running = false;
             }
             Input::Character('i') => {
@@ -231,7 +228,7 @@ mod tests {
     ) -> AppState {
         let mut files = Vec::new();
         if lines_count > 0 {
-            let lines = (0..lines_count).map(|i| format!("line {}", i)).collect();
+            let lines = (0..lines_count).map(|i| format!("line {i}")).collect();
             files.push(FileDiff {
                 file_name: "test_file.rs".to_string(),
                 status: FileStatus::Modified,
@@ -289,7 +286,10 @@ mod tests {
             final_state.scroll, max_scroll,
             "Scroll should not change as it's at the end"
         );
-        assert_eq!(final_state.line_cursor, 80, "Cursor should not move as scroll did not change");
+        assert_eq!(
+            final_state.line_cursor, 80,
+            "Cursor should not move as scroll did not change"
+        );
     }
 
     #[test]
@@ -436,24 +436,45 @@ mod tests {
 
         // After ignoring, the file should be gone from the diff,
         // and the .gitignore file should be the only change.
-        assert_eq!(updated_state.files.len(), 1, "File list should only contain .gitignore");
-        assert_eq!(updated_state.files[0].file_name, ".gitignore", "The remaining file should be .gitignore");
+        assert_eq!(
+            updated_state.files.len(),
+            1,
+            "File list should only contain .gitignore"
+        );
+        assert_eq!(
+            updated_state.files[0].file_name, ".gitignore",
+            "The remaining file should be .gitignore"
+        );
 
         // Simulate undo
         updated_state.command_history.undo();
         updated_state.refresh_diff();
 
         // After undo, the original file should be back and .gitignore should be gone
-        assert_eq!(updated_state.files.len(), 1, "File list should contain the original file again");
-        assert_eq!(updated_state.files[0].file_name, file_to_ignore, "The file should be the one we ignored");
+        assert_eq!(
+            updated_state.files.len(),
+            1,
+            "File list should contain the original file again"
+        );
+        assert_eq!(
+            updated_state.files[0].file_name, file_to_ignore,
+            "The file should be the one we ignored"
+        );
 
         // Simulate undo
         updated_state.command_history.undo();
         updated_state.refresh_diff();
 
         // After undo, the original file should be back and .gitignore should be gone
-        assert_eq!(updated_state.files.len(), 1, "File list should contain the original file again");
-        assert_eq!(updated_state.files[0].file_name, file_to_ignore, "The file should be the one we ignored");
+        assert_eq!(
+            updated_state.files.len(),
+            1,
+            "File list should contain the original file again"
+        );
+        assert_eq!(
+            updated_state.files[0].file_name, file_to_ignore,
+            "The file should be the one we ignored"
+        );
 
         // Cleanup
         std::fs::remove_dir_all(&temp_dir).unwrap();

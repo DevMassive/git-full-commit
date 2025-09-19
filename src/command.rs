@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use std::process::Command as OsCommand;
 use std::fs;
 use std::io::Write;
+use std::path::PathBuf;
+use std::process::Command as OsCommand;
 
 pub trait Command {
     fn execute(&mut self);
@@ -80,11 +80,15 @@ impl ApplyPatchCommand {
                 .expect("Failed to write to stdin.");
         }
 
-        let output = child.wait_with_output().expect("Failed to wait for git apply process.");
+        let output = child
+            .wait_with_output()
+            .expect("Failed to wait for git apply process.");
         if !output.status.success() {
             eprintln!(
                 "git apply failed for patch (reverse={}):\n{}\n--- stderr ---\n{}\n---",
-                reverse, self.patch, String::from_utf8_lossy(&output.stderr)
+                reverse,
+                self.patch,
+                String::from_utf8_lossy(&output.stderr)
             );
         }
     }
@@ -276,6 +280,12 @@ impl Command for RemoveFileCommand {
 pub struct CommandHistory {
     pub undo_stack: Vec<Box<dyn Command>>,
     pub redo_stack: Vec<Box<dyn Command>>,
+}
+
+impl Default for CommandHistory {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CommandHistory {

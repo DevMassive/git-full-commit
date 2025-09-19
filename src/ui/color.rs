@@ -1,4 +1,4 @@
-use pancurses::{init_color, init_pair, COLOR_BLACK};
+use pancurses::{COLOR_BLACK, init_color, init_pair};
 
 pub fn setup_colors() {
     // Base colors

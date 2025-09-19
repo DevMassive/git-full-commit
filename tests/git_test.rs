@@ -1,7 +1,7 @@
 use git_reset_pp::app_state::AppState;
 use git_reset_pp::git::get_diff;
 use git_reset_pp::ui::update::update_state;
-use pancurses::{endwin, initscr, Input, Window};
+use pancurses::{Input, Window, endwin, initscr};
 use serial_test::serial;
 use std::fs;
 use std::path::PathBuf;
@@ -146,7 +146,8 @@ fn test_unstage_hunk_by_line_with_undo_redo() {
         assert_eq!(state_after_unstage.files.len(), 0);
 
         // Undo
-        let state_after_undo = update_state(state_after_unstage, Some(Input::Character('u')), 30, 80);
+        let state_after_undo =
+            update_state(state_after_unstage, Some(Input::Character('u')), 30, 80);
         assert_eq!(state_after_undo.files.len(), 1);
         assert_eq!(state_after_undo.files[0].hunks.len(), 1);
 
@@ -185,11 +186,20 @@ fn test_unstage_line() {
         assert_eq!(state_after_unstage.files.len(), 1);
         // The diff should now only contain "+changed"
         assert_eq!(state_after_unstage.files[0].lines.len(), 8);
-        assert!(!state_after_unstage.files[0].lines.iter().any(|l| l.contains("+changed")));
-        assert!(state_after_unstage.files[0].lines.iter().any(|l| l.contains("-line2")));
+        assert!(
+            !state_after_unstage.files[0]
+                .lines
+                .iter()
+                .any(|l| l.contains("+changed"))
+        );
+        assert!(
+            state_after_unstage.files[0]
+                .lines
+                .iter()
+                .any(|l| l.contains("-line2"))
+        );
     });
 }
-
 
 #[test]
 #[serial]
@@ -228,7 +238,7 @@ fn test_commit_mode_activation_and_commit() {
 
         // 7. Verify the commit was created
         let output = OsCommand::new("git")
-            .args(&["log", "-1", "--pretty=%B"])
+            .args(["log", "-1", "--pretty=%B"])
             .current_dir(&setup.repo_path)
             .output()
             .expect("failed to run git log");
@@ -236,7 +246,6 @@ fn test_commit_mode_activation_and_commit() {
         assert_eq!(last_commit_message, msg);
     });
 }
-
 
 #[test]
 #[serial]
@@ -492,10 +501,7 @@ fn test_get_previous_commit_diff() {
     let setup = TestSetup::new();
 
     // Commit the staged changes to create a new commit
-    run_git(
-        &setup.repo_path,
-        &["commit", "-m", "second commit"],
-    );
+    run_git(&setup.repo_path, &["commit", "-m", "second commit"]);
 
     // Call the function to get the diff of the last commit
     let diffs = git_reset_pp::git::get_previous_commit_diff(&setup.repo_path).unwrap();
@@ -552,7 +558,7 @@ fn test_rename_file() {
             .output()
             .unwrap();
     }
-    
+
     let files = git_reset_pp::git::get_diff(repo_path.clone());
     assert!(!files.is_empty());
     assert_eq!(files.len(), 1);
@@ -575,7 +581,7 @@ fn test_create_unstage_line_patch_with_multiple_hunks() {
     let file_path = repo_path.join("large_file.txt");
     let mut content = String::new();
     for i in 0..100 {
-        content.push_str(&format!("line {}\n", i));
+        content.push_str(&format!("line {i}\n"));
     }
     fs::write(&file_path, &content).unwrap();
     run_git(&repo_path, &["add", "large_file.txt"]);
@@ -603,22 +609,16 @@ fn test_create_unstage_line_patch_with_multiple_hunks() {
         .unwrap();
 
     // Create the patch
-    let patch = git_reset_pp::git_patch::create_unstage_line_patch(
-        file_diff,
-        line_to_unstage_index,
-    )
-    .unwrap();
+    let patch =
+        git_reset_pp::git_patch::create_unstage_line_patch(file_diff, line_to_unstage_index)
+            .unwrap();
 
     // Apply the patch in reverse
     let patch_path = tmp_dir.path().join("patch.diff");
     fs::write(&patch_path, patch).unwrap();
     run_git(
         &repo_path,
-        &[
-            "apply",
-            "--reverse",
-            patch_path.to_str().unwrap(),
-        ],
+        &["apply", "--reverse", patch_path.to_str().unwrap()],
     );
 
     // Check the staged diff again
@@ -627,18 +627,24 @@ fn test_create_unstage_line_patch_with_multiple_hunks() {
     let file_diff_after_patch = &files_after_patch[0];
 
     // The line should be unstaged
-    assert!(!file_diff_after_patch
-        .lines
-        .iter()
-        .any(|line| line.contains("+modified line 50")));
+    assert!(
+        !file_diff_after_patch
+            .lines
+            .iter()
+            .any(|line| line.contains("+modified line 50"))
+    );
 
     // Other modifications should still be staged
-    assert!(file_diff_after_patch
-        .lines
-        .iter()
-        .any(|line| line.contains("+modified line 10")));
-    assert!(file_diff_after_patch
-        .lines
-        .iter()
-        .any(|line| line.contains("+modified line 90")));
+    assert!(
+        file_diff_after_patch
+            .lines
+            .iter()
+            .any(|line| line.contains("+modified line 10"))
+    );
+    assert!(
+        file_diff_after_patch
+            .lines
+            .iter()
+            .any(|line| line.contains("+modified line 90"))
+    );
 }

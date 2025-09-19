@@ -1,12 +1,9 @@
 use crate::app_state::AppState;
 use crate::git::FileStatus;
 use crate::ui::diff_view::{
-    compute_word_diffs,
-    get_scrolled_line,
-    WordDiffLine,
-    LINE_CONTENT_OFFSET,
+    LINE_CONTENT_OFFSET, WordDiffLine, compute_word_diffs, get_scrolled_line,
 };
-use pancurses::{chtype, A_REVERSE, COLOR_PAIR, Window};
+use pancurses::{A_REVERSE, COLOR_PAIR, Window, chtype};
 use unicode_width::UnicodeWidthStr;
 
 pub fn render(window: &Window, state: &AppState) {
@@ -29,7 +26,7 @@ pub fn render(window: &Window, state: &AppState) {
     } else {
         window.clrtoeol();
     }
-    window.addstr(&format!(" o {}", &state.previous_commit_message));
+    window.addstr(format!(" o {}", &state.previous_commit_message));
     window.attroff(COLOR_PAIR(pair));
 
     // Render sticky header
@@ -60,10 +57,10 @@ pub fn render(window: &Window, state: &AppState) {
             window.addstr(" | ");
             window.attroff(COLOR_PAIR(pair));
             window.attron(COLOR_PAIR(status_pair));
-            window.addstr(&format!("{}", status_char));
+            window.addstr(format!("{status_char}"));
             window.attroff(COLOR_PAIR(status_pair));
             window.attron(COLOR_PAIR(pair));
-            window.addstr(&format!(" {}", file.file_name));
+            window.addstr(format!(" {}", file.file_name));
             window.attroff(COLOR_PAIR(pair));
         }
     }
@@ -323,18 +320,16 @@ pub fn render(window: &Window, state: &AppState) {
                 i += 1;
             }
         }
-    } else if state.file_cursor == num_files + 1 {
-        if state.is_commit_mode {
-            let (prefix, message) = if state.is_amend_mode {
-                (" A ", &state.amend_message)
-            } else {
-                (" o ", &state.commit_message)
-            };
-            let prefix_width = prefix.width();
-            let message_before_cursor: String = message.chars().take(state.commit_cursor).collect();
-            let cursor_display_pos = prefix_width + message_before_cursor.width();
-            window.mv(commit_line_y, cursor_display_pos as i32);
-        }
+    } else if state.file_cursor == num_files + 1 && state.is_commit_mode {
+        let (prefix, message) = if state.is_amend_mode {
+            (" A ", &state.amend_message)
+        } else {
+            (" o ", &state.commit_message)
+        };
+        let prefix_width = prefix.width();
+        let message_before_cursor: String = message.chars().take(state.commit_cursor).collect();
+        let cursor_display_pos = prefix_width + message_before_cursor.width();
+        window.mv(commit_line_y, cursor_display_pos as i32);
     }
     window.refresh();
 }
@@ -405,10 +400,10 @@ fn render_line(
     let mut remaining_scroll = state.horizontal_scroll;
 
     let render_part = |win: &Window,
-                         text: &str,
-                         pair: chtype,
-                         attr: pancurses::chtype,
-                         remaining_scroll: &mut usize| {
+                       text: &str,
+                       pair: chtype,
+                       attr: pancurses::chtype,
+                       remaining_scroll: &mut usize| {
         if *remaining_scroll == 0 {
             win.attron(COLOR_PAIR(pair));
             win.attron(attr);

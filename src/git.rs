@@ -1,6 +1,6 @@
+use anyhow::Result;
 use std::path::{Path, PathBuf};
 use std::process::Command as OsCommand;
-use anyhow::Result;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FileStatus {
@@ -162,8 +162,6 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
     let diff_str = String::from_utf8_lossy(&output.stdout);
     parse_diff(&diff_str)
 }
-
-
 
 pub fn get_previous_commit_diff(repo_path: &Path) -> Result<Vec<FileDiff>> {
     let output = OsCommand::new("git")
