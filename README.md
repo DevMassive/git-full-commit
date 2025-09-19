@@ -1,6 +1,6 @@
 # おい、お前。フルコミットしてるか？
 
-これはフルコミットする漢のための Git Commit CLI ツール。
+これは常にフルコミットする漢の Git Commit CLI ツール。
 
 ```
 % git add -A
@@ -15,7 +15,7 @@
 
 Cargoをいれてから、このレポジトリをcloneして`cargo install`する。
 
-```bash
+```
 % git clone https://github.com/DevMassive/git-full-commit.git
 % cd git-full-commit
 % cargo install --path .
@@ -47,7 +47,7 @@ git管理しているディレクトリ内で実行。
 
 ## Undo/Redo
 
-漢なら使わないと思うがCommit以外の操作はUndo/Redoができる
+漢なら使わないと思うがCommit以外の操作はUndo/Redoができる。
 
 - u/r: undo/redo
 
@@ -63,4 +63,17 @@ git管理しているディレクトリ内で実行。
 - [Lazygit](https://github.com/jesseduffield/lazygit)
 - [GitUI](https://github.com/gitui-org/gitui)
 
+# 動作環境
+
+俺のマック
+
+# コントリビューション
+
+コントリビューションは大歓迎！
+issueの起票やpull requestをお気軽に！
+AIでもいいよ！
+
+# License
+
+This project is licensed under the MIT License.
 
