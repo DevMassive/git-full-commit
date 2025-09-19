@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use git_reset_pp::run;
+use git_full_commit::run;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
