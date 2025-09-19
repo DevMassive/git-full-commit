@@ -1,0 +1,97 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+  BINARY_NAME: git-full-commit
+
+jobs:
+  build_release:
+    name: Build Release Binaries
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest # Intel Mac
+            target: x86_64-apple-darwin
+          - os: macos-14 # Apple Silicon Mac
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies (for pancurses)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libncurses5-dev libncursesw5-dev
+
+      - name: Build binary
+        run: cargo build --release --target ${{ matrix.target }} --verbose
+
+      - name: Prepare package
+        shell: bash
+        run: |
+          # Define binary name and archive name based on OS
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            BIN_NAME="${{ env.BINARY_NAME }}.exe"
+            ARCHIVE_NAME="${{ env.BINARY_NAME }}-${{ github.ref_name }}-${{ matrix.target }}.zip"
+          else
+            BIN_NAME="${{ env.BINARY_NAME }}"
+            ARCHIVE_NAME="${{ env.BINARY_NAME }}-${{ github.ref_name }}-${{ matrix.target }}.tar.gz"
+          fi
+
+          # Create a staging directory
+          mkdir staging
+
+          # Copy binary to staging
+          cp "target/${{ matrix.target }}/release/${BIN_NAME}" staging/
+
+          # Create archive from staging directory
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            (cd staging && 7z a "../${ARCHIVE_NAME}" *)
+          else
+            (cd staging && tar czvf "../${ARCHIVE_NAME}" *)
+          fi
+
+          # Set asset path for upload
+          echo "ASSET_PATH=${ARCHIVE_NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifact for release
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset-${{ matrix.target }}
+          path: ${{ env.ASSET_PATH }}
+
+  release:
+    name: Create GitHub Release
+    needs: build_release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create releases
+    steps:
+      - name: Download all release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: release-asset-*
+          merge-multiple: true
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-assets/*
