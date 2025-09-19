@@ -36,18 +36,27 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
 
     let relative_line_index = line_index - (hunk.start_line + 1);
 
-    let old_line_offset = hunk.lines[1..=relative_line_index]
-        .iter()
-        .filter(|l| !l.starts_with('+'))
-        .count();
+    let mut old_line_counter = hunk.old_start;
+    let mut new_line_counter = hunk.new_start;
 
-    let new_line_offset = hunk.lines[1..=relative_line_index]
-        .iter()
-        .filter(|l| !l.starts_with('-'))
-        .count();
+    for i in 0..relative_line_index {
+        let l = &hunk.lines[i + 1];
+        if l.starts_with('+') {
+            new_line_counter += 1;
+        } else if l.starts_with('-') {
+            old_line_counter += 1;
+        } else {
+            old_line_counter += 1;
+            new_line_counter += 1;
+        }
+    }
 
-    let patch_old_line = old_start + old_line_offset as u32;
-    let patch_new_line = new_start + new_line_offset as u32;
+    let (patch_old_line, patch_new_line) = if line_to_unstage.starts_with('+') {
+        (old_line_counter - 1, new_line_counter)
+    } else {
+        // '-'
+        (old_line_counter, new_line_counter - 1)
+    };
 
     let new_hunk_header = if line_to_unstage.starts_with('-') {
         format!("@@ -{patch_old_line},1 +{patch_new_line},0 @@")
@@ -64,6 +73,14 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
     patch.push_str(line_to_unstage);
     patch.push('\n');
 
+    eprintln!("line_index: {line_index}");
+    eprintln!("line_to_unstage: {line_to_unstage}");
+    eprintln!("hunk_header: {hunk_header}");
+    eprintln!("old_start: {old_start}, new_start: {new_start}");
+    eprintln!("relative_line_index: {relative_line_index}");
+    // eprintln!("old_line_offset: {old_line_offset}, new_line_offset: {new_line_offset}");
+    eprintln!("patch_old_line: {patch_old_line}, patch_new_line: {patch_new_line}");
+    eprintln!("new_hunk_header: {new_hunk_header}");
     eprintln!("Generated patch:\n{patch}");
 
     Some(patch)
