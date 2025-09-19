@@ -1592,7 +1592,7 @@ mod tests {
     fn test_half_page_up_and_scroll() {
         let lines_count = 100;
         let max_y = 30; // content_height = 26
-        let scroll_amount = ((max_y as usize).saturating_sub(1 + 3) / 2).max(1);
+        let _scroll_amount = ((max_y as usize).saturating_sub(1 + 3) / 2).max(1);
         let initial_state = create_test_state(lines_count, 1, 10, 10);
 
         let final_state = update_state(initial_state, Some(Input::Character('\u{15}')), max_y);
