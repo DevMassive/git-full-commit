@@ -16,9 +16,9 @@
 Cargoをいれてから、このレポジトリをcloneして`cargo install`する。
 
 ```bash
-git clone https://github.com/DevMassive/git-full-commit.git
-cd git-full-commit
-cargo install --path .
+% git clone https://github.com/DevMassive/git-full-commit.git
+% cd git-full-commit
+% cargo install --path .
 ```
 
 # 使い方
