@@ -670,7 +670,9 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
 
                 return state;
             }
-            Some(Input::KeyBackspace) => {
+            Some(Input::KeyBackspace)
+            | Some(Input::Character('\x7f'))
+            | Some(Input::Character('\x08')) => {
                 if state.commit_cursor > 0 {
                     let message = if state.is_amend_mode {
                         &mut state.amend_message
@@ -760,28 +762,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
                                 &state.repo_path,
                                 &state.commit_message,
                             );
-                        }
-                    }
-                } else if c == '\u{7f}' || c == '\u{08}' {
-                    // Backspace
-                    if state.commit_cursor > 0 {
-                        let message = if state.is_amend_mode {
-                            &mut state.amend_message
-                        } else {
-                            &mut state.commit_message
-                        };
-                        let char_index_to_remove = state.commit_cursor - 1;
-                        if let Some((byte_index, _)) =
-                            message.char_indices().nth(char_index_to_remove)
-                        {
-                            message.remove(byte_index);
-                            state.commit_cursor -= 1;
-                            if !state.is_amend_mode {
-                                let _ = commit_storage::save_commit_message(
-                                    &state.repo_path,
-                                    &state.commit_message,
-                                );
-                            }
                         }
                     }
                 } else if !c.is_control() {
