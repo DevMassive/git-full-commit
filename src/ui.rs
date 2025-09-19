@@ -1,7 +1,10 @@
-use pancurses::{A_REVERSE, COLOR_BLACK, COLOR_PAIR, Input, Window, curs_set, endwin, init_color, init_pair, initscr, noecho, start_color};
-use unicode_width::UnicodeWidthStr;
-use std::process::Command as OsCommand;
+use pancurses::{
+    A_REVERSE, COLOR_BLACK, COLOR_PAIR, Input, Window, curs_set, endwin, init_color, init_pair,
+    initscr, noecho, start_color,
+};
 use similar::TextDiff;
+use std::process::Command as OsCommand;
+use unicode_width::UnicodeWidthStr;
 
 // Represents a line of text with word-level diff information.
 // Each element in the vector is a tuple of (text, is_changed).
@@ -9,12 +12,12 @@ use similar::TextDiff;
 pub struct WordDiffLine(pub Vec<(String, bool)>);
 
 use crate::app_state::AppState;
-use crate::commit_storage;
-use crate::git::{FileStatus, get_previous_commit_message};
 use crate::command::{
     ApplyPatchCommand, CheckoutFileCommand, IgnoreFileCommand, RemoveFileCommand,
     UnstageFileCommand,
 };
+use crate::commit_storage;
+use crate::git::{FileStatus, get_previous_commit_message};
 
 fn compute_word_diffs(old: &str, new: &str) -> (Vec<WordDiffLine>, Vec<WordDiffLine>) {
     if old.trim().is_empty() || new.trim().is_empty() {
@@ -243,9 +246,14 @@ fn render(window: &Window, state: &AppState) {
 
     if state.file_cursor == 0 {
         // Render previous commit diff
-        let all_lines: Vec<String> = state.previous_commit_files.iter().flat_map(|f| f.lines.clone()).collect();
+        let all_lines: Vec<String> = state
+            .previous_commit_files
+            .iter()
+            .flat_map(|f| f.lines.clone())
+            .collect();
         if !all_lines.is_empty() {
-            let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); all_lines.len()];
+            let mut line_numbers: Vec<(Option<usize>, Option<usize>)> =
+                vec![(None, None); all_lines.len()];
             let mut line_offset = 0;
             for file in &state.previous_commit_files {
                 for hunk in &file.hunks {
@@ -265,7 +273,8 @@ fn render(window: &Window, state: &AppState) {
                             line_numbers[line_index] = (Some(old_line_counter), None);
                             old_line_counter += 1;
                         } else if !hunk_line.starts_with("@@") {
-                            line_numbers[line_index] = (Some(old_line_counter), Some(new_line_counter));
+                            line_numbers[line_index] =
+                                (Some(old_line_counter), Some(new_line_counter));
                             old_line_counter += 1;
                             new_line_counter += 1;
                         }
@@ -366,8 +375,7 @@ fn render(window: &Window, state: &AppState) {
                         .collect::<Vec<_>>()
                         .join("\n");
 
-                    let (old_word_diffs, new_word_diffs) =
-                        compute_word_diffs(&old_text, &new_text);
+                    let (old_word_diffs, new_word_diffs) = compute_word_diffs(&old_text, &new_text);
 
                     for (k, &idx) in minus_lines_indices.iter().enumerate() {
                         if idx < state.scroll {
@@ -523,11 +531,12 @@ fn render_line(
         (default_pair, " ")
     };
 
-    let num_pair = if line.starts_with("@@ ") || line.starts_with("--- ") || line.starts_with("+++ ") {
-        grey_pair
-    } else {
-        base_pair
-    };
+    let num_pair =
+        if line.starts_with("@@ ") || line.starts_with("--- ") || line.starts_with("+++ ") {
+            grey_pair
+        } else {
+            base_pair
+        };
 
     window.attron(COLOR_PAIR(num_pair));
     window.mvaddstr(line_render_index, 0, &line_num_str);
@@ -1010,9 +1019,16 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
             let header_height = state.files.len() + 3;
             let content_height = (max_y as usize).saturating_sub(header_height);
             let lines_count = if state.file_cursor == 0 {
-                state.previous_commit_files.iter().map(|f| f.lines.len()).sum()
+                state
+                    .previous_commit_files
+                    .iter()
+                    .map(|f| f.lines.len())
+                    .sum()
             } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                state.files.get(state.file_cursor - 1).map_or(0, |f| f.lines.len())
+                state
+                    .files
+                    .get(state.file_cursor - 1)
+                    .map_or(0, |f| f.lines.len())
             } else {
                 0
             };
@@ -1035,9 +1051,16 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
             let header_height = state.files.len() + 3;
             let content_height = (max_y as usize).saturating_sub(header_height);
             let lines_count = if state.file_cursor == 0 {
-                state.previous_commit_files.iter().map(|f| f.lines.len()).sum()
+                state
+                    .previous_commit_files
+                    .iter()
+                    .map(|f| f.lines.len())
+                    .sum()
             } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                state.files.get(state.file_cursor - 1).map_or(0, |f| f.lines.len())
+                state
+                    .files
+                    .get(state.file_cursor - 1)
+                    .map_or(0, |f| f.lines.len())
             } else {
                 0
             };
@@ -1055,9 +1078,16 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
             let header_height = state.files.len() + 3;
             let content_height = (max_y as usize).saturating_sub(header_height);
             let lines_count = if state.file_cursor == 0 {
-                state.previous_commit_files.iter().map(|f| f.lines.len()).sum()
+                state
+                    .previous_commit_files
+                    .iter()
+                    .map(|f| f.lines.len())
+                    .sum()
             } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                state.files.get(state.file_cursor - 1).map_or(0, |f| f.lines.len())
+                state
+                    .files
+                    .get(state.file_cursor - 1)
+                    .map_or(0, |f| f.lines.len())
             } else {
                 0
             };
@@ -1080,9 +1110,16 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
             let header_height = state.files.len() + 3;
             let content_height = (max_y as usize).saturating_sub(header_height);
             let lines_count = if state.file_cursor == 0 {
-                state.previous_commit_files.iter().map(|f| f.lines.len()).sum()
+                state
+                    .previous_commit_files
+                    .iter()
+                    .map(|f| f.lines.len())
+                    .sum()
             } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                state.files.get(state.file_cursor - 1).map_or(0, |f| f.lines.len())
+                state
+                    .files
+                    .get(state.file_cursor - 1)
+                    .map_or(0, |f| f.lines.len())
             } else {
                 0
             };
@@ -1122,9 +1159,16 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
         }
         Some(Input::Character('j')) => {
             let lines_count = if state.file_cursor == 0 {
-                state.previous_commit_files.iter().map(|f| f.lines.len()).sum()
+                state
+                    .previous_commit_files
+                    .iter()
+                    .map(|f| f.lines.len())
+                    .sum()
             } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-                state.files.get(state.file_cursor - 1).map_or(0, |f| f.lines.len())
+                state
+                    .files
+                    .get(state.file_cursor - 1)
+                    .map_or(0, |f| f.lines.len())
             } else {
                 0
             };
@@ -1277,8 +1321,15 @@ mod tests {
 
         let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
 
-        assert_eq!(final_state.scroll, content_height, "Scroll should move down by one page");
-        assert_eq!(final_state.line_cursor, 5 + content_height, "Cursor should also move down by one page");
+        assert_eq!(
+            final_state.scroll, content_height,
+            "Scroll should move down by one page"
+        );
+        assert_eq!(
+            final_state.line_cursor,
+            5 + content_height,
+            "Cursor should also move down by one page"
+        );
     }
 
     #[test]
@@ -1291,8 +1342,14 @@ mod tests {
 
         let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
 
-        assert_eq!(final_state.scroll, max_scroll, "Scroll should not change as it's at the end");
-        assert_eq!(final_state.line_cursor, 80, "Cursor should not move as scroll did not change");
+        assert_eq!(
+            final_state.scroll, max_scroll,
+            "Scroll should not change as it's at the end"
+        );
+        assert_eq!(
+            final_state.line_cursor, 80,
+            "Cursor should not move as scroll did not change"
+        );
     }
 
     #[test]
@@ -1305,8 +1362,15 @@ mod tests {
 
         let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
 
-        assert_eq!(final_state.scroll, max_scroll, "Scroll should clamp to the max scroll position");
-        assert_eq!(final_state.line_cursor, 20 + max_scroll, "Cursor should move by the amount scrolled");
+        assert_eq!(
+            final_state.scroll, max_scroll,
+            "Scroll should clamp to the max scroll position"
+        );
+        assert_eq!(
+            final_state.line_cursor,
+            20 + max_scroll,
+            "Cursor should move by the amount scrolled"
+        );
     }
 
     // --- Page Up Tests ---
@@ -1319,8 +1383,16 @@ mod tests {
 
         let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
 
-        assert_eq!(final_state.scroll, 50 - content_height, "Scroll should move up by one page");
-        assert_eq!(final_state.line_cursor, 60 - content_height, "Cursor should also move up by one page");
+        assert_eq!(
+            final_state.scroll,
+            50 - content_height,
+            "Scroll should move up by one page"
+        );
+        assert_eq!(
+            final_state.line_cursor,
+            60 - content_height,
+            "Cursor should also move up by one page"
+        );
     }
 
     #[test]
@@ -1332,7 +1404,11 @@ mod tests {
         let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
 
         assert_eq!(final_state.scroll, 0, "Scroll should clamp at the top");
-        assert_eq!(final_state.line_cursor, 20 - 15, "Cursor should move by the amount scrolled");
+        assert_eq!(
+            final_state.line_cursor,
+            20 - 15,
+            "Cursor should move by the amount scrolled"
+        );
     }
 
     #[test]
