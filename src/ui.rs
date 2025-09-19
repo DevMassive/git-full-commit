@@ -820,6 +820,9 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
         Some(Input::Character('i')) => {
             if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
                 if let Some(file) = state.files.get(state.file_cursor - 1).cloned() {
+                    if file.file_name == ".gitignore" {
+                        return state;
+                    }
                     let command = Box::new(IgnoreFileCommand {
                         repo_path: state.repo_path.clone(),
                         file_name: file.file_name.clone(),
