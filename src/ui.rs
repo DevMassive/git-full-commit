@@ -1012,26 +1012,81 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32) -> Ap
             };
 
             if lines_count > 0 {
+                let scroll_amount = content_height;
+                let old_scroll = state.scroll;
+                let max_scroll = lines_count.saturating_sub(content_height).max(0);
+                let new_scroll = state.scroll.saturating_add(scroll_amount).min(max_scroll);
+                state.scroll = new_scroll;
+                let scrolled_by = new_scroll - old_scroll;
                 state.line_cursor = state
                     .line_cursor
-                    .saturating_add(content_height)
+                    .saturating_add(scrolled_by)
                     .min(lines_count.saturating_sub(1));
-
-                if state.line_cursor >= state.scroll + content_height {
-                    let new_scroll = state.scroll.saturating_add(content_height);
-                    let max_scroll = lines_count.saturating_sub(content_height);
-                    state.scroll = new_scroll.min(max_scroll);
-                }
             }
         }
         Some(Input::Character('b')) => {
             // Page up
             let header_height = state.files.len() + 3;
             let content_height = (max_y as usize).saturating_sub(header_height);
-            state.line_cursor = state.line_cursor.saturating_sub(content_height);
+            let lines_count = if state.file_cursor == 0 {
+                state.previous_commit_files.iter().map(|f| f.lines.len()).sum()
+            } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                state.files.get(state.file_cursor - 1).map_or(0, |f| f.lines.len())
+            } else {
+                0
+            };
 
-            if state.line_cursor < state.scroll {
-                state.scroll = state.scroll.saturating_sub(content_height);
+            if lines_count > 0 {
+                let scroll_amount = content_height;
+                let old_scroll = state.scroll;
+                state.scroll = state.scroll.saturating_sub(scroll_amount);
+                let scrolled_by = old_scroll - state.scroll;
+                state.line_cursor = state.line_cursor.saturating_sub(scrolled_by);
+            }
+        }
+        Some(Input::Character('\u{4}')) => {
+            // Half page down
+            let header_height = state.files.len() + 3;
+            let content_height = (max_y as usize).saturating_sub(header_height);
+            let lines_count = if state.file_cursor == 0 {
+                state.previous_commit_files.iter().map(|f| f.lines.len()).sum()
+            } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                state.files.get(state.file_cursor - 1).map_or(0, |f| f.lines.len())
+            } else {
+                0
+            };
+
+            if lines_count > 0 {
+                let scroll_amount = (content_height / 2).max(1);
+                let old_scroll = state.scroll;
+                let max_scroll = lines_count.saturating_sub(content_height).max(0);
+                let new_scroll = state.scroll.saturating_add(scroll_amount).min(max_scroll);
+                state.scroll = new_scroll;
+                let scrolled_by = new_scroll - old_scroll;
+                state.line_cursor = state
+                    .line_cursor
+                    .saturating_add(scrolled_by)
+                    .min(lines_count.saturating_sub(1));
+            }
+        }
+        Some(Input::Character('\u{15}')) => {
+            // Half page up
+            let header_height = state.files.len() + 3;
+            let content_height = (max_y as usize).saturating_sub(header_height);
+            let lines_count = if state.file_cursor == 0 {
+                state.previous_commit_files.iter().map(|f| f.lines.len()).sum()
+            } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
+                state.files.get(state.file_cursor - 1).map_or(0, |f| f.lines.len())
+            } else {
+                0
+            };
+
+            if lines_count > 0 {
+                let scroll_amount = (content_height / 2).max(1);
+                let old_scroll = state.scroll;
+                state.scroll = state.scroll.saturating_sub(scroll_amount);
+                let scrolled_by = old_scroll - state.scroll;
+                state.line_cursor = state.line_cursor.saturating_sub(scrolled_by);
             }
         }
         Some(Input::KeyUp) => {
@@ -1209,90 +1264,81 @@ mod tests {
     // --- Page Down Tests ---
 
     #[test]
-    fn test_page_down_moves_cursor_and_scroll() {
-        // Simulates a normal page down where both cursor and scroll position change.
+    fn test_page_down_maintains_relative_cursor() {
         let initial_state = create_test_state(100, 1, 5, 0);
-        let num_files = initial_state.files.len();
-        let max_y = 30; // Results in content_height of 26 (30 - (1 file + 3 header lines))
+        let max_y = 30;
+        let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
 
         let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
 
-        let header_height = num_files + 3;
-        let content_height = (max_y as usize).saturating_sub(header_height); // 26
-
-        assert_eq!(final_state.line_cursor, 5 + content_height, "Cursor should move down by one page");
         assert_eq!(final_state.scroll, content_height, "Scroll should move down by one page");
+        assert_eq!(final_state.line_cursor, 5 + content_height, "Cursor should also move down by one page");
     }
 
     #[test]
-    fn test_page_down_at_end_moves_cursor_only() {
-        // Simulates paging down when near the end of the file.
-        // The cursor moves, but the scroll position stays fixed at the maximum scroll position.
+    fn test_page_down_at_end_stops_at_max_scroll() {
         let lines_count = 100;
         let max_y = 30;
-        let _content_height = (max_y as usize).saturating_sub(1 + 3); // 26
-        let max_scroll = lines_count - _content_height; // 74
-
+        let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
+        let max_scroll = lines_count - content_height; // 74
         let initial_state = create_test_state(lines_count, 1, 80, max_scroll);
 
         let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
 
-        assert_eq!(final_state.line_cursor, lines_count - 1, "Cursor should move to the last line");
-        assert_eq!(final_state.scroll, max_scroll, "Scroll should not change");
+        assert_eq!(final_state.scroll, max_scroll, "Scroll should not change as it's at the end");
+        assert_eq!(final_state.line_cursor, 80, "Cursor should not move as scroll did not change");
     }
 
     #[test]
-    fn test_page_down_clamps_cursor_at_end() {
-        // Ensures that paging down past the end of the file clamps the cursor to the last line.
+    fn test_page_down_clamps_at_end() {
         let lines_count = 40;
         let max_y = 30;
         let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
         let initial_state = create_test_state(lines_count, 1, 20, 0);
+        let max_scroll = lines_count - content_height; // 14
 
         let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y);
 
-        assert_eq!(final_state.line_cursor, lines_count - 1, "Cursor should be clamped to the last line");
+        assert_eq!(final_state.scroll, max_scroll, "Scroll should clamp to the max scroll position");
+        assert_eq!(final_state.line_cursor, 20 + max_scroll, "Cursor should move by the amount scrolled");
     }
 
     // --- Page Up Tests ---
 
     #[test]
-    fn test_page_up_moves_cursor_and_scroll() {
-        // Simulates a normal page up where both cursor and scroll change.
+    fn test_page_up_maintains_relative_cursor() {
         let max_y = 30;
         let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
         let initial_state = create_test_state(100, 1, 60, 50);
 
         let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
 
-        assert_eq!(final_state.line_cursor, 60 - content_height, "Cursor should move up by one page");
         assert_eq!(final_state.scroll, 50 - content_height, "Scroll should move up by one page");
+        assert_eq!(final_state.line_cursor, 60 - content_height, "Cursor should also move up by one page");
     }
 
     #[test]
-    fn test_page_up_moves_cursor_only() {
-        // Simulates paging up where the new cursor position is still visible, so only the cursor moves.
+    fn test_page_up_stops_at_top() {
         let max_y = 30;
-        let content_height = (max_y as usize).saturating_sub(1 + 3); // 26
-        let initial_state = create_test_state(100, 1, 46, 20);
+        let _content_height = (max_y as usize).saturating_sub(1 + 3); // 26
+        let initial_state = create_test_state(100, 1, 20, 15);
 
         let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
 
-        assert_eq!(final_state.line_cursor, 46 - content_height, "Cursor should move up by one page");
-        assert_eq!(final_state.scroll, 20, "Scroll should not change");
+        assert_eq!(final_state.scroll, 0, "Scroll should clamp at the top");
+        assert_eq!(final_state.line_cursor, 20 - 15, "Cursor should move by the amount scrolled");
     }
 
     #[test]
-    fn test_page_up_at_top_moves_cursor_to_zero() {
-        // Simulates paging up from near the top of the file.
+    fn test_page_up_at_top_does_nothing() {
         let max_y = 30;
         let _content_height = (max_y as usize).saturating_sub(1 + 3); // 26
         let initial_state = create_test_state(100, 1, 10, 0);
 
         let final_state = update_state(initial_state, Some(Input::Character('b')), max_y);
 
-        assert_eq!(final_state.line_cursor, 0, "Cursor should move to the first line");
         assert_eq!(final_state.scroll, 0, "Scroll should not change");
+        assert_eq!(final_state.line_cursor, 10, "Cursor should not change");
     }
 
     #[test]
@@ -1410,5 +1456,61 @@ mod tests {
 
         // Cleanup
         std::fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn test_half_page_down() {
+        let lines_count = 100;
+        let max_y = 30; // content_height = 26
+        let content_height = (max_y as usize).saturating_sub(1 + 3);
+        let scroll_amount = (content_height / 2).max(1);
+        let initial_state = create_test_state(lines_count, 1, 10, 5);
+
+        let final_state = update_state(initial_state, Some(Input::Character('\u{4}')), max_y);
+
+        let expected_scroll = 5 + scroll_amount;
+        assert_eq!(final_state.scroll, expected_scroll);
+        assert_eq!(final_state.line_cursor, 10 + scroll_amount);
+    }
+
+    #[test]
+    fn test_half_page_down_and_scroll() {
+        let lines_count = 100;
+        let max_y = 30; // content_height = 26
+        let content_height = (max_y as usize).saturating_sub(1 + 3);
+        let scroll_amount = (content_height / 2).max(1);
+        let initial_state = create_test_state(lines_count, 1, 25, 0);
+
+        let final_state = update_state(initial_state, Some(Input::Character('\u{4}')), max_y);
+
+        assert_eq!(final_state.line_cursor, 25 + scroll_amount);
+        assert_eq!(final_state.scroll, 13);
+    }
+
+    #[test]
+    fn test_half_page_up() {
+        let lines_count = 100;
+        let max_y = 30; // content_height = 26
+        let content_height = (max_y as usize).saturating_sub(1 + 3);
+        let scroll_amount = (content_height / 2).max(1);
+        let initial_state = create_test_state(lines_count, 1, 20, 15);
+
+        let final_state = update_state(initial_state, Some(Input::Character('\u{15}')), max_y);
+
+        assert_eq!(final_state.line_cursor, 20 - scroll_amount);
+        assert_eq!(final_state.scroll, 2);
+    }
+
+    #[test]
+    fn test_half_page_up_and_scroll() {
+        let lines_count = 100;
+        let max_y = 30; // content_height = 26
+        let scroll_amount = ((max_y as usize).saturating_sub(1 + 3) / 2).max(1);
+        let initial_state = create_test_state(lines_count, 1, 10, 10);
+
+        let final_state = update_state(initial_state, Some(Input::Character('\u{15}')), max_y);
+
+        assert_eq!(final_state.line_cursor, 0); // 10 - 13 saturates at 0
+        assert_eq!(final_state.scroll, 0); // 10 - 13 saturates at 0
     }
 }
