@@ -56,3 +56,24 @@ pub fn create_stage_line_patch(file: &FileDiff, line_index: usize) -> Option<Str
 pub fn create_stage_hunk_patch(file: &FileDiff, hunk: &Hunk) -> String {
     create_unstage_hunk_patch(file, hunk)
 }
+
+pub fn get_line_number(file: &FileDiff, line_index: usize) -> Option<usize> {
+    let line_content = file.lines.get(line_index)?;
+    if line_content.starts_with("@@") {
+        return None;
+    }
+
+    let hunk = find_hunk(file, line_index)?;
+    let relative_line_index = line_index - hunk.start_line;
+
+    let (_, new_line_num) = hunk.line_numbers.get(relative_line_index)?;
+
+    if line_content.starts_with('-') {
+        // It's a deleted line. The stored `new_line_num` is the line number
+        // of the line *before* the deletion. We want to point to the line
+        // that now occupies that space.
+        Some(new_line_num + 1)
+    } else {
+        Some(*new_line_num)
+    }
+}
