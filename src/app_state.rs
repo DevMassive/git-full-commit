@@ -55,10 +55,11 @@ impl AppState {
     }
 
     pub fn get_cursor_line_index(&self) -> usize {
-        if self.file_cursor == 0 {
-            return self.line_cursor;
-        }
-        if self.file_cursor > 0 && self.file_cursor <= self.files.len() {
+        let num_files = self.files.len();
+        if self.file_cursor == 0
+            || (self.file_cursor > 0 && self.file_cursor <= num_files)
+            || self.file_cursor == num_files + 2
+        {
             self.line_cursor
         } else {
             0

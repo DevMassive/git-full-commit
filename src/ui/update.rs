@@ -171,14 +171,17 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         }
         Input::Character('j') => {
             state.is_diff_cursor_active = true;
-            let lines_count = if state.file_cursor == 0 {
+            let num_files = state.files.len();
+            let lines_count = if state.file_cursor > 0 && state.file_cursor <= num_files {
+                state.current_file().map_or(0, |f| f.lines.len())
+            } else if state.file_cursor == num_files + 2 {
                 state
                     .previous_commit_files
                     .iter()
                     .map(|f| f.lines.len())
                     .sum()
             } else {
-                state.current_file().map_or(0, |f| f.lines.len())
+                0
             };
 
             if lines_count > 0 && state.line_cursor < lines_count.saturating_sub(1) {

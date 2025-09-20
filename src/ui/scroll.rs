@@ -14,17 +14,18 @@ enum ScrollAmount {
 fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollAmount, max_y: i32) {
     let header_height = state.files.len() + 3;
     let content_height = (max_y as usize).saturating_sub(header_height);
-    let lines_count = if state.file_cursor == 0 {
+    let num_files = state.files.len();
+    let lines_count = if state.file_cursor > 0 && state.file_cursor <= num_files {
+        state
+            .files
+            .get(state.file_cursor - 1)
+            .map_or(0, |f| f.lines.len())
+    } else if state.file_cursor == num_files + 2 {
         state
             .previous_commit_files
             .iter()
             .map(|f| f.lines.len())
             .sum()
-    } else if state.file_cursor > 0 && state.file_cursor <= state.files.len() {
-        state
-            .files
-            .get(state.file_cursor - 1)
-            .map_or(0, |f| f.lines.len())
     } else {
         0
     };
