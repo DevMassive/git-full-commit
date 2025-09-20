@@ -35,7 +35,11 @@ pub fn render(window: &Window, state: &AppState) {
                 }
             }
             window.mv(line_y, 0);
-            window.addstr(" Staged changes");
+            let mut staged_changes_text = " Staged changes".to_string();
+            if state.has_unstaged_changes {
+                staged_changes_text.push_str(" (Press R to re-add)");
+            }
+            window.addstr(&staged_changes_text);
             window.attroff(COLOR_PAIR(pair));
         } else if item_index > 0 && item_index <= num_files {
             let file_index = item_index - 1;

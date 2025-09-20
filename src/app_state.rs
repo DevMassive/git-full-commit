@@ -1,6 +1,6 @@
 use crate::command::{Command, CommandHistory};
 use crate::commit_storage;
-use crate::git::{FileDiff, get_diff, get_previous_commit_diff, get_previous_commit_info};
+use crate::git::{self, FileDiff, get_diff, get_previous_commit_diff, get_previous_commit_info};
 use std::path::PathBuf;
 
 pub struct AppState {
@@ -22,6 +22,7 @@ pub struct AppState {
     pub previous_commit_message: String,
     pub previous_commit_files: Vec<FileDiff>,
     pub is_diff_cursor_active: bool,
+    pub has_unstaged_changes: bool,
 }
 
 impl AppState {
@@ -32,6 +33,7 @@ impl AppState {
             get_previous_commit_info(&repo_path).unwrap_or((String::new(), String::new()));
         let previous_commit_files =
             get_previous_commit_diff(&repo_path).unwrap_or_else(|_| Vec::new());
+        let has_unstaged_changes = git::has_unstaged_changes(&repo_path).unwrap_or(false);
         Self {
             repo_path,
             scroll: 0,
@@ -51,6 +53,7 @@ impl AppState {
             previous_commit_message,
             previous_commit_files,
             is_diff_cursor_active: false,
+            has_unstaged_changes,
         }
     }
 
@@ -72,6 +75,7 @@ impl AppState {
             get_previous_commit_info(&self.repo_path).unwrap_or((String::new(), String::new()));
         self.previous_commit_files =
             get_previous_commit_diff(&self.repo_path).unwrap_or_else(|_| Vec::new());
+        self.has_unstaged_changes = git::has_unstaged_changes(&self.repo_path).unwrap_or(false);
 
         if self.files.is_empty() {
             self.file_cursor = 1; // commit message line

@@ -242,6 +242,34 @@ pub fn get_previous_commit_diff(repo_path: &Path) -> Result<Vec<FileDiff>> {
     Ok(parse_diff(&diff_str))
 }
 
+pub fn has_unstaged_changes(repo_path: &Path) -> Result<bool> {
+    let output = OsCommand::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .current_dir(repo_path)
+        .output()?;
+
+    if !output.status.success() {
+        return Ok(false);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let mut chars = line.chars();
+        let x = chars.next();
+        let y = chars.next();
+
+        if x == Some('?') && y == Some('?') {
+            return Ok(true); // Untracked
+        }
+        if y.is_some() && y != Some(' ') {
+            return Ok(true); // Modified in work tree
+        }
+    }
+
+    Ok(false)
+}
+
 pub fn is_git_repository(path: &Path) -> bool {
     path.join(".git").is_dir()
 }
