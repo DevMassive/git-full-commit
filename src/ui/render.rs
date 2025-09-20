@@ -1,13 +1,8 @@
 use crate::app_state::{AppState, Screen};
 use crate::git::FileStatus;
-use crate::ui::diff_view::{
-    LINE_CONTENT_OFFSET,
-    WordDiffLine,
-    compute_word_diffs,
-    get_scrolled_line,
-};
+use crate::ui::diff_view::{render_diff_view, render_line};
 use crate::ui::unstaged_view::render_unstaged_view;
-use pancurses::{chtype, A_REVERSE, COLOR_PAIR, Window};
+use pancurses::{COLOR_PAIR, Window};
 use unicode_width::UnicodeWidthStr;
 
 pub fn render(window: &Window, state: &AppState) {
@@ -82,10 +77,10 @@ fn render_main_view(window: &Window, state: &AppState) {
             window.addstr("   ");
             window.attroff(COLOR_PAIR(pair));
             window.attron(COLOR_PAIR(status_pair));
-            window.addstr(format!( "{status_char}"));
+            window.addstr(format!("{status_char}"));
             window.attroff(COLOR_PAIR(status_pair));
             window.attron(COLOR_PAIR(pair));
-            window.addstr(format!( " {}", file.file_name));
+            window.addstr(format!(" {}", file.file_name));
             window.attroff(COLOR_PAIR(pair));
         } else if item_index == num_files + 1 {
             // Render commit message line
@@ -130,7 +125,7 @@ fn render_main_view(window: &Window, state: &AppState) {
             if state.is_amend_mode {
                 window.addstr(" |");
             } else {
-                window.addstr(format!( " o {}", &state.previous_commit_message));
+                window.addstr(format!(" o {}", &state.previous_commit_message));
             }
             window.attroff(COLOR_PAIR(pair));
         }
@@ -182,7 +177,6 @@ fn render_main_view(window: &Window, state: &AppState) {
                 let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
                 render_line(
                     window,
-                    state,
                     line,
                     None,
                     line_index_in_file,
@@ -190,303 +184,25 @@ fn render_main_view(window: &Window, state: &AppState) {
                     cursor_position,
                     old_line_num,
                     new_line_num,
+                    state.horizontal_scroll,
+                    state.is_diff_cursor_active,
                 );
             }
         }
     } else if state.file_cursor > 0 && state.file_cursor <= num_files {
         let selected_file = &state.files[state.file_cursor - 1];
-        let lines = &selected_file.lines;
-
-        let mut line_numbers: Vec<(usize, usize)> = vec![(0, 0); lines.len()];
-        for hunk in &selected_file.hunks {
-            for (hunk_line_index, (old, new)) in hunk.line_numbers.iter().enumerate() {
-                let line_index = hunk.start_line + hunk_line_index;
-                if line_index >= lines.len() {
-                    continue;
-                }
-                line_numbers[line_index] = (*old, *new);
-            }
-        }
-
-        let mut i = 0;
-        let mut render_index = 0;
-        while i < lines.len() {
-            if render_index >= content_height {
-                break;
-            }
-
-            let line = &lines[i];
-
-            if line.starts_with('-') && !line.starts_with("--- ") {
-                let mut minus_lines_indices = Vec::new();
-                let mut current_pos = i;
-                while current_pos < lines.len()
-                    && lines[current_pos].starts_with('-')
-                    && !lines[current_pos].starts_with("--- ")
-                {
-                    minus_lines_indices.push(current_pos);
-                    current_pos += 1;
-                }
-
-                let mut plus_lines_indices = Vec::new();
-                let mut next_pos = current_pos;
-                while next_pos < lines.len()
-                    && lines[next_pos].starts_with('+')
-                    && !lines[next_pos].starts_with("+++ ")
-                {
-                    plus_lines_indices.push(next_pos);
-                    next_pos += 1;
-                }
-
-                if !plus_lines_indices.is_empty() {
-                    let old_text = minus_lines_indices
-                        .iter()
-                        .map(|&idx| &lines[idx][1..])
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    let new_text = plus_lines_indices
-                        .iter()
-                        .map(|&idx| &lines[idx][1..])
-                        .collect::<Vec<_>>()
-                        .join("\n");
-
-                    let (old_word_diffs, new_word_diffs) = compute_word_diffs(&old_text, &new_text);
-
-                    for (k, &idx) in minus_lines_indices.iter().enumerate() {
-                        if idx < state.scroll {
-                            continue;
-                        }
-                        if render_index >= content_height {
-                            break;
-                        }
-                        let (old_line_num, new_line_num) = line_numbers[idx];
-                        render_line(
-                            window,
-                            state,
-                            &lines[idx],
-                            old_word_diffs.get(k),
-                            idx,
-                            render_index as i32 + header_height as i32,
-                            cursor_position,
-                            old_line_num,
-                            new_line_num,
-                        );
-                        render_index += 1;
-                    }
-
-                    for (k, &idx) in plus_lines_indices.iter().enumerate() {
-                        if idx < state.scroll {
-                            continue;
-                        }
-                        if render_index >= content_height {
-                            break;
-                        }
-                        let (old_line_num, new_line_num) = line_numbers[idx];
-                        render_line(
-                            window,
-                            state,
-                            &lines[idx],
-                            new_word_diffs.get(k),
-                            idx,
-                            render_index as i32 + header_height as i32,
-                            cursor_position,
-                            old_line_num,
-                            new_line_num,
-                        );
-                        render_index += 1;
-                    }
-                    i = next_pos;
-                } else {
-                    for &idx in &minus_lines_indices {
-                        if idx < state.scroll {
-                            continue;
-                        }
-                        if render_index >= content_height {
-                            break;
-                        }
-                        let (old_line_num, new_line_num) = line_numbers[idx];
-                        render_line(
-                            window,
-                            state,
-                            &lines[idx],
-                            None,
-                            idx,
-                            render_index as i32 + header_height as i32,
-                            cursor_position,
-                            old_line_num,
-                            new_line_num,
-                        );
-                        render_index += 1;
-                    }
-                    i = current_pos;
-                }
-            } else {
-                if i >= state.scroll {
-                    let (old_line_num, new_line_num) = line_numbers[i];
-                    render_line(
-                        window,
-                        state,
-                        line,
-                        None,
-                        i,
-                        render_index as i32 + header_height as i32,
-                        cursor_position,
-                        old_line_num,
-                        new_line_num,
-                    );
-                    render_index += 1;
-                }
-                i += 1;
-            }
-        }
+        render_diff_view(
+            window,
+            selected_file,
+            content_height,
+            state.scroll,
+            state.horizontal_scroll,
+            header_height,
+            cursor_position,
+            state.is_diff_cursor_active,
+        );
     }
 
     window.mv(carret_y, carret_x);
     window.refresh();
-}
-
-fn render_line(
-    window: &Window,
-    state: &AppState,
-    line: &str,
-    word_diff_line: Option<&WordDiffLine>,
-    line_index_in_file: usize,
-    line_render_index: i32,
-    cursor_position: usize,
-    old_line_num: usize,
-    new_line_num: usize,
-) {
-    let is_cursor_line = line_index_in_file == cursor_position;
-
-    let (default_pair, deletion_pair, addition_pair, hunk_header_pair, grey_pair) =
-        if is_cursor_line {
-            if state.is_diff_cursor_active {
-                (5, 6, 7, 8, 10) // Active cursor pairs
-            } else {
-                (11, 12, 13, 14, 15) // Inactive cursor pairs
-            }
-        } else {
-            (1, 2, 3, 4, 9) // Non-cursor pairs
-        };
-
-    let line_num_str = format!(
-        "{:<4} {:<4}",
-        if line.starts_with('+') || old_line_num == 0 {
-            "".to_string()
-        } else {
-            old_line_num.to_string()
-        },
-        if line.starts_with('-') || new_line_num == 0 {
-            "".to_string()
-        } else {
-            new_line_num.to_string()
-        }
-    );
-    let line_content_offset = LINE_CONTENT_OFFSET as i32;
-
-    window.mv(line_render_index, 0);
-    window.clrtoeol();
-
-    if is_cursor_line {
-        window.attron(COLOR_PAIR(default_pair));
-        for i in 0..window.get_max_x() {
-            window.mvaddch(line_render_index, i, ' ');
-        }
-        window.attroff(COLOR_PAIR(default_pair));
-    }
-
-    let (base_pair, line_prefix) = if line.starts_with("--- ") || line.starts_with("+++ ") {
-        (grey_pair, "")
-    } else if line.starts_with('+') {
-        (addition_pair, "+")
-    } else if line.starts_with('-') {
-        (deletion_pair, "-")
-    } else if line.starts_with("@@ ") {
-        (hunk_header_pair, "")
-    } else if line.starts_with("diff --git ") {
-        (default_pair, "")
-    } else {
-        (default_pair, " ")
-    };
-
-    let num_pair = if line.starts_with('+') || line.starts_with('-') {
-        base_pair
-    } else {
-        grey_pair
-    };
-
-    if (line.starts_with(' ') || line.starts_with('+') || line.starts_with('-'))
-        && (!line.starts_with("@@ ") && !line.starts_with("+++") && !line.starts_with("---")) {
-        window.attron(COLOR_PAIR(num_pair));
-        window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.attroff(COLOR_PAIR(num_pair));
-    }
-
-    window.mv(line_render_index, line_content_offset);
-
-    let mut remaining_scroll = state.horizontal_scroll;
-
-    let render_part = |win: &Window,
-                       text: &str,
-                       pair: chtype,
-                       attr: pancurses::chtype,
-                       remaining_scroll: &mut usize| {
-        if *remaining_scroll == 0 {
-            win.attron(COLOR_PAIR(pair));
-            win.attron(attr);
-            win.addstr(text);
-            win.attroff(attr);
-            win.attroff(COLOR_PAIR(pair));
-        } else {
-            let width = UnicodeWidthStr::width(text);
-            if *remaining_scroll < width {
-                let scrolled_text = get_scrolled_line(text, *remaining_scroll);
-                win.attron(COLOR_PAIR(pair));
-                win.attron(attr);
-                win.addstr(scrolled_text);
-                win.attroff(attr);
-                win.attroff(COLOR_PAIR(pair));
-                *remaining_scroll = 0;
-            } else {
-                *remaining_scroll -= width;
-            }
-        }
-    };
-
-    if line.starts_with("@@ ") {
-        window.attroff(COLOR_PAIR(base_pair));
-        window.attron(COLOR_PAIR(grey_pair));
-        window.mvaddstr(line_render_index, 0, &line_num_str);
-        window.attroff(COLOR_PAIR(grey_pair));
-
-        if let Some(hunk_end_pos) = line.rfind("@@") {
-            let hunk_header = &line[..hunk_end_pos + 2];
-            let function_signature = &line[hunk_end_pos + 2..];
-
-            render_part(
-                window,
-                hunk_header,
-                hunk_header_pair,
-                0,
-                &mut remaining_scroll,
-            );
-            render_part(
-                window,
-                function_signature,
-                addition_pair,
-                0,
-                &mut remaining_scroll,
-            );
-        } else {
-            render_part(window, line, hunk_header_pair, 0, &mut remaining_scroll);
-        }
-    } else if let Some(word_diff) = word_diff_line {
-        render_part(window, line_prefix, base_pair, 0, &mut remaining_scroll);
-        for (text, is_changed) in &word_diff.0 {
-            let attr = if *is_changed { A_REVERSE } else { 0 };
-            render_part(window, text, base_pair, attr, &mut remaining_scroll);
-        }
-    } else {
-        render_part(window, line, base_pair, 0, &mut remaining_scroll);
-    }
 }

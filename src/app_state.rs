@@ -1,8 +1,8 @@
 use crate::command::{Command, CommandHistory};
 use crate::commit_storage;
 use crate::git::{
-    self, get_diff, get_previous_commit_diff, get_previous_commit_info, get_unstaged_diff,
-    get_untracked_files, FileDiff,
+    self, FileDiff, get_diff, get_previous_commit_diff, get_previous_commit_info,
+    get_unstaged_diff, get_untracked_files,
 };
 use std::path::PathBuf;
 
@@ -36,6 +36,8 @@ pub struct AppState {
     pub untracked_files: Vec<String>,
     pub unstaged_cursor: usize,
     pub unstaged_scroll: usize,
+    pub unstaged_diff_scroll: usize,
+    pub unstaged_horizontal_scroll: usize,
 }
 
 impl AppState {
@@ -74,6 +76,8 @@ impl AppState {
             untracked_files,
             unstaged_cursor: 0,
             unstaged_scroll: 0,
+            unstaged_diff_scroll: 0,
+            unstaged_horizontal_scroll: 0,
         }
     }
 

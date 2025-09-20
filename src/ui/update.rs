@@ -1,12 +1,7 @@
 use crate::app_state::{AppState, Screen};
 use crate::command::{
-    ApplyPatchCommand,
-    CheckoutFileCommand,
-    DiscardHunkCommand,
-    IgnoreFileCommand,
-    RemoveFileCommand,
-    StageAllCommand,
-    UnstageFileCommand,
+    ApplyPatchCommand, CheckoutFileCommand, DiscardHunkCommand, IgnoreFileCommand,
+    RemoveFileCommand, StageAllCommand, UnstageFileCommand,
 };
 use crate::commit_storage;
 use crate::git;
@@ -105,6 +100,8 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
         Input::Character('\n') => {
             if state.file_cursor == 0 {
                 state.screen = Screen::Unstaged;
+                state.line_cursor = 0;
+                state.scroll = 0;
             } else if let Some(file) = state.current_file().cloned() {
                 let line_index = state.line_cursor;
                 if let Some(hunk) = git_patch::find_hunk(&file, line_index) {
@@ -260,7 +257,7 @@ mod tests {
     fn create_state_with_files(num_files: usize) -> AppState {
         let files: Vec<FileDiff> = (0..num_files)
             .map(|i| FileDiff {
-                file_name: format!("file_{}.txt", i),
+                file_name: format!("file_{i}.txt"),
                 status: FileStatus::Modified,
                 lines: vec![],
                 hunks: vec![],
@@ -326,7 +323,7 @@ mod tests {
     ) -> AppState {
         let mut files = Vec::new();
         if lines_count > 0 {
-            let lines = (0..lines_count).map(|i| format!("line {}", i)).collect();
+            let lines = (0..lines_count).map(|i| format!("line {i}")).collect();
             files.push(FileDiff {
                 file_name: "test_file.rs".to_string(),
                 status: FileStatus::Modified,
@@ -444,7 +441,7 @@ mod tests {
 
         assert_eq!(
             final_state.line_cursor,
-            (20 as usize).saturating_sub(content_height), // 0
+            20_usize.saturating_sub(content_height), // 0
             "Cursor should move up by one page or saturate at 0"
         );
         assert_eq!(final_state.scroll, 0, "Scroll should clamp at the top");
@@ -543,7 +540,7 @@ mod tests {
             1,
             "File list should only contain .gitignore"
         );
-        assert_eq!( 
+        assert_eq!(
             updated_state.files[0].file_name, ".gitignore",
             "The remaining file should be .gitignore"
         );
@@ -558,7 +555,7 @@ mod tests {
             1,
             "File list should contain the original file again"
         );
-        assert_eq!( 
+        assert_eq!(
             updated_state.files[0].file_name, file_to_ignore,
             "The file should be the one we ignored"
         );
@@ -573,7 +570,7 @@ mod tests {
             1,
             "File list should contain the original file again"
         );
-        assert_eq!( 
+        assert_eq!(
             updated_state.files[0].file_name, file_to_ignore,
             "The file should be the one we ignored"
         );
@@ -613,7 +610,7 @@ mod tests {
         let expected_cursor = 20 + scroll_amount; // 32
         assert_eq!(final_state.line_cursor, expected_cursor);
         // Cursor is at 32, scroll is 0, content_height is 25. 32 >= 0 + 25. Scroll.
-        let expected_scroll = 0 + scroll_amount;
+        let expected_scroll = scroll_amount;
         assert_eq!(final_state.scroll, expected_scroll);
     }
 
@@ -646,10 +643,10 @@ mod tests {
 
         let final_state = update_state(initial_state, Some(Input::Character('\u{15}')), max_y, 80);
 
-        let expected_cursor = (10 as usize).saturating_sub(scroll_amount); // 0
+        let expected_cursor = 10_usize.saturating_sub(scroll_amount); // 0
         assert_eq!(final_state.line_cursor, expected_cursor);
         // Cursor is at 0, scroll is 10. 0 < 10. Scroll.
-        let expected_scroll = (10 as usize).saturating_sub(scroll_amount); // 0
+        let expected_scroll = 10_usize.saturating_sub(scroll_amount); // 0
         assert_eq!(final_state.scroll, expected_scroll);
     }
 
@@ -735,7 +732,7 @@ mod tests {
         // Create and commit a file
         let file_path = repo_path.join("test.txt");
         let initial_content = (1..=20)
-            .map(|i| format!("line {}", i))
+            .map(|i| format!("line {i}"))
             .collect::<Vec<_>>()
             .join("\n");
         std::fs::write(&file_path, &initial_content).unwrap();
@@ -907,10 +904,10 @@ mod tests {
 
         // Create app state
         let files = crate::git::get_unstaged_diff(&repo_path);
-        let mut state = AppState::new(repo_path.clone(), files);
+        let state = AppState::new(repo_path.clone(), files);
 
         // Simulate pressing 'R'
-        let mut updated_state = update_state(state, Some(Input::Character('R')), 80, 80);
+        let updated_state = update_state(state, Some(Input::Character('R')), 80, 80);
 
         // Check that both files are staged
         let status_output = OsCommand::new("git")
@@ -924,7 +921,7 @@ mod tests {
         assert!(status_str.contains("A  untracked.txt"));
 
         // Simulate undo
-        updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
+        let _updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
 
         // Check that the original state is restored
         let status_output_after_undo = OsCommand::new("git")

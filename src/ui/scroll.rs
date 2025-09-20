@@ -54,7 +54,6 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
                 state.line_cursor = next_line_cursor;
             }
         }
-
     }
 }
 

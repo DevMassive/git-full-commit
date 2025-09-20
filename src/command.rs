@@ -78,8 +78,7 @@ impl Command for DiscardHunkCommand {
         git::apply_patch(&self.repo_path, &self.patch, false, false)
             .expect("Failed to re-apply hunk to working tree.");
         // Stage
-        git::apply_patch(&self.repo_path, &self.patch, false, true)
-            .expect("Failed to stage hunk.");
+        git::apply_patch(&self.repo_path, &self.patch, false, true).expect("Failed to stage hunk.");
     }
 }
 
