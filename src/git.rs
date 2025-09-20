@@ -440,3 +440,21 @@ pub fn rm_file_from_index(repo_path: &Path, path: &str) -> Result<()> {
         .output()?;
     Ok(())
 }
+
+pub fn is_commit_on_remote(repo_path: &Path, hash: &str) -> Result<bool> {
+    if hash.is_empty() {
+        return Ok(false);
+    }
+    let output = OsCommand::new("git")
+        .arg("branch")
+        .arg("-r")
+        .arg("--contains")
+        .arg(hash)
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        return Ok(false);
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(!stdout.trim().is_empty())
+}
