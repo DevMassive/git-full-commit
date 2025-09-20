@@ -165,6 +165,36 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
     let file_list_height = (max_y as usize / 3).max(3).min(unstaged_items_count);
 
     match input {
+        Input::Character('\t') => {
+            let unstaged_file_count = state.unstaged_files.len();
+            let selected_file_name = if state.unstaged_cursor > 0
+                && state.unstaged_cursor <= unstaged_file_count
+            {
+                state
+                    .unstaged_files
+                    .get(state.unstaged_cursor - 1)
+                    .map(|f| f.file_name.clone())
+            } else if state.unstaged_cursor > unstaged_file_count + 1 {
+                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
+                state.untracked_files.get(file_index).cloned()
+            } else {
+                None
+            };
+
+            if let Some(file_name) = selected_file_name {
+                if let Some(index) = state.files.iter().position(|f| f.file_name == file_name) {
+                    state.file_cursor = index + 1;
+                } else {
+                    state.file_cursor = 1;
+                }
+            } else {
+                state.file_cursor = 1;
+            }
+
+            state.screen = Screen::Main;
+            state.line_cursor = 0;
+            state.scroll = 0;
+        }
         Input::Character('q') | Input::Character('Q') => {
             state.screen = Screen::Main;
             state.line_cursor = 0;

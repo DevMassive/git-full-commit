@@ -209,6 +209,31 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
             state.horizontal_scroll = state.horizontal_scroll.saturating_add(scroll_amount);
         }
+        Input::Character('\t') => {
+            if let Some(current_file) = state.current_file() {
+                let file_name = current_file.file_name.clone();
+                if let Some(index) = state
+                    .unstaged_files
+                    .iter()
+                    .position(|f| f.file_name == file_name)
+                {
+                    state.unstaged_cursor = index + 1;
+                } else if let Some(index) = state
+                    .untracked_files
+                    .iter()
+                    .position(|f| *f == file_name)
+                {
+                    state.unstaged_cursor = state.unstaged_files.len() + index + 2;
+                } else {
+                    state.unstaged_cursor = 1;
+                }
+            } else {
+                state.unstaged_cursor = 1;
+            }
+            state.screen = Screen::Unstaged;
+            state.line_cursor = 0;
+            state.unstaged_diff_scroll = 0;
+        }
         _ => {
             if state.file_cursor == state.files.len() + 1 {
                 state.is_commit_mode = true;
@@ -934,5 +959,73 @@ mod tests {
 
         // Cleanup
         std::fs::remove_dir_all(&repo_path).unwrap();
+    }
+
+    #[test]
+    fn test_tab_screen_switching_and_cursor_sync() {
+        let mut state = create_state_with_files(0);
+        state.files = vec![
+            FileDiff {
+                file_name: "staged_only.txt".to_string(),
+                status: FileStatus::Modified,
+                lines: vec![],
+                hunks: vec![],
+            },
+            FileDiff {
+                file_name: "common_file.txt".to_string(),
+                status: FileStatus::Modified,
+                lines: vec![],
+                hunks: vec![],
+            },
+        ];
+        state.unstaged_files = vec![
+            FileDiff {
+                file_name: "common_file.txt".to_string(),
+                status: FileStatus::Modified,
+                lines: vec![],
+                hunks: vec![],
+            },
+            FileDiff {
+                file_name: "unstaged_only.txt".to_string(),
+                status: FileStatus::Modified,
+                lines: vec![],
+                hunks: vec![],
+            },
+        ];
+        state.untracked_files = vec!["untracked_file.txt".to_string()];
+
+        // --- Switch from Main to Unstaged (with file sync) ---
+        state.screen = Screen::Main;
+        state.file_cursor = 2; // "common_file.txt"
+
+        let mut state = update_state(state, Some(Input::Character('\t')), 30, 80);
+        assert_eq!(state.screen, Screen::Unstaged);
+        assert_eq!(state.unstaged_cursor, 1); // "common_file.txt"
+
+        // --- Switch from Unstaged to Main (with file sync) ---
+        let mut state = update_state(state, Some(Input::Character('\t')), 30, 80);
+        assert_eq!(state.screen, Screen::Main);
+        assert_eq!(state.file_cursor, 2); // "common_file.txt"
+
+        // --- Switch from Main to Unstaged (untracked file) ---
+        state.files.push(FileDiff {
+            file_name: "untracked_file.txt".to_string(),
+            status: FileStatus::Added,
+            lines: vec![],
+            hunks: vec![],
+        });
+        state.file_cursor = 3; // "untracked_file.txt"
+        let mut state = update_state(state, Some(Input::Character('\t')), 30, 80);
+        assert_eq!(state.screen, Screen::Unstaged);
+        // unstaged_files(2) + untracked_files(1) + headers(2) = 5 total
+        // unstaged_cursor = unstaged_files.len() + index + 2
+        // unstaged_cursor = 2 + 0 + 2 = 4
+        assert_eq!(state.unstaged_cursor, 4);
+
+        // --- Switch from Unstaged to Main (no sync) ---
+        state.unstaged_cursor = 2; // "unstaged_only.txt"
+        let state = update_state(state, Some(Input::Character('\t')), 30, 80);
+        assert_eq!(state.screen, Screen::Main);
+        assert_eq!(state.file_cursor, 1); // Reset to default
     }
 }
