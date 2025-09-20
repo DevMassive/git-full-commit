@@ -282,7 +282,7 @@ fn test_page_up_down_with_cursor() {
         let header_height = if state.files.is_empty() {
             0
         } else {
-            state.files.len() + 3
+            state.files.len() + 4
         };
         let content_height = (max_y as usize).saturating_sub(header_height);
 

@@ -12,7 +12,7 @@ enum ScrollAmount {
 }
 
 fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollAmount, max_y: i32) {
-    let header_height = state.files.len() + 3;
+    let header_height = state.files.len() + 4;
     let content_height = (max_y as usize).saturating_sub(header_height);
     let num_files = state.files.len();
     let lines_count = if state.file_cursor > 0 && state.file_cursor <= num_files {
@@ -36,24 +36,25 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
             ScrollAmount::Half => (content_height / 2).max(1),
         };
 
-        let old_scroll = state.scroll;
+        let max_line = lines_count.saturating_sub(1);
+
         match direction {
             ScrollDirection::Down => {
-                let max_scroll = lines_count.saturating_sub(content_height).max(0);
-                let new_scroll = state.scroll.saturating_add(scroll_amount).min(max_scroll);
-                state.scroll = new_scroll;
-                let scrolled_by = new_scroll - old_scroll;
-                state.line_cursor = state
-                    .line_cursor
-                    .saturating_add(scrolled_by)
-                    .min(lines_count.saturating_sub(1));
+                let next_line_cursor = state.line_cursor.saturating_add(scroll_amount);
+                if next_line_cursor >= state.scroll + content_height {
+                    state.scroll = state.scroll.saturating_add(scroll_amount);
+                }
+                state.line_cursor = next_line_cursor.min(max_line);
             }
             ScrollDirection::Up => {
-                state.scroll = state.scroll.saturating_sub(scroll_amount);
-                let scrolled_by = old_scroll - state.scroll;
-                state.line_cursor = state.line_cursor.saturating_sub(scrolled_by);
+                let next_line_cursor = state.line_cursor.saturating_sub(scroll_amount);
+                if next_line_cursor < state.scroll {
+                    state.scroll = state.scroll.saturating_sub(scroll_amount);
+                }
+                state.line_cursor = next_line_cursor;
             }
         }
+
     }
 }
 
