@@ -41,10 +41,10 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
         match direction {
             ScrollDirection::Down => {
                 let next_line_cursor = state.line_cursor.saturating_add(scroll_amount);
-                if next_line_cursor >= state.scroll + content_height {
+                state.line_cursor = next_line_cursor.min(max_line);
+                if state.line_cursor >= state.scroll + content_height {
                     state.scroll = state.scroll.saturating_add(scroll_amount);
                 }
-                state.line_cursor = next_line_cursor.min(max_line);
             }
             ScrollDirection::Up => {
                 let next_line_cursor = state.line_cursor.saturating_sub(scroll_amount);

@@ -381,7 +381,7 @@ mod tests {
         let max_y = 30;
         let header_height = 1 + 4;
         let content_height = (max_y as usize).saturating_sub(header_height); // 25
-        let initial_state = create_test_state(lines_count, 1, 95, 75);
+        let initial_state = create_test_state(lines_count, 1, 95, 74);
 
         let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y, 80);
 
@@ -391,7 +391,7 @@ mod tests {
         );
         assert_eq!(
             final_state.scroll,
-            75 + content_height, // 100
+            74 + content_height,
             "Scroll should increase by a page even if it goes beyond max_scroll"
         );
     }
