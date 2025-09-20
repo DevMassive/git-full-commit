@@ -16,7 +16,7 @@ pub struct Hunk {
     pub lines: Vec<String>,
     pub old_start: usize,
     pub new_start: usize,
-    pub line_numbers: Vec<(Option<usize>, Option<usize>)>,
+    pub line_numbers: Vec<(usize, usize)>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +57,31 @@ pub fn get_previous_commit_info(repo_path: &Path) -> Result<(String, String)> {
     Ok((hash, message))
 }
 
+fn calc_line_numbers(hunk: &Hunk) -> Vec<(usize, usize)> {
+    let mut line_numbers: Vec<(usize, usize)> = Vec::new();
+    let mut old_line_counter: i32 = hunk.old_start as i32 - 1;
+    let mut new_line_counter: i32 = hunk.new_start as i32 - 1;
+    for (i, hunk_line) in hunk.lines.iter().enumerate() {
+        if i == 0 {
+            // Ignore the hunk header
+            line_numbers.push((0, 0));
+            continue;
+        } else if hunk_line.starts_with('+') {
+            new_line_counter += 1;
+        } else if hunk_line.starts_with('-') {
+            old_line_counter += 1;
+        } else {
+            old_line_counter += 1;
+            new_line_counter += 1;
+        }
+        line_numbers.push((
+            old_line_counter.max(0) as usize,
+            new_line_counter.max(0) as usize,
+        ));
+    }
+    line_numbers
+}
+
 fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
     let mut files = Vec::new();
     let mut current_file: Option<FileDiff> = None;
@@ -68,29 +93,7 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
         if line.starts_with("diff --git") {
             if let Some(mut file) = current_file.take() {
                 if let Some(mut hunk) = current_hunk.take() {
-                    let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = Vec::new();
-                    let mut old_line_counter: i32 = hunk.old_start as i32 - 1;
-                    let mut new_line_counter: i32 = hunk.new_start as i32 - 1;
-                    for (i, hunk_line) in hunk.lines.iter().enumerate() {
-                        if i == 0 {
-                            // Skip hunk header
-                            line_numbers.push((None, None));
-                            continue;
-                        }
-                        if hunk_line.starts_with('+') {
-                            new_line_counter += 1;
-                        } else if hunk_line.starts_with('-') {
-                            old_line_counter += 1;
-                        } else {
-                            old_line_counter += 1;
-                            new_line_counter += 1;
-                        }
-                        line_numbers.push((
-                            Some(old_line_counter.max(0) as usize),
-                            Some(new_line_counter.max(0) as usize),
-                        ));
-                    }
-                    hunk.line_numbers = line_numbers;
+                    hunk.line_numbers = calc_line_numbers(&hunk);
                     file.hunks.push(hunk);
                 }
                 file.lines = current_file_lines;
@@ -132,28 +135,7 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
         } else if line.starts_with("@@ ") {
             if let Some(mut hunk) = current_hunk.take() {
                 if let Some(file) = current_file.as_mut() {
-                    let mut line_numbers = Vec::new();
-                    let mut old_line_counter = hunk.old_start;
-                    let mut new_line_counter = hunk.new_start;
-                    for (i, hunk_line) in hunk.lines.iter().enumerate() {
-                        if i == 0 {
-                            // Skip hunk header
-                            line_numbers.push((None, None));
-                            continue;
-                        }
-                        if hunk_line.starts_with('+') {
-                            line_numbers.push((None, Some(new_line_counter)));
-                            new_line_counter += 1;
-                        } else if hunk_line.starts_with('-') {
-                            line_numbers.push((Some(old_line_counter), None));
-                            old_line_counter += 1;
-                        } else {
-                            line_numbers.push((Some(old_line_counter), Some(new_line_counter)));
-                            old_line_counter += 1;
-                            new_line_counter += 1;
-                        }
-                    }
-                    hunk.line_numbers = line_numbers;
+                    hunk.line_numbers = calc_line_numbers(&hunk);
                     file.hunks.push(hunk);
                 }
             }
@@ -189,28 +171,7 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
 
     if let Some(mut file) = current_file.take() {
         if let Some(mut hunk) = current_hunk.take() {
-            let mut line_numbers = Vec::new();
-            let mut old_line_counter = hunk.old_start;
-            let mut new_line_counter = hunk.new_start;
-            for (i, hunk_line) in hunk.lines.iter().enumerate() {
-                if i == 0 {
-                    // Skip hunk header
-                    line_numbers.push((None, None));
-                    continue;
-                }
-                if hunk_line.starts_with('+') {
-                    line_numbers.push((None, Some(new_line_counter)));
-                    new_line_counter += 1;
-                } else if hunk_line.starts_with('-') {
-                    line_numbers.push((Some(old_line_counter), None));
-                    old_line_counter += 1;
-                } else {
-                    line_numbers.push((Some(old_line_counter), Some(new_line_counter)));
-                    old_line_counter += 1;
-                    new_line_counter += 1;
-                }
-            }
-            hunk.line_numbers = line_numbers;
+            hunk.line_numbers = calc_line_numbers(&hunk);
             file.hunks.push(hunk);
         }
         file.lines = current_file_lines;

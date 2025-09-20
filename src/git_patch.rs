@@ -19,8 +19,7 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
 
     let relative_line_index = line_index - hunk.start_line;
 
-    let (_old_line, new_line) = hunk.line_numbers[relative_line_index];
-    let new_line_num = new_line.unwrap();
+    let (_old_line_num, new_line_num) = hunk.line_numbers[relative_line_index];
 
     let new_hunk_header = if line_to_unstage.starts_with('+') {
         format!("@@ -{},0 +{},1 @@", new_line_num - 1, new_line_num)

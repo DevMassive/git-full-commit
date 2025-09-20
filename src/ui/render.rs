@@ -142,8 +142,7 @@ pub fn render(window: &Window, state: &AppState) {
             .flat_map(|f| f.lines.clone())
             .collect();
         if !all_lines.is_empty() {
-            let mut line_numbers: Vec<(Option<usize>, Option<usize>)> =
-                vec![(None, None); all_lines.len()];
+            let mut line_numbers: Vec<(usize, usize)> = vec![(0, 0); all_lines.len()];
             let mut line_offset = 0;
             for file in &state.previous_commit_files {
                 for hunk in &file.hunks {
@@ -183,7 +182,7 @@ pub fn render(window: &Window, state: &AppState) {
         let selected_file = &state.files[state.file_cursor - 1];
         let lines = &selected_file.lines;
 
-        let mut line_numbers: Vec<(Option<usize>, Option<usize>)> = vec![(None, None); lines.len()];
+        let mut line_numbers: Vec<(usize, usize)> = vec![(0, 0); lines.len()];
         for hunk in &selected_file.hunks {
             for (hunk_line_index, (old, new)) in hunk.line_numbers.iter().enumerate() {
                 let line_index = hunk.start_line + hunk_line_index;
@@ -339,8 +338,8 @@ fn render_line(
     line_index_in_file: usize,
     line_render_index: i32,
     cursor_position: usize,
-    old_line_num: Option<usize>,
-    new_line_num: Option<usize>,
+    old_line_num: usize,
+    new_line_num: usize,
 ) {
     let is_cursor_line = line_index_in_file == cursor_position;
 
@@ -357,15 +356,15 @@ fn render_line(
 
     let line_num_str = format!(
         "{:<4} {:<4}",
-        if line.starts_with('+') {
+        if line.starts_with('+') || old_line_num == 0 {
             "".to_string()
         } else {
-            old_line_num.map_or(String::new(), |n| n.to_string())
+            old_line_num.to_string()
         },
-        if line.starts_with('-') {
+        if line.starts_with('-') || new_line_num == 0 {
             "".to_string()
         } else {
-            new_line_num.map_or(String::new(), |n| n.to_string())
+            new_line_num.to_string()
         }
     );
     let line_content_offset = LINE_CONTENT_OFFSET as i32;
@@ -401,9 +400,13 @@ fn render_line(
         grey_pair
     };
 
-    window.attron(COLOR_PAIR(num_pair));
-    window.mvaddstr(line_render_index, 0, &line_num_str);
-    window.attroff(COLOR_PAIR(num_pair));
+    if (line.starts_with(" ") || line.starts_with("+") || line.starts_with("-"))
+        && (!line.starts_with("@@ ") && !line.starts_with("+++") && !line.starts_with("---"))
+    {
+        window.attron(COLOR_PAIR(num_pair));
+        window.mvaddstr(line_render_index, 0, &line_num_str);
+        window.attroff(COLOR_PAIR(num_pair));
+    }
 
     window.mv(line_render_index, line_content_offset);
 
