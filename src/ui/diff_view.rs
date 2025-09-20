@@ -14,11 +14,10 @@ pub fn get_scrolled_line(full_line: &str, scroll_offset: usize) -> &str {
     }
 
     let mut current_width = 0;
-    let mut start_byte_index = 0;
 
     for (byte_index, ch) in full_line.char_indices() {
         if current_width >= scroll_offset {
-            start_byte_index = byte_index;
+            let start_byte_index = byte_index;
             return &full_line[start_byte_index..];
         }
         current_width += UnicodeWidthChar::width(ch).unwrap_or(0);
