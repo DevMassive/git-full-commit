@@ -23,11 +23,7 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
         .output()?;
 
     if staged_diff_output.stdout.is_empty() {
-        OsCommand::new("git")
-            .arg("add")
-            .arg("-A")
-            .current_dir(&repo_path)
-            .output()?;
+        git::add_all(&repo_path)?;
     }
 
     let files = git::get_diff(repo_path.clone());
