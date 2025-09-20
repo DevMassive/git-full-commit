@@ -1,4 +1,4 @@
-use crate::app_state::AppState;
+use crate::app_state::{AppState, Screen};
 use pancurses::Input;
 
 enum ScrollDirection {
@@ -9,6 +9,45 @@ enum ScrollDirection {
 enum ScrollAmount {
     Full,
     Half,
+}
+
+fn scroll_content(
+    line_cursor: usize,
+    scroll: usize,
+    content_height: usize,
+    lines_count: usize,
+    direction: ScrollDirection,
+    amount: ScrollAmount,
+) -> (usize, usize) {
+    if lines_count == 0 {
+        return (line_cursor, scroll);
+    }
+
+    let scroll_amount = match amount {
+        ScrollAmount::Full => content_height,
+        ScrollAmount::Half => (content_height / 2).max(1),
+    };
+
+    let max_line = lines_count.saturating_sub(1);
+    let mut new_line_cursor = line_cursor;
+    let mut new_scroll = scroll;
+
+    match direction {
+        ScrollDirection::Down => {
+            new_line_cursor = new_line_cursor.saturating_add(scroll_amount);
+            new_line_cursor = new_line_cursor.min(max_line);
+            if new_line_cursor >= new_scroll + content_height {
+                new_scroll = new_scroll.saturating_add(scroll_amount);
+            }
+        }
+        ScrollDirection::Up => {
+            new_line_cursor = new_line_cursor.saturating_sub(scroll_amount);
+            if new_line_cursor < new_scroll {
+                new_scroll = new_scroll.saturating_sub(scroll_amount);
+            }
+        }
+    }
+    (new_line_cursor, new_scroll)
 }
 
 fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollAmount, max_y: i32) {
@@ -30,47 +69,56 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
         0
     };
 
-    if lines_count > 0 {
-        let scroll_amount = match amount {
-            ScrollAmount::Full => content_height,
-            ScrollAmount::Half => (content_height / 2).max(1),
-        };
+    let (new_line_cursor, new_scroll) = scroll_content(
+        state.line_cursor,
+        state.scroll,
+        content_height,
+        lines_count,
+        direction,
+        amount,
+    );
+    state.line_cursor = new_line_cursor;
+    state.scroll = new_scroll;
+}
 
-        let max_line = lines_count.saturating_sub(1);
+fn scroll_unstaged_diff_view(
+    state: &mut AppState,
+    direction: ScrollDirection,
+    amount: ScrollAmount,
+    max_y: i32,
+) {
+    if let Some(file) = state.get_unstaged_file() {
+        let unstaged_file_count = state.unstaged_files.len();
+        let untracked_file_count = state.untracked_files.len();
+        let file_list_total_items = unstaged_file_count + untracked_file_count + 2;
+        let file_list_height = (max_y as usize / 3).max(3).min(file_list_total_items);
+        let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
+        let lines_count = file.lines.len();
 
-        match direction {
-            ScrollDirection::Down => {
-                let next_line_cursor = state.line_cursor.saturating_add(scroll_amount);
-                state.line_cursor = next_line_cursor.min(max_line);
-                if state.line_cursor >= state.scroll + content_height {
-                    state.scroll = state.scroll.saturating_add(scroll_amount);
-                }
-            }
-            ScrollDirection::Up => {
-                let next_line_cursor = state.line_cursor.saturating_sub(scroll_amount);
-                if next_line_cursor < state.scroll {
-                    state.scroll = state.scroll.saturating_sub(scroll_amount);
-                }
-                state.line_cursor = next_line_cursor;
-            }
-        }
+        let (new_line_cursor, new_scroll) = scroll_content(
+            state.line_cursor,
+            state.unstaged_diff_scroll,
+            content_height,
+            lines_count,
+            direction,
+            amount,
+        );
+        state.line_cursor = new_line_cursor;
+        state.unstaged_diff_scroll = new_scroll;
     }
 }
 
 pub fn handle_scroll(state: &mut AppState, input: Input, max_y: i32) {
-    match input {
-        Input::Character(' ') => {
-            scroll_view(state, ScrollDirection::Down, ScrollAmount::Full, max_y);
-        }
-        Input::Character('b') => {
-            scroll_view(state, ScrollDirection::Up, ScrollAmount::Full, max_y);
-        }
-        Input::Character('\u{4}') => {
-            scroll_view(state, ScrollDirection::Down, ScrollAmount::Half, max_y);
-        }
-        Input::Character('\u{15}') => {
-            scroll_view(state, ScrollDirection::Up, ScrollAmount::Half, max_y);
-        }
-        _ => {}
+    let (direction, amount) = match input {
+        Input::Character(' ') => (ScrollDirection::Down, ScrollAmount::Full),
+        Input::Character('b') => (ScrollDirection::Up, ScrollAmount::Full),
+        Input::Character('\u{4}') => (ScrollDirection::Down, ScrollAmount::Half),
+        Input::Character('\u{15}') => (ScrollDirection::Up, ScrollAmount::Half),
+        _ => return,
+    };
+
+    match state.screen {
+        Screen::Main => scroll_view(state, direction, amount, max_y),
+        Screen::Unstaged => scroll_unstaged_diff_view(state, direction, amount, max_y),
     }
 }

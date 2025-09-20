@@ -1,9 +1,8 @@
 use crate::app_state::{AppState, Screen};
 use crate::git::FileStatus;
 use crate::ui::diff_view::render_diff_view;
-use pancurses::{COLOR_PAIR, Input, Window};
-
-pub fn render_unstaged_view(window: &Window, state: &AppState) {
+use crate::ui::scroll;
+use pancurses::{COLOR_PAIR, Input, Window};pub fn render_unstaged_view(window: &Window, state: &AppState) {
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
 
@@ -167,6 +166,6 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
         Input::KeyRight => {
             state.unstaged_horizontal_scroll = state.unstaged_horizontal_scroll.saturating_add(10);
         }
-        _ => {}
+        _ => scroll::handle_scroll(state, input, max_y),
     }
 }

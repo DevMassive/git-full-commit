@@ -128,4 +128,12 @@ impl AppState {
             None
         }
     }
+
+    pub fn get_unstaged_file(&self) -> Option<&FileDiff> {
+        if self.unstaged_cursor > 0 && self.unstaged_cursor <= self.unstaged_files.len() {
+            self.unstaged_files.get(self.unstaged_cursor - 1)
+        } else {
+            None
+        }
+    }
 }
