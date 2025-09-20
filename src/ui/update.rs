@@ -5,6 +5,7 @@ use crate::command::{
     DiscardHunkCommand,
     IgnoreFileCommand,
     RemoveFileCommand,
+    StagePatchCommand,
     UnstageFileCommand,
 };
 use crate::commit_storage;
@@ -129,8 +130,15 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
             state.refresh_diff();
         }
         Input::Character('R') => {
-            git::add_all(&state.repo_path).expect("Failed to git add -A.");
-            state.refresh_diff();
+            if let Ok(patch) = git::get_unstaged_diff_patch(&state.repo_path) {
+                if !patch.is_empty() {
+                    let command = Box::new(StagePatchCommand {
+                        repo_path: state.repo_path.clone(),
+                        patch,
+                    });
+                    state.execute_and_refresh(command);
+                }
+            }
         }
         _ => return false,
     }

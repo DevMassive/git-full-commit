@@ -313,6 +313,14 @@ pub fn get_staged_diff_output(repo_path: &Path) -> Result<std::process::Output> 
     Ok(output)
 }
 
+pub fn get_unstaged_diff_patch(repo_path: &Path) -> Result<String> {
+    let output = OsCommand::new("git")
+        .arg("diff")
+        .current_dir(repo_path)
+        .output()?;
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 pub fn get_file_diff_patch(repo_path: &Path, file_name: &str) -> Result<String> {
     let output = OsCommand::new("git")
         .arg("diff")

@@ -493,6 +493,14 @@ fn test_stage_all() {
 
         // Check that the file is staged again
         assert_eq!(state.files.len(), 1);
+
+        // Undo staging all changes
+        state = update_state(state, Some(Input::Character('u')), 30, 80);
+        assert_eq!(state.files.len(), 0);
+
+        // Redo staging all changes
+        state = update_state(state, Some(Input::Character('r')), 30, 80);
+        assert_eq!(state.files.len(), 1);
     });
 }
 

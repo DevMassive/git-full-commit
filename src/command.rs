@@ -41,6 +41,23 @@ impl Command for ApplyPatchCommand {
     }
 }
 
+pub struct StagePatchCommand {
+    pub repo_path: PathBuf,
+    pub patch: String,
+}
+
+impl Command for StagePatchCommand {
+    fn execute(&mut self) {
+        git::apply_patch(&self.repo_path, &self.patch, false, true)
+            .expect("Failed to apply patch.");
+    }
+
+    fn undo(&mut self) {
+        git::apply_patch(&self.repo_path, &self.patch, true, true)
+            .expect("Failed to apply patch in reverse.");
+    }
+}
+
 pub struct DiscardHunkCommand {
     pub repo_path: PathBuf,
     pub patch: String,
