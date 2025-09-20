@@ -47,3 +47,12 @@ pub fn create_unstage_hunk_patch(file: &FileDiff, hunk: &Hunk) -> String {
     patch.push('\n');
     patch
 }
+
+// For staging, the logic is identical to unstaging
+pub fn create_stage_line_patch(file: &FileDiff, line_index: usize) -> Option<String> {
+    create_unstage_line_patch(file, line_index)
+}
+
+pub fn create_stage_hunk_patch(file: &FileDiff, hunk: &Hunk) -> String {
+    create_unstage_hunk_patch(file, hunk)
+}

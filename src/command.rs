@@ -24,6 +24,21 @@ impl Command for UnstageFileCommand {
     }
 }
 
+pub struct StageFileCommand {
+    pub repo_path: PathBuf,
+    pub file_name: String,
+}
+
+impl Command for StageFileCommand {
+    fn execute(&mut self) {
+        git::stage_file(&self.repo_path, &self.file_name).expect("Failed to stage file.");
+    }
+
+    fn undo(&mut self) {
+        git::unstage_file(&self.repo_path, &self.file_name).expect("Failed to unstage file.");
+    }
+}
+
 pub struct ApplyPatchCommand {
     pub repo_path: PathBuf,
     pub patch: String,
