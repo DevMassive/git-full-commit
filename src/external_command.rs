@@ -1,4 +1,6 @@
+#[cfg(not(test))]
 use std::env;
+#[cfg(not(test))]
 use std::process::Command;
 
 #[cfg(not(test))]

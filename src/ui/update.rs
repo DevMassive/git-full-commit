@@ -928,7 +928,7 @@ mod tests {
         );
 
         // Simulate undo
-        let updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
+        let _updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
 
         // Check that the hunk is back
         let staged_diff_after_undo = OsCommand::new("git")

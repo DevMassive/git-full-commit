@@ -879,7 +879,7 @@ fn test_stage_modified_file() {
         assert_eq!(state.files[0].file_name, file_name);
 
         // Undo
-        state = update_state(state, Some(Input::Character('u')), 30, 80);
+        let state = update_state(state, Some(Input::Character('u')), 30, 80);
         assert!(!state.unstaged_files.is_empty());
         assert!(state.files.is_empty());
     });
@@ -925,7 +925,7 @@ fn test_stage_hunk() {
         assert!(staged_diff.contains("+MODIFIED line 3"));
 
         // Undo
-        state = update_state(state, Some(Input::Character('u')), 30, 80);
+        let _ = update_state(state, Some(Input::Character('u')), 30, 80);
         assert_eq!(
             git::get_diff(repo_path).len(),
             0,
@@ -1064,7 +1064,7 @@ fn test_stage_line() {
         assert!(!staged_diff.contains("-line2"));
 
         // Undo
-        state = update_state(state, Some(Input::Character('u')), 30, 80);
+        update_state(state, Some(Input::Character('u')), 30, 80);
         assert_eq!(
             git::get_diff(repo_path).len(),
             0,

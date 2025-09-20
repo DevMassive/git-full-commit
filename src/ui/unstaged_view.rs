@@ -144,7 +144,7 @@ fn is_binary(content: &[u8]) -> bool {
 pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32) {
     let (file_list_height, unstaged_items_count) = state.unstaged_header_height(max_y);
     let unstaged_file_count = state.unstaged_files.len();
-    let untracked_file_count = state.untracked_files.len();
+    let _untracked_file_count = state.untracked_files.len();
 
     match input {
         Input::Character('\t') => {
