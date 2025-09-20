@@ -4,6 +4,7 @@ use std::process::Command as OsCommand;
 
 pub mod app_state;
 pub mod command;
+pub mod cursor_state;
 mod commit_storage;
 pub mod git;
 pub mod git_patch;

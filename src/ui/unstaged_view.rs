@@ -1,5 +1,5 @@
 use crate::app_state::{AppState, Screen};
-use crate::command::{StageFileCommand, StagePatchCommand};
+use crate::command::{Command, StageFileCommand, StagePatchCommand};
 use crate::git::{self, FileStatus};
 use crate::git_patch;
 use crate::ui::diff_view::{render_diff_view, render_line};
@@ -242,28 +242,25 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
             if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
                 let file_index = state.unstaged_cursor - 1;
                 if let Some(file) = state.unstaged_files.get(file_index).cloned() {
-                    if let Some(hunk) = git_patch::find_hunk(&file, state.line_cursor) {
-                        let patch = git_patch::create_stage_hunk_patch(&file, hunk);
-                        let command = Box::new(StagePatchCommand {
-                            repo_path: state.repo_path.clone(),
-                            patch,
-                        });
-                        state.execute_and_refresh(command);
-                    } else {
-                        let command = Box::new(StageFileCommand {
-                            repo_path: state.repo_path.clone(),
-                            file_name: file.file_name.clone(),
-                        });
-                        state.execute_and_refresh(command);
-                    }
+                    let command: Box<dyn Command> =
+                        if let Some(hunk) = git_patch::find_hunk(&file, state.line_cursor) {
+                            let patch = git_patch::create_stage_hunk_patch(&file, hunk);
+                            Box::new(StagePatchCommand::new(state.repo_path.clone(), patch))
+                        } else {
+                            Box::new(StageFileCommand::new(
+                                state.repo_path.clone(),
+                                file.file_name.clone(),
+                            ))
+                        };
+                    state.execute_and_refresh(command);
                 }
             } else if state.unstaged_cursor > unstaged_file_count + 1 {
                 let file_index = state.unstaged_cursor - unstaged_file_count - 2;
                 if let Some(file_name) = state.untracked_files.get(file_index).cloned() {
-                    let command = Box::new(StageFileCommand {
-                        repo_path: state.repo_path.clone(),
+                    let command = Box::new(StageFileCommand::new(
+                        state.repo_path.clone(),
                         file_name,
-                    });
+                    ));
                     state.execute_and_refresh(command);
                 }
             }
@@ -276,10 +273,8 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
                     if let Some(patch) =
                         git_patch::create_stage_line_patch(file, state.line_cursor)
                     {
-                        let command = Box::new(StagePatchCommand {
-                            repo_path: state.repo_path.clone(),
-                            patch,
-                        });
+                        let command =
+                            Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
                         state.execute_and_refresh(command);
                     }
                 }

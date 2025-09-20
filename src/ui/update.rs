@@ -1,9 +1,10 @@
 use crate::app_state::{AppState, Screen};
 use crate::command::{
-    ApplyPatchCommand, CheckoutFileCommand, DiscardHunkCommand, IgnoreFileCommand,
+    ApplyPatchCommand, CheckoutFileCommand, Command, DiscardHunkCommand, IgnoreFileCommand,
     RemoveFileCommand, StageAllCommand, UnstageFileCommand,
 };
 use crate::commit_storage;
+use crate::cursor_state::CursorState;
 use crate::git;
 use crate::ui::commit_view;
 use crate::ui::diff_view::LINE_CONTENT_OFFSET;
@@ -19,10 +20,7 @@ fn unstage_line(state: &mut AppState, max_y: i32) {
     if let Some(file) = state.current_file() {
         let line_index = state.line_cursor;
         if let Some(patch) = git_patch::create_unstage_line_patch(file, line_index) {
-            let command = Box::new(ApplyPatchCommand {
-                repo_path: state.repo_path.clone(),
-                patch,
-            });
+            let command = Box::new(ApplyPatchCommand::new(state.repo_path.clone(), patch));
             let old_line_cursor = state.line_cursor;
             state.execute_and_refresh(command);
 
@@ -56,10 +54,10 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
         Input::Character('i') => {
             if let Some(file) = state.current_file().cloned() {
                 if file.file_name != ".gitignore" {
-                    let command = Box::new(IgnoreFileCommand {
-                        repo_path: state.repo_path.clone(),
-                        file_name: file.file_name.clone(),
-                    });
+                    let command = Box::new(IgnoreFileCommand::new(
+                        state.repo_path.clone(),
+                        file.file_name.clone(),
+                    ));
                     state.execute_and_refresh(command);
                 }
             }
@@ -70,30 +68,27 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                     let line_index = state.line_cursor;
                     if let Some(hunk) = git_patch::find_hunk(file, line_index) {
                         let patch = git_patch::create_unstage_hunk_patch(file, hunk);
-                        let command = Box::new(DiscardHunkCommand {
-                            repo_path: state.repo_path.clone(),
-                            patch,
-                        });
+                        let command =
+                            Box::new(DiscardHunkCommand::new(state.repo_path.clone(), patch));
                         state.execute_and_refresh(command);
                     }
                 }
             } else if let Some(file) = state.current_file().cloned() {
                 let patch = git::get_file_diff_patch(&state.repo_path, &file.file_name)
                     .expect("Failed to get diff for file.");
-                let command: Box<dyn crate::command::Command> =
-                    if file.status == git::FileStatus::Added {
-                        Box::new(RemoveFileCommand {
-                            repo_path: state.repo_path.clone(),
-                            file_name: file.file_name.clone(),
-                            patch,
-                        })
-                    } else {
-                        Box::new(CheckoutFileCommand {
-                            repo_path: state.repo_path.clone(),
-                            file_name: file.file_name.clone(),
-                            patch,
-                        })
-                    };
+                let command: Box<dyn Command> = if file.status == git::FileStatus::Added {
+                    Box::new(RemoveFileCommand::new(
+                        state.repo_path.clone(),
+                        file.file_name.clone(),
+                        patch,
+                    ))
+                } else {
+                    Box::new(CheckoutFileCommand::new(
+                        state.repo_path.clone(),
+                        file.file_name.clone(),
+                        patch,
+                    ))
+                };
                 state.execute_and_refresh(command);
             }
         }
@@ -106,28 +101,34 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                 let line_index = state.line_cursor;
                 if let Some(hunk) = git_patch::find_hunk(&file, line_index) {
                     let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
-                    let command = Box::new(ApplyPatchCommand {
-                        repo_path: state.repo_path.clone(),
-                        patch,
-                    });
+                    let command =
+                        Box::new(ApplyPatchCommand::new(state.repo_path.clone(), patch));
                     state.execute_and_refresh(command);
                 } else {
-                    let command = Box::new(UnstageFileCommand {
-                        repo_path: state.repo_path.clone(),
-                        file_name: file.file_name.clone(),
-                    });
+                    let command = Box::new(UnstageFileCommand::new(
+                        state.repo_path.clone(),
+                        file.file_name.clone(),
+                    ));
                     state.execute_and_refresh(command);
                 }
             }
         }
         Input::Character('1') => unstage_line(state, max_y),
         Input::Character('u') => {
-            state.command_history.undo();
-            state.refresh_diff();
+            let cursor_state = CursorState::from_app_state(state);
+            if let Some(cursor) = state.command_history.undo(cursor_state) {
+                state.refresh_diff();
+                cursor.apply_to_app_state(state);
+            } else {
+                state.refresh_diff();
+            }
         }
         Input::Character('r') => {
-            state.command_history.redo();
-            state.refresh_diff();
+            let cursor_state = CursorState::from_app_state(state);
+            if let Some(cursor) = state.command_history.redo(cursor_state) {
+                state.refresh_diff();
+                cursor.apply_to_app_state(state);
+            }
         }
         Input::Character('R') => {
             let command = Box::new(StageAllCommand::new(state.repo_path.clone()));
@@ -546,8 +547,7 @@ mod tests {
         );
 
         // Simulate undo
-        updated_state.command_history.undo();
-        updated_state.refresh_diff();
+        updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
 
         // After undo, the original file should be back and .gitignore should be gone
         assert_eq!(
@@ -560,9 +560,8 @@ mod tests {
             "The file should be the one we ignored"
         );
 
-        // Simulate undo
-        updated_state.command_history.undo();
-        updated_state.refresh_diff();
+        // Simulate undo again
+        let updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
 
         // After undo, the original file should be back and .gitignore should be gone
         assert_eq!(
@@ -782,7 +781,7 @@ mod tests {
         state.line_cursor = line_in_diff;
 
         // Simulate pressing '!' to discard the hunk
-        let mut updated_state = update_state(state, Some(Input::Character('!')), 80, 80);
+        let updated_state = update_state(state, Some(Input::Character('!')), 80, 80);
 
         // Check that the hunk is gone from both staged and working directory
         let staged_diff = OsCommand::new("git")
@@ -807,8 +806,7 @@ mod tests {
         );
 
         // Simulate undo
-        updated_state.command_history.undo();
-        updated_state.refresh_diff();
+        let updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
 
         // Check that the hunk is back
         let staged_diff_after_undo = OsCommand::new("git")
