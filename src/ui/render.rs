@@ -125,7 +125,12 @@ fn render_main_view(window: &Window, state: &AppState) {
             if state.is_amend_mode {
                 window.addstr(" |");
             } else {
-                window.addstr(format!(" o {}", &state.previous_commit_message));
+                let status = if state.previous_commit_is_on_remote {
+                    "(remote)"
+                } else {
+                    "(local)"
+                };
+                window.addstr(format!(" o {} {}", status, &state.previous_commit_message));
             }
             window.attroff(COLOR_PAIR(pair));
         }

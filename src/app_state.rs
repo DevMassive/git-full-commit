@@ -3,7 +3,7 @@ use crate::commit_storage;
 use crate::cursor_state::CursorState;
 use crate::git::{
     self, FileDiff, get_diff, get_previous_commit_diff, get_previous_commit_info,
-    get_unstaged_diff, get_untracked_files,
+    get_unstaged_diff, get_untracked_files, is_commit_on_remote,
 };
 use std::path::PathBuf;
 
@@ -30,6 +30,7 @@ pub struct AppState {
     pub is_amend_mode: bool,
     pub previous_commit_hash: String,
     pub previous_commit_message: String,
+    pub previous_commit_is_on_remote: bool,
     pub previous_commit_files: Vec<FileDiff>,
     pub is_diff_cursor_active: bool,
     pub has_unstaged_changes: bool,
@@ -49,6 +50,8 @@ impl AppState {
             commit_storage::load_commit_message(&repo_path).unwrap_or_else(|_| String::new());
         let (previous_commit_hash, previous_commit_message) =
             get_previous_commit_info(&repo_path).unwrap_or((String::new(), String::new()));
+        let previous_commit_is_on_remote =
+            is_commit_on_remote(&repo_path, &previous_commit_hash).unwrap_or(false);
         let previous_commit_files =
             get_previous_commit_diff(&repo_path).unwrap_or_else(|_| Vec::new());
         let has_unstaged_changes = git::has_unstaged_changes(&repo_path).unwrap_or(false);
@@ -71,6 +74,7 @@ impl AppState {
             is_amend_mode: false,
             previous_commit_hash,
             previous_commit_message,
+            previous_commit_is_on_remote,
             previous_commit_files,
             is_diff_cursor_active: false,
             has_unstaged_changes,
@@ -101,6 +105,8 @@ impl AppState {
         self.files = get_diff(self.repo_path.clone());
         (self.previous_commit_hash, self.previous_commit_message) =
             get_previous_commit_info(&self.repo_path).unwrap_or((String::new(), String::new()));
+        self.previous_commit_is_on_remote =
+            is_commit_on_remote(&self.repo_path, &self.previous_commit_hash).unwrap_or(false);
         self.previous_commit_files =
             get_previous_commit_diff(&self.repo_path).unwrap_or_else(|_| Vec::new());
         self.has_unstaged_changes = git::has_unstaged_changes(&self.repo_path).unwrap_or(false);
