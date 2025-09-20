@@ -64,6 +64,110 @@ impl Command for UnstageFileCommand {
     command_impl!();
 }
 
+pub struct UnstageAllCommand {
+    pub repo_path: PathBuf,
+    patch: String,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl UnstageAllCommand {
+    pub fn new(repo_path: PathBuf) -> Self {
+        let patch = git::get_staged_diff_patch(&repo_path).unwrap_or_default();
+        Self {
+            repo_path,
+            patch,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for UnstageAllCommand {
+    fn execute(&mut self) {
+        git::unstage_all(&self.repo_path).expect("Failed to unstage all files.");
+    }
+
+    fn undo(&mut self) {
+        if !self.patch.is_empty() {
+            git::apply_patch(&self.repo_path, &self.patch, false, true)
+                .expect("Failed to apply patch for unstage undo.");
+        }
+    }
+
+    command_impl!();
+}
+
+pub struct StageUnstagedCommand {
+    pub repo_path: PathBuf,
+    files_to_stage: Vec<String>,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl StageUnstagedCommand {
+    pub fn new(repo_path: PathBuf) -> Self {
+        let files_to_stage = git::get_unstaged_files(&repo_path).unwrap_or_default();
+        Self {
+            repo_path,
+            files_to_stage,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for StageUnstagedCommand {
+    fn execute(&mut self) {
+        for file in &self.files_to_stage {
+            git::stage_file(&self.repo_path, file).expect("Failed to stage file.");
+        }
+    }
+
+    fn undo(&mut self) {
+        for file in &self.files_to_stage {
+            git::unstage_file(&self.repo_path, file).expect("Failed to unstage file.");
+        }
+    }
+
+    command_impl!();
+}
+
+pub struct StageUntrackedCommand {
+    pub repo_path: PathBuf,
+    untracked_files: Vec<String>,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl StageUntrackedCommand {
+    pub fn new(repo_path: PathBuf) -> Self {
+        let untracked_files = git::get_untracked_files(&repo_path).unwrap_or_default();
+        Self {
+            repo_path,
+            untracked_files,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for StageUntrackedCommand {
+    fn execute(&mut self) {
+        for file in &self.untracked_files {
+            git::stage_file(&self.repo_path, file).expect("Failed to stage untracked file.");
+        }
+    }
+
+    fn undo(&mut self) {
+        for file in &self.untracked_files {
+            git::rm_cached(&self.repo_path, file).expect("Failed to unstage untracked file.");
+        }
+    }
+
+    command_impl!();
+}
+
 pub struct StageFileCommand {
     pub repo_path: PathBuf,
     pub file_name: String,

@@ -1,7 +1,7 @@
 use crate::app_state::{AppState, Screen};
 use crate::command::{
     ApplyPatchCommand, CheckoutFileCommand, Command, DiscardHunkCommand, IgnoreFileCommand,
-    RemoveFileCommand, StageAllCommand, UnstageFileCommand,
+    RemoveFileCommand, StageAllCommand, UnstageAllCommand, UnstageFileCommand,
 };
 use crate::commit_storage;
 use crate::cursor_state::CursorState;
@@ -39,10 +39,6 @@ fn unstage_line(state: &mut AppState, max_y: i32) {
 
 fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
     match input {
-        Input::Character('\u{3}') | Input::Character('Q') => {
-            let _ = commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
-            state.running = false;
-        }
         Input::Character('q') => {
             if state.is_diff_cursor_active {
                 state.is_diff_cursor_active = false;
@@ -95,9 +91,8 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
         }
         Input::Character('\n') => {
             if state.file_cursor == 0 {
-                state.screen = Screen::Unstaged;
-                state.line_cursor = 0;
-                state.scroll = 0;
+                let command = Box::new(UnstageAllCommand::new(state.repo_path.clone()));
+                state.execute_and_refresh(command);
             } else if let Some(file) = state.current_file().cloned() {
                 let line_index = state.line_cursor;
                 if let Some(hunk) = git_patch::find_hunk(&file, line_index) {
@@ -115,22 +110,6 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
             }
         }
         Input::Character('1') => unstage_line(state, max_y),
-        Input::Character('u') => {
-            let cursor_state = CursorState::from_app_state(state);
-            if let Some(cursor) = state.command_history.undo(cursor_state) {
-                state.refresh_diff();
-                cursor.apply_to_app_state(state);
-            } else {
-                state.refresh_diff();
-            }
-        }
-        Input::Character('r') => {
-            let cursor_state = CursorState::from_app_state(state);
-            if let Some(cursor) = state.command_history.redo(cursor_state) {
-                state.refresh_diff();
-                cursor.apply_to_app_state(state);
-            }
-        }
         Input::Character('R') => {
             let command = Box::new(StageAllCommand::new(state.repo_path.clone()));
             state.execute_and_refresh(command);
@@ -268,6 +247,35 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
 
 pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x: i32) -> AppState {
     if let Some(input) = input {
+        // Global commands
+        match input {
+            Input::Character('\u{3}') | Input::Character('Q') => {
+                let _ =
+                    commit_storage::save_commit_message(&state.repo_path, &state.commit_message);
+                state.running = false;
+                return state;
+            }
+            Input::Character('u') => {
+                let cursor_state = CursorState::from_app_state(&state);
+                if let Some(cursor) = state.command_history.undo(cursor_state) {
+                    state.refresh_diff();
+                    cursor.apply_to_app_state(&mut state);
+                } else {
+                    state.refresh_diff();
+                }
+                return state;
+            }
+            Input::Character('r') => {
+                let cursor_state = CursorState::from_app_state(&state);
+                if let Some(cursor) = state.command_history.redo(cursor_state) {
+                    state.refresh_diff();
+                    cursor.apply_to_app_state(&mut state);
+                }
+                return state;
+            }
+            _ => (),
+        }
+
         match state.screen {
             Screen::Main => {
                 if state.is_commit_mode {
@@ -294,6 +302,48 @@ mod tests {
     use pancurses::Input;
     use std::path::PathBuf;
     use std::process::Command as OsCommand;
+
+    // Helper function to create a temporary git repository for testing
+    fn setup_temp_repo() -> PathBuf {
+        let temp_dir = std::env::temp_dir().join(format!("test_repo_{}", rand::random::<u32>()));
+        if temp_dir.exists() {
+            std::fs::remove_dir_all(&temp_dir).unwrap();
+        }
+        std::fs::create_dir(&temp_dir).unwrap();
+
+        OsCommand::new("git")
+            .arg("init")
+            .current_dir(&temp_dir)
+            .output()
+            .expect("Failed to init git repo");
+        OsCommand::new("git")
+            .arg("config")
+            .arg("user.name")
+            .arg("Test")
+            .current_dir(&temp_dir)
+            .output()
+            .expect("Failed to set git user.name");
+        OsCommand::new("git")
+            .arg("config")
+            .arg("user.email")
+            .arg("test@example.com")
+            .current_dir(&temp_dir)
+            .output()
+            .expect("Failed to set git user.email");
+
+        temp_dir
+    }
+
+    fn get_git_status(repo_path: &PathBuf) -> String {
+        let output = OsCommand::new("git")
+            .arg("status")
+            .arg("--porcelain")
+            .current_dir(repo_path)
+            .output()
+            .expect("Failed to get git status");
+        String::from_utf8_lossy(&output.stdout).to_string()
+    }
+
 
     fn create_test_file_diff() -> FileDiff {
         let lines = vec![
@@ -1168,5 +1218,121 @@ mod tests {
                 None
             )
         );
+    }
+
+    #[test]
+    fn test_unstage_all() {
+        let repo_path = setup_temp_repo();
+        // Create a committed file
+        std::fs::write(repo_path.join("committed.txt"), "a").unwrap();
+        OsCommand::new("git").arg("add").arg(".").current_dir(&repo_path).output().unwrap();
+        OsCommand::new("git").arg("commit").arg("-m").arg("i").current_dir(&repo_path).output().unwrap();
+
+        // Create a modified file and a new file, then stage them
+        std::fs::write(repo_path.join("committed.txt"), "b").unwrap();
+        std::fs::write(repo_path.join("new.txt"), "c").unwrap();
+        OsCommand::new("git").arg("add").arg(".").current_dir(&repo_path).output().unwrap();
+
+        let files = crate::git::get_diff(repo_path.clone());
+        let mut state = AppState::new(repo_path.clone(), files);
+        state.file_cursor = 0; // Select "Staged changes" header
+
+        // Unstage all
+        let state = update_state(state, Some(Input::Character('\n')), 80, 80);
+        let status = get_git_status(&repo_path);
+        assert!(status.contains(" M committed.txt"), "Should be unstaged modified");
+        assert!(status.contains("?? new.txt"), "Should be untracked");
+
+        // Undo
+        let state = update_state(state, Some(Input::Character('u')), 80, 80);
+        let status = get_git_status(&repo_path);
+        assert!(status.contains("M  committed.txt"), "Should be staged modified");
+        assert!(status.contains("A  new.txt"), "Should be staged new");
+
+        // Redo
+        let _ = update_state(state, Some(Input::Character('r')), 80, 80);
+        let status = get_git_status(&repo_path);
+        assert!(status.contains(" M committed.txt"));
+        assert!(status.contains("?? new.txt"));
+
+        std::fs::remove_dir_all(&repo_path).unwrap();
+    }
+
+    #[test]
+    fn test_stage_unstaged() {
+        let repo_path = setup_temp_repo();
+        std::fs::write(repo_path.join("file1.txt"), "a").unwrap();
+        OsCommand::new("git").arg("add").arg(".").current_dir(&repo_path).output().unwrap();
+        OsCommand::new("git").arg("commit").arg("-m").arg("i").current_dir(&repo_path).output().unwrap();
+
+        // One modified, one untracked
+        std::fs::write(repo_path.join("file1.txt"), "b").unwrap();
+        std::fs::write(repo_path.join("untracked.txt"), "c").unwrap();
+
+        let mut state = AppState::new(repo_path.clone(), vec![]);
+        state.refresh_diff();
+        state.screen = Screen::Unstaged;
+        state.unstaged_cursor = 0; // Select "Unstaged changes" header
+
+        // Stage all unstaged
+        let state = update_state(state, Some(Input::Character('\n')), 80, 80);
+        let status = get_git_status(&repo_path);
+        assert!(status.contains("M  file1.txt"), "file1 should be staged");
+        assert!(status.contains("?? untracked.txt"), "untracked should remain untracked");
+
+        // Undo
+        let state = update_state(state, Some(Input::Character('u')), 80, 80);
+        let status = get_git_status(&repo_path);
+        assert!(status.contains(" M file1.txt"), "file1 should be unstaged again");
+        assert!(status.contains("?? untracked.txt"), "untracked should still be untracked");
+
+        // Redo
+        let _ = update_state(state, Some(Input::Character('r')), 80, 80);
+        let status = get_git_status(&repo_path);
+        assert!(status.contains("M  file1.txt"));
+        assert!(status.contains("?? untracked.txt"));
+
+        std::fs::remove_dir_all(&repo_path).unwrap();
+    }
+
+    #[test]
+    fn test_stage_untracked() {
+        let repo_path = setup_temp_repo();
+        std::fs::write(repo_path.join("untracked1.txt"), "a").unwrap();
+        std::fs::write(repo_path.join("untracked2.txt"), "b").unwrap();
+
+        // Add a modified file to ensure we only stage untracked
+        std::fs::write(repo_path.join("modified.txt"), "c").unwrap();
+        OsCommand::new("git").arg("add").arg("modified.txt").current_dir(&repo_path).output().unwrap();
+        OsCommand::new("git").arg("commit").arg("-m").arg("i").current_dir(&repo_path).output().unwrap();
+        std::fs::write(repo_path.join("modified.txt"), "d").unwrap();
+
+        let mut state = AppState::new(repo_path.clone(), vec![]);
+        state.refresh_diff();
+        state.screen = Screen::Unstaged;
+        state.unstaged_cursor = state.unstaged_files.len() + 1; // Select "Untracked files" header
+
+        // Stage all untracked
+        let state = update_state(state, Some(Input::Character('\n')), 80, 80);
+        let status = get_git_status(&repo_path);
+        assert!(status.contains("A  untracked1.txt"), "untracked1 should be staged");
+        assert!(status.contains("A  untracked2.txt"), "untracked2 should be staged");
+        assert!(status.contains(" M modified.txt"), "modified.txt should NOT be staged");
+
+        // Undo
+        let state = update_state(state, Some(Input::Character('u')), 80, 80);
+        let status = get_git_status(&repo_path);
+        assert!(status.contains("?? untracked1.txt"), "untracked1 should be untracked again");
+        assert!(status.contains("?? untracked2.txt"), "untracked2 should be untracked again");
+        assert!(status.contains(" M modified.txt"), "modified.txt should be untouched");
+
+        // Redo
+        let _ = update_state(state, Some(Input::Character('r')), 80, 80);
+        let status = get_git_status(&repo_path);
+        assert!(status.contains("A  untracked1.txt"));
+        assert!(status.contains("A  untracked2.txt"));
+        assert!(status.contains(" M modified.txt"));
+
+        std::fs::remove_dir_all(&repo_path).unwrap();
     }
 }
