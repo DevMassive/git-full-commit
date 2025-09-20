@@ -19,36 +19,13 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
 
     let relative_line_index = line_index - hunk.start_line;
 
-    let (old_line, new_line) = hunk.line_numbers[relative_line_index];
+    let (_old_line, new_line) = hunk.line_numbers[relative_line_index];
+    let new_line_num = new_line.unwrap();
 
     let new_hunk_header = if line_to_unstage.starts_with('+') {
-        let new_line_num = new_line.unwrap();
-        let old_line_num = hunk
-            .line_numbers
-            .iter()
-            .find_map(|(ol, nl)| {
-                if nl.is_some() && nl.unwrap() == new_line_num - 1 {
-                    *ol
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(0);
-        format!("@@ -{old_line_num},0 +{new_line_num},1 @@")
+        format!("@@ -{},0 +{},1 @@", new_line_num - 1, new_line_num)
     } else {
-        let old_line_num = old_line.unwrap();
-        let new_line_num = hunk
-            .line_numbers
-            .iter()
-            .find_map(|(ol, nl)| {
-                if ol.is_some() && ol.unwrap() == old_line_num - 1 {
-                    *nl
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(0);
-        format!("@@ -{old_line_num},1 +{new_line_num},0 @@")
+        format!("@@ -{},1 +{},0 @@", new_line_num + 1, new_line_num + 1)
     };
 
     let mut patch = String::new();

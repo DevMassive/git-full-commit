@@ -357,8 +357,16 @@ fn render_line(
 
     let line_num_str = format!(
         "{:<4} {:<4}",
-        old_line_num.map_or(String::new(), |n| n.to_string()),
-        new_line_num.map_or(String::new(), |n| n.to_string())
+        if line.starts_with('+') {
+            "".to_string()
+        } else {
+            old_line_num.map_or(String::new(), |n| n.to_string())
+        },
+        if line.starts_with('-') {
+            "".to_string()
+        } else {
+            new_line_num.map_or(String::new(), |n| n.to_string())
+        }
     );
     let line_content_offset = LINE_CONTENT_OFFSET as i32;
 

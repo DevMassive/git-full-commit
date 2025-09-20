@@ -32,7 +32,7 @@ fn unstage_line(state: &mut AppState, max_y: i32) {
 
             if let Some(file) = state.current_file() {
                 state.line_cursor = old_line_cursor.min(file.lines.len().saturating_sub(1));
-                let header_height = state.files.len() + 3;
+                let header_height = state.files.len() + 4;
                 let content_height = (max_y as usize).saturating_sub(header_height);
                 if state.line_cursor >= state.scroll + content_height {
                     state.scroll = state.line_cursor - content_height + 1;
