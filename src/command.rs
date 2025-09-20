@@ -164,6 +164,43 @@ impl Command for RemoveFileCommand {
     }
 }
 
+pub struct StageAllCommand {
+    pub repo_path: PathBuf,
+    patch: String,
+    untracked_files: Vec<String>,
+}
+
+impl StageAllCommand {
+    pub fn new(repo_path: PathBuf) -> Self {
+        let patch = git::get_unstaged_diff_patch(&repo_path).unwrap_or_default();
+        let untracked_files = git::get_untracked_files(&repo_path).unwrap_or_default();
+        Self {
+            repo_path,
+            patch,
+            untracked_files,
+        }
+    }
+}
+
+impl Command for StageAllCommand {
+    fn execute(&mut self) {
+        git::add_all(&self.repo_path).expect("Failed to stage all files.");
+    }
+
+    fn undo(&mut self) {
+        // Untracked files are now tracked, so we need to unstage them.
+        for file in &self.untracked_files {
+            git::rm_cached(&self.repo_path, file).expect("Failed to unstage file.");
+        }
+
+        // For modified and deleted files, we apply the reverse of the patch.
+        if !self.patch.is_empty() {
+            git::apply_patch(&self.repo_path, &self.patch, true, true)
+                .expect("Failed to apply patch in reverse.");
+        }
+    }
+}
+
 pub struct CommandHistory {
     pub undo_stack: Vec<Box<dyn Command>>,
     pub redo_stack: Vec<Box<dyn Command>>,

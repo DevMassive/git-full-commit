@@ -5,7 +5,7 @@ use crate::command::{
     DiscardHunkCommand,
     IgnoreFileCommand,
     RemoveFileCommand,
-    StagePatchCommand,
+    StageAllCommand,
     UnstageFileCommand,
 };
 use crate::commit_storage;
@@ -133,15 +133,8 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
             state.refresh_diff();
         }
         Input::Character('R') => {
-            if let Ok(patch) = git::get_unstaged_diff_patch(&state.repo_path) {
-                if !patch.is_empty() {
-                    let command = Box::new(StagePatchCommand {
-                        repo_path: state.repo_path.clone(),
-                        patch,
-                    });
-                    state.execute_and_refresh(command);
-                }
-            }
+            let command = Box::new(StageAllCommand::new(state.repo_path.clone()));
+            state.execute_and_refresh(command);
         }
         _ => return false,
     }
@@ -856,5 +849,95 @@ mod tests {
         // KeyDown again, should not move
         handle_navigation(&mut state, Input::KeyDown, max_y, max_x);
         assert_eq!(state.file_cursor, 3);
+    }
+
+    #[test]
+    fn test_stage_all_and_undo() {
+        // Setup a temporary git repository
+        let temp_dir = std::env::temp_dir().join("test_repo_for_stage_all");
+        if temp_dir.exists() {
+            std::fs::remove_dir_all(&temp_dir).unwrap();
+        }
+        std::fs::create_dir(&temp_dir).unwrap();
+        let repo_path = temp_dir;
+
+        OsCommand::new("git")
+            .arg("init")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to init git repo");
+        OsCommand::new("git")
+            .arg("config")
+            .arg("user.name")
+            .arg("Test")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to set git user.name");
+        OsCommand::new("git")
+            .arg("config")
+            .arg("user.email")
+            .arg("test@example.com")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to set git user.email");
+
+        // Create and commit a file
+        let committed_file = repo_path.join("committed.txt");
+        std::fs::write(&committed_file, "initial content").unwrap();
+        OsCommand::new("git")
+            .arg("add")
+            .arg(".")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to git add");
+        OsCommand::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("initial commit")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to git commit");
+
+        // Modify the committed file
+        std::fs::write(&committed_file, "modified content").unwrap();
+
+        // Create a new untracked file
+        let untracked_file = repo_path.join("untracked.txt");
+        std::fs::write(&untracked_file, "new file").unwrap();
+
+        // Create app state
+        let files = crate::git::get_unstaged_diff(&repo_path);
+        let mut state = AppState::new(repo_path.clone(), files);
+
+        // Simulate pressing 'R'
+        let mut updated_state = update_state(state, Some(Input::Character('R')), 80, 80);
+
+        // Check that both files are staged
+        let status_output = OsCommand::new("git")
+            .arg("status")
+            .arg("--porcelain")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to get git status");
+        let status_str = String::from_utf8_lossy(&status_output.stdout);
+        assert!(status_str.contains("M  committed.txt"));
+        assert!(status_str.contains("A  untracked.txt"));
+
+        // Simulate undo
+        updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
+
+        // Check that the original state is restored
+        let status_output_after_undo = OsCommand::new("git")
+            .arg("status")
+            .arg("--porcelain")
+            .current_dir(&repo_path)
+            .output()
+            .expect("Failed to get git status");
+        let status_str_after_undo = String::from_utf8_lossy(&status_output_after_undo.stdout);
+        assert!(status_str_after_undo.contains(" M committed.txt"));
+        assert!(status_str_after_undo.contains("?? untracked.txt"));
+
+        // Cleanup
+        std::fs::remove_dir_all(&repo_path).unwrap();
     }
 }
