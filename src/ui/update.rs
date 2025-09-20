@@ -289,7 +289,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 }
             }
             Screen::Unstaged => {
-                unstaged_view::handle_unstaged_view_input(&mut state, input);
+                unstaged_view::handle_unstaged_view_input(&mut state, input, max_y);
             }
         }
     }

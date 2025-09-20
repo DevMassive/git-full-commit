@@ -142,12 +142,11 @@ fn is_binary(content: &[u8]) -> bool {
     content.contains(&0x00)
 }
 
-pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
+pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32) {
     let unstaged_file_count = state.unstaged_files.len();
     let untracked_file_count = state.untracked_files.len();
     let unstaged_items_count = unstaged_file_count + untracked_file_count + 2;
 
-    let (max_y, _) = pancurses::initscr().get_max_yx();
     let file_list_height = (max_y as usize / 3).max(3).min(unstaged_items_count);
 
     match input {

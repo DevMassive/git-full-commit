@@ -843,7 +843,7 @@ fn test_stage_untracked_file() {
         state.unstaged_cursor = 2; // Unstaged header (0), Untracked header (1), file (2)
 
         // Press Enter to stage the file
-        handle_unstaged_view_input(&mut state, Input::Character('\n'));
+        handle_unstaged_view_input(&mut state, Input::Character('\n'), 30);
 
         // Check that the file is staged
         state.refresh_diff();
@@ -875,7 +875,7 @@ fn test_stage_modified_file() {
         state.unstaged_cursor = 1;
 
         // Press Enter to stage the file
-        handle_unstaged_view_input(&mut state, Input::Character('\n'));
+        handle_unstaged_view_input(&mut state, Input::Character('\n'), 30);
 
         // Check that the file is staged
         state.refresh_diff();
@@ -912,7 +912,7 @@ fn test_stage_hunk() {
         state.line_cursor = hunk_line;
 
         // Press Enter to stage the hunk
-        handle_unstaged_view_input(&mut state, Input::Character('\n'));
+        handle_unstaged_view_input(&mut state, Input::Character('\n'), 30);
         state.refresh_diff();
 
         // Check that the hunk is staged
@@ -1034,7 +1034,7 @@ fn test_stage_line() {
         state.line_cursor = added_line_index;
 
         // Press '1' to stage the line
-        handle_unstaged_view_input(&mut state, Input::Character('1'));
+        handle_unstaged_view_input(&mut state, Input::Character('1'), 30);
         state.refresh_diff();
 
         // Check that the line is staged
