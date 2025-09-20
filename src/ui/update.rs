@@ -5,6 +5,7 @@ use crate::command::{
 };
 use crate::commit_storage;
 use crate::cursor_state::CursorState;
+use crate::external_command;
 use crate::git;
 use crate::ui::commit_view;
 use crate::ui::diff_view::LINE_CONTENT_OFFSET;
@@ -133,6 +134,19 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
         Input::Character('R') => {
             let command = Box::new(StageAllCommand::new(state.repo_path.clone()));
             state.execute_and_refresh(command);
+        }
+        Input::Character('e') => {
+            if let Some(file) = state.current_file() {
+                let line_number = if state.is_diff_cursor_active {
+                    git_patch::get_line_number(file, state.line_cursor)
+                } else {
+                    None
+                };
+                let file_path = state.repo_path.join(&file.file_name);
+                if let Some(path_str) = file_path.to_str() {
+                    let _ = external_command::open_editor(path_str, line_number);
+                }
+            }
         }
         _ => return false,
     }
@@ -275,10 +289,45 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
 mod tests {
     use super::*;
     use crate::app_state::AppState;
+    use crate::external_command;
     use crate::git::{FileDiff, FileStatus, Hunk};
     use pancurses::Input;
     use std::path::PathBuf;
     use std::process::Command as OsCommand;
+
+    fn create_test_file_diff() -> FileDiff {
+        let lines = vec![
+            "@@ -1,5 +1,6 @@".to_string(),
+            " line 1".to_string(),
+            "-line 2".to_string(),
+            "-line 3".to_string(),
+            "+line 2 new".to_string(),
+            "+line 3 new".to_string(),
+            " line 4".to_string(),
+        ];
+        let line_numbers = vec![
+            (0, 0), // @@
+            (1, 1), // ` line 1`
+            (2, 1), // `-line 2`
+            (3, 1), // `-line 3`
+            (3, 2), // `+line 2 new`
+            (3, 3), // `+line 3 new`
+            (4, 4), // ` line 4`
+        ];
+        let hunks = vec![Hunk {
+            start_line: 0,
+            lines: lines.clone(),
+            old_start: 1,
+            new_start: 1,
+            line_numbers,
+        }];
+        FileDiff {
+            file_name: "test.txt".to_string(),
+            hunks,
+            lines,
+            status: FileStatus::Modified,
+        }
+    }
 
     fn create_state_with_files(num_files: usize) -> AppState {
         let files: Vec<FileDiff> = (0..num_files)
@@ -1027,5 +1076,97 @@ mod tests {
         let state = update_state(state, Some(Input::Character('\t')), 30, 80);
         assert_eq!(state.screen, Screen::Main);
         assert_eq!(state.file_cursor, 1); // Reset to default
+    }
+
+    #[test]
+    fn test_open_editor_main_view_no_line() {
+        let mut state = create_state_with_files(1);
+        state.file_cursor = 1;
+        state.is_diff_cursor_active = false;
+        external_command::mock::clear_calls();
+        let repo_path = state.repo_path.clone();
+
+        let _ = update_state(state, Some(Input::Character('e')), 80, 80);
+
+        let calls = external_command::mock::get_calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            calls[0],
+            (
+                repo_path.join("file_0.txt").to_str().unwrap().to_string(),
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn test_open_editor_main_view_with_line() {
+        let mut state = create_test_state(10, 1, 5, 0); // file_cursor=1, line_cursor=5
+        state.is_diff_cursor_active = true;
+        let mut file = create_test_file_diff();
+        file.file_name = "test_file.rs".to_string();
+        state.files = vec![file];
+        external_command::mock::clear_calls();
+        let repo_path = state.repo_path.clone();
+
+        let _ = update_state(state, Some(Input::Character('e')), 80, 80);
+
+        let calls = external_command::mock::get_calls();
+        assert_eq!(calls.len(), 1);
+        // line_cursor is 5, which is "+line 3 new" -> new_line_num 3
+        assert_eq!(
+            calls[0],
+            (
+                repo_path.join("test_file.rs").to_str().unwrap().to_string(),
+                Some(3)
+            )
+        );
+    }
+
+    #[test]
+    fn test_open_editor_unstaged_view() {
+        let mut state = create_state_with_files(0);
+        let mut file = create_test_file_diff();
+        file.file_name = "unstaged_file.txt".to_string();
+        state.unstaged_files = vec![file];
+        state.screen = Screen::Unstaged;
+        state.unstaged_cursor = 1; // Select the file
+        state.line_cursor = 4; // "+line 2 new" -> new_line_num 2
+        external_command::mock::clear_calls();
+        let repo_path = state.repo_path.clone();
+
+        let _ = update_state(state, Some(Input::Character('e')), 80, 80);
+
+        let calls = external_command::mock::get_calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            calls[0],
+            (
+                repo_path.join("unstaged_file.txt").to_str().unwrap().to_string(),
+                Some(2)
+            )
+        );
+    }
+
+    #[test]
+    fn test_open_editor_untracked_file() {
+        let mut state = create_state_with_files(0);
+        state.untracked_files = vec!["untracked.txt".to_string()];
+        state.screen = Screen::Unstaged;
+        state.unstaged_cursor = 2; // [Unstaged header, Untracked header, untracked.txt]
+        external_command::mock::clear_calls();
+        let repo_path = state.repo_path.clone();
+
+        let _ = update_state(state, Some(Input::Character('e')), 80, 80);
+
+        let calls = external_command::mock::get_calls();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            calls[0],
+            (
+                repo_path.join("untracked.txt").to_str().unwrap().to_string(),
+                None
+            )
+        );
     }
 }

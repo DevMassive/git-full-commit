@@ -1,5 +1,6 @@
 use crate::app_state::{AppState, Screen};
 use crate::command::{Command, StageFileCommand, StagePatchCommand};
+use crate::external_command;
 use crate::git::{self, FileStatus};
 use crate::git_patch;
 use crate::ui::diff_view::{render_diff_view, render_line};
@@ -306,6 +307,31 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
                         let command =
                             Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
                         state.execute_and_refresh(command);
+                    }
+                }
+            }
+        }
+        Input::Character('e') => {
+            let unstaged_file_count = state.unstaged_files.len();
+            let untracked_file_count = state.untracked_files.len();
+
+            if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
+                let file_index = state.unstaged_cursor - 1;
+                if let Some(file) = state.unstaged_files.get(file_index) {
+                    let line_number = git_patch::get_line_number(file, state.line_cursor);
+                    let file_path = state.repo_path.join(&file.file_name);
+                    if let Some(path_str) = file_path.to_str() {
+                        let _ = external_command::open_editor(path_str, line_number);
+                    }
+                }
+            } else if state.unstaged_cursor > unstaged_file_count + 1
+                && state.unstaged_cursor <= unstaged_file_count + 1 + untracked_file_count
+            {
+                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
+                if let Some(file_name) = state.untracked_files.get(file_index) {
+                    let file_path = state.repo_path.join(file_name);
+                    if let Some(path_str) = file_path.to_str() {
+                        let _ = external_command::open_editor(path_str, None);
                     }
                 }
             }
