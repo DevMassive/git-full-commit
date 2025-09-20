@@ -1,4 +1,5 @@
 use crate::app_state::{AppState, Screen};
+use crate::git;
 use pancurses::Input;
 
 enum ScrollDirection {
@@ -87,13 +88,38 @@ fn scroll_unstaged_diff_view(
     amount: ScrollAmount,
     max_y: i32,
 ) {
-    if let Some(file) = state.get_unstaged_file() {
-        let unstaged_file_count = state.unstaged_files.len();
-        let untracked_file_count = state.untracked_files.len();
+    let unstaged_file_count = state.unstaged_files.len();
+    let untracked_file_count = state.untracked_files.len();
+
+    let lines_count = if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
+        state
+            .get_unstaged_file()
+            .map_or(0, |f| f.lines.len())
+    } else if state.unstaged_cursor > unstaged_file_count + 1
+        && state.unstaged_cursor <= unstaged_file_count + 1 + untracked_file_count
+    {
+        let file_index = state.unstaged_cursor - unstaged_file_count - 2;
+        if let Some(file_path) = state.untracked_files.get(file_index) {
+            if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_path) {
+                if content.contains(&0x00) {
+                    1
+                } else {
+                    String::from_utf8_lossy(&content).lines().count()
+                }
+            } else {
+                1
+            }
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
+    if lines_count > 0 {
         let file_list_total_items = unstaged_file_count + untracked_file_count + 2;
         let file_list_height = (max_y as usize / 3).max(3).min(file_list_total_items);
         let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
-        let lines_count = file.lines.len();
 
         let (new_line_cursor, new_scroll) = scroll_content(
             state.line_cursor,

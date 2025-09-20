@@ -3,11 +3,13 @@ use crate::command::{
     Command, StageFileCommand, StagePatchCommand, StageUnstagedCommand, StageUntrackedCommand,
 };
 use crate::external_command;
-use crate::git::{self, FileStatus};
+use crate::git::{self, FileDiff, FileStatus};
 use crate::git_patch;
-use crate::ui::diff_view::{render_diff_view, render_line};
+use crate::ui::diff_view::render_diff_view;
 use crate::ui::scroll;
-use pancurses::{COLOR_PAIR, Input, Window};pub fn render_unstaged_view(window: &Window, state: &AppState) {
+use pancurses::{COLOR_PAIR, Input, Window};
+
+pub fn render_unstaged_view(window: &Window, state: &AppState) {
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
 
@@ -23,26 +25,26 @@ use pancurses::{COLOR_PAIR, Input, Window};pub fn render_unstaged_view(window: &
             break;
         }
         let line_y = i as i32;
+        let is_selected = state.unstaged_cursor == item_index;
+        let pair = if is_selected { 5 } else { 1 };
+
+        if is_selected {
+            window.attron(COLOR_PAIR(pair));
+            for x in 0..max_x {
+                window.mvaddch(line_y, x, ' ');
+            }
+            window.attroff(COLOR_PAIR(pair));
+        }
+
+        window.attron(COLOR_PAIR(pair));
+        window.mv(line_y, 0);
 
         if item_index == 0 {
-            window.attron(COLOR_PAIR(1));
-            window.mvaddstr(line_y, 0, " Unstaged changes");
-            window.attroff(COLOR_PAIR(1));
+            window.addstr(" Unstaged changes");
         } else if item_index > 0 && item_index <= unstaged_file_count {
             let file_index = item_index - 1;
             let file = &state.unstaged_files[file_index];
-            let is_selected = state.unstaged_cursor == item_index;
-            let pair = if is_selected { 5 } else { 1 };
             let status_pair = if is_selected { 6 } else { 2 };
-
-            window.attron(COLOR_PAIR(pair));
-            if is_selected {
-                for x in 0..max_x {
-                    window.mvaddch(line_y, x, ' ');
-                }
-            }
-            window.mv(line_y, 0);
-            window.attroff(COLOR_PAIR(pair));
 
             let status_char = match file.status {
                 FileStatus::Added => 'A',
@@ -50,7 +52,6 @@ use pancurses::{COLOR_PAIR, Input, Window};pub fn render_unstaged_view(window: &
                 FileStatus::Renamed => 'R',
                 FileStatus::Deleted => 'D',
             };
-            window.attron(COLOR_PAIR(pair));
             window.addstr("   ");
             window.attroff(COLOR_PAIR(pair));
             window.attron(COLOR_PAIR(status_pair));
@@ -58,30 +59,14 @@ use pancurses::{COLOR_PAIR, Input, Window};pub fn render_unstaged_view(window: &
             window.attroff(COLOR_PAIR(status_pair));
             window.attron(COLOR_PAIR(pair));
             window.addstr(format!(" {}", file.file_name));
-            window.attroff(COLOR_PAIR(pair));
         } else if item_index == unstaged_file_count + 1 {
-            window.attron(COLOR_PAIR(1));
-            window.mvaddstr(line_y, 0, " Untracked files");
-            window.attroff(COLOR_PAIR(1));
+            window.addstr(" Untracked files");
         } else {
             let file_index = item_index - unstaged_file_count - 2;
             let file = &state.untracked_files[file_index];
-            let is_selected = state.unstaged_cursor == item_index;
-            let pair = if is_selected { 5 } else { 1 };
-
-            window.attron(COLOR_PAIR(pair));
-            if is_selected {
-                for x in 0..max_x {
-                    window.mvaddch(line_y, x, ' ');
-                }
-            }
-            window.mv(line_y, 0);
-            window.attroff(COLOR_PAIR(pair));
-
-            window.attron(COLOR_PAIR(pair));
             window.addstr(format!("    ? {file}"));
-            window.attroff(COLOR_PAIR(pair));
         }
+        window.attroff(COLOR_PAIR(pair));
     }
 
     // Render separator
@@ -103,8 +88,8 @@ use pancurses::{COLOR_PAIR, Input, Window};pub fn render_unstaged_view(window: &
                 state.unstaged_diff_scroll,
                 state.unstaged_horizontal_scroll,
                 file_list_height + 1,
-                state.line_cursor, // Using main line_cursor for now
-                true,              // Diff cursor is always active here
+                state.line_cursor,
+                true,
             );
         }
     } else if state.unstaged_cursor > unstaged_file_count + 1
@@ -113,45 +98,43 @@ use pancurses::{COLOR_PAIR, Input, Window};pub fn render_unstaged_view(window: &
         let file_index = state.unstaged_cursor - unstaged_file_count - 2;
         if let Some(file_path) = state.untracked_files.get(file_index) {
             let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
-            let header_height = file_list_height + 1;
 
-            match git::read_file_content(&state.repo_path, file_path) {
+            let lines = match git::read_file_content(&state.repo_path, file_path) {
                 Ok((content, size)) => {
                     if is_binary(&content) {
-                        let message = format!("  Binary file (size: {} bytes)", size);
-                        window.mvaddstr(header_height as i32, 2, &message);
+                        vec![format!("  Binary file (size: {} bytes)", size)]
                     } else {
-                        let content_str = String::from_utf8_lossy(&content);
-                        for (i, line) in content_str
+                        String::from_utf8_lossy(&content)
                             .lines()
-                            .skip(state.untracked_preview_scroll)
-                            .take(content_height)
-                            .enumerate()
-                        {
-                            let line_render_index = i as i32 + header_height as i32;
-                            render_line(
-                                window,
-                                &format!(" {}", line),
-                                None,
-                                i + state.untracked_preview_scroll,
-                                line_render_index,
-                                usize::MAX, // No cursor line
-                                0,
-                                i + state.untracked_preview_scroll + 1,
-                                state.unstaged_horizontal_scroll,
-                                false,
-                            );
-                        }
+                            .map(|l| format!(" {}", l))
+                            .collect()
                     }
                 }
-                Err(e) => {
-                    let message = format!("  Error reading file: {}", e);
-                    window.mvaddstr(header_height as i32, 2, &message);
-                }
-            }
+                Err(e) => vec![format!("  Error reading file: {}", e)],
+            };
+
+            let file_diff = FileDiff {
+                file_name: file_path.clone(),
+                status: FileStatus::Added,
+                lines,
+                hunks: vec![],
+            };
+
+            render_diff_view(
+                window,
+                &file_diff,
+                content_height,
+                state.unstaged_diff_scroll,
+                state.unstaged_horizontal_scroll,
+                file_list_height + 1,
+                state.line_cursor,
+                true,
+            );
         }
     }
 
+    #[cfg(not(test))]
+    pancurses::curs_set(0);
     window.refresh();
 }
 
@@ -207,7 +190,6 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
             state.unstaged_cursor = state.unstaged_cursor.saturating_sub(1);
             state.unstaged_diff_scroll = 0;
             state.line_cursor = 0;
-            state.untracked_preview_scroll = 0;
             if state.unstaged_cursor < state.unstaged_scroll {
                 state.unstaged_scroll = state.unstaged_cursor;
             }
@@ -219,48 +201,50 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
                 .min(unstaged_items_count - 1);
             state.unstaged_diff_scroll = 0;
             state.line_cursor = 0;
-            state.untracked_preview_scroll = 0;
             if state.unstaged_cursor >= state.unstaged_scroll + file_list_height {
                 state.unstaged_scroll = state.unstaged_cursor - file_list_height + 1;
             }
         }
         Input::Character('k') => {
-            let is_on_untracked = state.unstaged_cursor > unstaged_file_count + 1;
-            if is_on_untracked {
-                state.untracked_preview_scroll = state.untracked_preview_scroll.saturating_sub(1);
-            } else {
-                state.line_cursor = state.line_cursor.saturating_sub(1);
-                if state.line_cursor < state.unstaged_diff_scroll {
-                    state.unstaged_diff_scroll = state.line_cursor;
-                }
+            state.line_cursor = state.line_cursor.saturating_sub(1);
+            if state.line_cursor < state.unstaged_diff_scroll {
+                state.unstaged_diff_scroll = state.line_cursor;
             }
         }
         Input::Character('j') => {
-            let is_on_untracked = state.unstaged_cursor > unstaged_file_count + 1;
-            if is_on_untracked {
+            let file_lines_count = if state.unstaged_cursor > 0
+                && state.unstaged_cursor <= unstaged_file_count
+            {
+                let file_index = state.unstaged_cursor - 1;
+                state
+                    .unstaged_files
+                    .get(file_index)
+                    .map(|f| f.lines.len())
+                    .unwrap_or(0)
+            } else if state.unstaged_cursor > unstaged_file_count + 1 {
                 let file_index = state.unstaged_cursor - unstaged_file_count - 2;
                 if let Some(file_path) = state.untracked_files.get(file_index) {
                     if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_path) {
-                        if !is_binary(&content) {
-                            let content_str = String::from_utf8_lossy(&content);
-                            let line_count = content_str.lines().count();
-                            if state.untracked_preview_scroll < line_count.saturating_sub(1) {
-                                state.untracked_preview_scroll += 1;
-                            }
+                        if is_binary(&content) {
+                            1
+                        } else {
+                            String::from_utf8_lossy(&content).lines().count()
                         }
+                    } else {
+                        1
                     }
+                } else {
+                    0
                 }
-            } else if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
-                let file_index = state.unstaged_cursor - 1;
-                if let Some(file) = state.unstaged_files.get(file_index) {
-                    if state.line_cursor < file.lines.len().saturating_sub(1) {
-                        state.line_cursor += 1;
-                        let content_height =
-                            (max_y as usize).saturating_sub(file_list_height + 1);
-                        if state.line_cursor >= state.unstaged_diff_scroll + content_height {
-                            state.unstaged_diff_scroll = state.line_cursor - content_height + 1;
-                        }
-                    }
+            } else {
+                0
+            };
+
+            if state.line_cursor < file_lines_count.saturating_sub(1) {
+                state.line_cursor += 1;
+                let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
+                if state.line_cursor >= state.unstaged_diff_scroll + content_height {
+                    state.unstaged_diff_scroll = state.line_cursor - content_height + 1;
                 }
             }
         }

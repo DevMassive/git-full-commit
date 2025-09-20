@@ -208,6 +208,14 @@ fn render_main_view(window: &Window, state: &AppState) {
         );
     }
 
-    window.mv(carret_y, carret_x);
+    if state.file_cursor == num_files + 1 {
+        #[cfg(not(test))]
+        pancurses::curs_set(1);
+        window.mv(carret_y, carret_x);
+    } else {
+        #[cfg(not(test))]
+        pancurses::curs_set(0);
+    }
+
     window.refresh();
 }
