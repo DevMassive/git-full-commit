@@ -1,6 +1,6 @@
 use crate::app_state::{AppState, Screen};
-use crate::git::FileStatus;
-use crate::ui::diff_view::render_diff_view;
+use crate::git::{self, FileStatus};
+use crate::ui::diff_view::{render_diff_view, render_line};
 use crate::ui::scroll;
 use pancurses::{COLOR_PAIR, Input, Window};pub fn render_unstaged_view(window: &Window, state: &AppState) {
     window.clear();
@@ -102,9 +102,56 @@ use pancurses::{COLOR_PAIR, Input, Window};pub fn render_unstaged_view(window: &
                 true,              // Diff cursor is always active here
             );
         }
+    } else if state.unstaged_cursor > unstaged_file_count + 1
+        && state.unstaged_cursor <= unstaged_file_count + 1 + untracked_file_count
+    {
+        let file_index = state.unstaged_cursor - unstaged_file_count - 2;
+        if let Some(file_path) = state.untracked_files.get(file_index) {
+            let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
+            let header_height = file_list_height + 1;
+
+            match git::read_file_content(&state.repo_path, file_path) {
+                Ok((content, size)) => {
+                    if is_binary(&content) {
+                        let message = format!("  Binary file (size: {} bytes)", size);
+                        window.mvaddstr(header_height as i32, 2, &message);
+                    } else {
+                        let content_str = String::from_utf8_lossy(&content);
+                        for (i, line) in content_str
+                            .lines()
+                            .skip(state.untracked_preview_scroll)
+                            .take(content_height)
+                            .enumerate()
+                        {
+                            let line_render_index = i as i32 + header_height as i32;
+                            render_line(
+                                window,
+                                &format!(" {}", line),
+                                None,
+                                i + state.untracked_preview_scroll,
+                                line_render_index,
+                                usize::MAX, // No cursor line
+                                0,
+                                i + state.untracked_preview_scroll + 1,
+                                state.unstaged_horizontal_scroll,
+                                false,
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    let message = format!("  Error reading file: {}", e);
+                    window.mvaddstr(header_height as i32, 2, &message);
+                }
+            }
+        }
     }
 
     window.refresh();
+}
+
+fn is_binary(content: &[u8]) -> bool {
+    content.contains(&0x00)
 }
 
 pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
@@ -125,6 +172,7 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
             state.unstaged_cursor = state.unstaged_cursor.saturating_sub(1);
             state.unstaged_diff_scroll = 0;
             state.line_cursor = 0;
+            state.untracked_preview_scroll = 0;
             if state.unstaged_cursor < state.unstaged_scroll {
                 state.unstaged_scroll = state.unstaged_cursor;
             }
@@ -136,23 +184,44 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
                 .min(unstaged_items_count - 1);
             state.unstaged_diff_scroll = 0;
             state.line_cursor = 0;
+            state.untracked_preview_scroll = 0;
             if state.unstaged_cursor >= state.unstaged_scroll + file_list_height {
                 state.unstaged_scroll = state.unstaged_cursor - file_list_height + 1;
             }
         }
         Input::Character('k') => {
-            state.line_cursor = state.line_cursor.saturating_sub(1);
-            if state.line_cursor < state.unstaged_diff_scroll {
-                state.unstaged_diff_scroll = state.line_cursor;
+            let is_on_untracked = state.unstaged_cursor > unstaged_file_count + 1;
+            if is_on_untracked {
+                state.untracked_preview_scroll = state.untracked_preview_scroll.saturating_sub(1);
+            } else {
+                state.line_cursor = state.line_cursor.saturating_sub(1);
+                if state.line_cursor < state.unstaged_diff_scroll {
+                    state.unstaged_diff_scroll = state.line_cursor;
+                }
             }
         }
         Input::Character('j') => {
-            if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
+            let is_on_untracked = state.unstaged_cursor > unstaged_file_count + 1;
+            if is_on_untracked {
+                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
+                if let Some(file_path) = state.untracked_files.get(file_index) {
+                    if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_path) {
+                        if !is_binary(&content) {
+                            let content_str = String::from_utf8_lossy(&content);
+                            let line_count = content_str.lines().count();
+                            if state.untracked_preview_scroll < line_count.saturating_sub(1) {
+                                state.untracked_preview_scroll += 1;
+                            }
+                        }
+                    }
+                }
+            } else if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
                 let file_index = state.unstaged_cursor - 1;
                 if let Some(file) = state.unstaged_files.get(file_index) {
                     if state.line_cursor < file.lines.len().saturating_sub(1) {
                         state.line_cursor += 1;
-                        let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
+                        let content_height =
+                            (max_y as usize).saturating_sub(file_list_height + 1);
                         if state.line_cursor >= state.unstaged_diff_scroll + content_height {
                             state.unstaged_diff_scroll = state.line_cursor - content_height + 1;
                         }

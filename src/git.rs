@@ -425,6 +425,13 @@ pub fn rm_cached(repo_path: &Path, path: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn read_file_content(repo_path: &Path, file_path: &str) -> Result<(Vec<u8>, usize)> {
+    let full_path = repo_path.join(file_path);
+    let metadata = std::fs::metadata(&full_path)?;
+    let content = std::fs::read(&full_path)?;
+    Ok((content, metadata.len() as usize))
+}
+
 pub fn rm_file_from_index(repo_path: &Path, path: &str) -> Result<()> {
     OsCommand::new("git")
         .arg("rm")

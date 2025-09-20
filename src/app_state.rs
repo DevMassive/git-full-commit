@@ -38,6 +38,7 @@ pub struct AppState {
     pub unstaged_scroll: usize,
     pub unstaged_diff_scroll: usize,
     pub unstaged_horizontal_scroll: usize,
+    pub untracked_preview_scroll: usize,
 }
 
 impl AppState {
@@ -78,6 +79,7 @@ impl AppState {
             unstaged_scroll: 0,
             unstaged_diff_scroll: 0,
             unstaged_horizontal_scroll: 0,
+            untracked_preview_scroll: 0,
         }
     }
 
