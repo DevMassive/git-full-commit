@@ -1,11 +1,13 @@
 use crate::command::{Command, CommandHistory};
 use crate::commit_storage;
+use crate::cursor_state::CursorState;
 use crate::git::{
     self, FileDiff, get_diff, get_previous_commit_diff, get_previous_commit_info,
     get_unstaged_diff, get_untracked_files,
 };
 use std::path::PathBuf;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Screen {
     Main,
     Unstaged,
@@ -119,7 +121,8 @@ impl AppState {
     }
 
     pub fn execute_and_refresh(&mut self, command: Box<dyn Command>) {
-        self.command_history.execute(command);
+        let cursor_state = CursorState::from_app_state(self);
+        self.command_history.execute(command, cursor_state);
         self.refresh_diff();
     }
 
