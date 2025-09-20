@@ -1,5 +1,5 @@
 use git_full_commit::app_state::AppState;
-use git_full_commit::git::{self, apply_patch, get_diff};
+use git_full_commit::git::{apply_patch, get_diff};
 use git_full_commit::ui::update::update_state;
 use pancurses::{Input, Window, endwin, initscr};
 use serial_test::serial;
