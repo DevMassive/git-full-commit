@@ -1,7 +1,7 @@
 use git_full_commit::app_state::AppState;
 use git_full_commit::git::{self, apply_patch, get_diff};
-use git_full_commit::ui::update::update_state;
 use git_full_commit::ui::unstaged_view::handle_unstaged_view_input;
+use git_full_commit::ui::update::update_state;
 use pancurses::{Input, Window, endwin, initscr};
 use serial_test::serial;
 use std::fs;
@@ -329,11 +329,7 @@ fn test_page_up_down_with_cursor() {
         let mut state = AppState::new(repo_path.clone(), files);
 
         let (max_y, _) = window.get_max_yx();
-        let header_height = if state.files.is_empty() {
-            0
-        } else {
-            state.files.len() + 4
-        };
+        let (header_height, _) = state.main_header_height(max_y);
         let content_height = (max_y as usize).saturating_sub(header_height);
 
         // Page down
@@ -896,7 +892,10 @@ fn test_stage_hunk() {
         let repo_path = std::env::temp_dir().join("test_stage_hunk");
         setup_test_repo_for_unstaged(&repo_path);
         let file_name = "test.txt";
-        let initial_content = (1..=10).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let initial_content = (1..=10)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         create_initial_commit_for_unstaged(&repo_path, file_name, &initial_content);
 
         let mut lines: Vec<String> = initial_content.lines().map(String::from).collect();
@@ -908,7 +907,11 @@ fn test_stage_hunk() {
 
         // Navigate to the modified file and the hunk
         state.unstaged_cursor = 1;
-        let hunk_line = state.unstaged_files[0].lines.iter().position(|l| l.contains("MODIFIED")).unwrap();
+        let hunk_line = state.unstaged_files[0]
+            .lines
+            .iter()
+            .position(|l| l.contains("MODIFIED"))
+            .unwrap();
         state.line_cursor = hunk_line;
 
         // Press Enter to stage the hunk
@@ -923,7 +926,11 @@ fn test_stage_hunk() {
 
         // Undo
         state = update_state(state, Some(Input::Character('u')), 30, 80);
-        assert_eq!(git::get_diff(repo_path).len(), 0, "Staged diff should be empty after undo");
+        assert_eq!(
+            git::get_diff(repo_path).len(),
+            0,
+            "Staged diff should be empty after undo"
+        );
     });
 }
 
@@ -979,7 +986,8 @@ fn test_undo_redo_restores_cursor_position() {
         state.scroll = 5;
         state.screen = git_full_commit::app_state::Screen::Main;
 
-        let cursor_before_action = git_full_commit::cursor_state::CursorState::from_app_state(&state);
+        let cursor_before_action =
+            git_full_commit::cursor_state::CursorState::from_app_state(&state);
 
         // 2. Perform an action (unstage line)
         state = update_state(state, Some(Input::Character('1')), 30, 80);
@@ -995,18 +1003,26 @@ fn test_undo_redo_restores_cursor_position() {
 
         // 5. Assert cursor is restored to the position before the action
         let cursor_after_undo = git_full_commit::cursor_state::CursorState::from_app_state(&state);
-        assert_eq!(cursor_after_undo.file_cursor, cursor_before_action.file_cursor);
-        assert_eq!(cursor_after_undo.line_cursor, cursor_before_action.line_cursor);
+        assert_eq!(
+            cursor_after_undo.file_cursor,
+            cursor_before_action.file_cursor
+        );
+        assert_eq!(
+            cursor_after_undo.line_cursor,
+            cursor_before_action.line_cursor
+        );
         assert_eq!(cursor_after_undo.scroll, cursor_before_action.scroll);
         assert_eq!(cursor_after_undo.screen, cursor_before_action.screen);
-
 
         // 6. Redo
         state = update_state(state, Some(Input::Character('r')), 30, 80);
 
         // 7. Assert cursor is restored to the position before the undo
         let cursor_after_redo = git_full_commit::cursor_state::CursorState::from_app_state(&state);
-        assert_eq!(cursor_after_redo.file_cursor, cursor_before_undo.file_cursor);
+        assert_eq!(
+            cursor_after_redo.file_cursor,
+            cursor_before_undo.file_cursor
+        );
         // line_cursor is not restored on redo of unstaging a line, as the file content changes.
         // This is acceptable. The main thing is file_cursor and screen.
         // assert_eq!(cursor_after_redo.line_cursor, cursor_before_undo.line_cursor);
@@ -1023,14 +1039,18 @@ fn test_stage_line() {
         setup_test_repo_for_unstaged(&repo_path);
         let file_name = "test.txt";
         create_initial_commit_for_unstaged(&repo_path, file_name, "line1\nline2\n");
-            fs::write(repo_path.join(file_name), "line1\nCHANGED\nADDED\n").unwrap();
+        fs::write(repo_path.join(file_name), "line1\nCHANGED\nADDED\n").unwrap();
 
         let mut state = AppState::new(repo_path.clone(), vec![]);
         state.refresh_diff();
 
         // Navigate to the added line
         state.unstaged_cursor = 1;
-            let added_line_index = state.unstaged_files[0].lines.iter().position(|l| l.contains("ADDED")).unwrap();
+        let added_line_index = state.unstaged_files[0]
+            .lines
+            .iter()
+            .position(|l| l.contains("ADDED"))
+            .unwrap();
         state.line_cursor = added_line_index;
 
         // Press '1' to stage the line
@@ -1045,6 +1065,10 @@ fn test_stage_line() {
 
         // Undo
         state = update_state(state, Some(Input::Character('u')), 30, 80);
-        assert_eq!(git::get_diff(repo_path).len(), 0, "Staged diff should be empty after undo");
+        assert_eq!(
+            git::get_diff(repo_path).len(),
+            0,
+            "Staged diff should be empty after undo"
+        );
     });
 }

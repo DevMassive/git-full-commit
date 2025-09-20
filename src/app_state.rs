@@ -145,4 +145,19 @@ impl AppState {
             None
         }
     }
+
+    pub fn main_header_height(&self, max_y: i32) -> (usize, usize) {
+        let num_files = self.files.len();
+        let file_list_total_items = num_files + 3;
+        let height = (max_y as usize / 3).max(3).min(file_list_total_items);
+        (height, file_list_total_items)
+    }
+
+    pub fn unstaged_header_height(&self, max_y: i32) -> (usize, usize) {
+        let unstaged_file_count = self.unstaged_files.len();
+        let untracked_file_count = self.untracked_files.len();
+        let file_list_total_items = unstaged_file_count + untracked_file_count + 2;
+        let height = (max_y as usize / 3).max(3).min(file_list_total_items);
+        (height, file_list_total_items)
+    }
 }

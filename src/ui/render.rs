@@ -20,9 +20,8 @@ fn render_main_view(window: &Window, state: &AppState) {
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
 
+    let (file_list_height, file_list_total_items) = state.main_header_height(max_y);
     let num_files = state.files.len();
-    let file_list_total_items = num_files + 3;
-    let file_list_height = (max_y as usize / 3).max(3).min(file_list_total_items);
 
     let mut carret_y = 0;
     let mut carret_x = 0;

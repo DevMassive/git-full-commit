@@ -293,7 +293,6 @@ pub fn add_all_with_size_limit(repo_path: &Path, size_limit: u64) -> Result<()> 
     Ok(())
 }
 
-
 pub fn add_all(repo_path: &Path) -> Result<()> {
     add_all_with_size_limit(repo_path, 100 * 1024 * 1024)
 }

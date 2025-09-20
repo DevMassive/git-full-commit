@@ -35,11 +35,11 @@ fn scroll_content(
 
     match direction {
         ScrollDirection::Down => {
-            new_line_cursor = new_line_cursor.saturating_add(scroll_amount);
-            new_line_cursor = new_line_cursor.min(max_line);
-            if new_line_cursor >= new_scroll + content_height {
+            if new_line_cursor.saturating_add(scroll_amount) >= new_scroll + content_height {
                 new_scroll = new_scroll.saturating_add(scroll_amount);
             }
+            new_line_cursor = new_line_cursor.saturating_add(scroll_amount);
+            new_line_cursor = new_line_cursor.min(max_line);
         }
         ScrollDirection::Up => {
             new_line_cursor = new_line_cursor.saturating_sub(scroll_amount);
@@ -52,7 +52,7 @@ fn scroll_content(
 }
 
 fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollAmount, max_y: i32) {
-    let header_height = state.files.len() + 4;
+    let header_height = state.main_header_height(max_y).0;
     let content_height = (max_y as usize).saturating_sub(header_height);
     let num_files = state.files.len();
     let lines_count = if state.file_cursor > 0 && state.file_cursor <= num_files {
@@ -92,9 +92,7 @@ fn scroll_unstaged_diff_view(
     let untracked_file_count = state.untracked_files.len();
 
     let lines_count = if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
-        state
-            .get_unstaged_file()
-            .map_or(0, |f| f.lines.len())
+        state.get_unstaged_file().map_or(0, |f| f.lines.len())
     } else if state.unstaged_cursor > unstaged_file_count + 1
         && state.unstaged_cursor <= unstaged_file_count + 1 + untracked_file_count
     {

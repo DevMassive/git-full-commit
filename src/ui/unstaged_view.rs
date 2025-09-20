@@ -13,10 +13,9 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
 
+    let (file_list_height, file_list_total_items) = state.unstaged_header_height(max_y);
     let unstaged_file_count = state.unstaged_files.len();
     let untracked_file_count = state.untracked_files.len();
-    let file_list_total_items = unstaged_file_count + untracked_file_count + 2;
-    let file_list_height = (max_y as usize / 3).max(3).min(file_list_total_items);
 
     // Render file list
     for i in 0..file_list_height {
@@ -106,7 +105,7 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
                     } else {
                         String::from_utf8_lossy(&content)
                             .lines()
-                            .map(|l| format!(" {}", l))
+                            .map(|l| format!(" {l}"))
                             .collect()
                     }
                 }
@@ -143,28 +142,25 @@ fn is_binary(content: &[u8]) -> bool {
 }
 
 pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32) {
+    let (file_list_height, unstaged_items_count) = state.unstaged_header_height(max_y);
     let unstaged_file_count = state.unstaged_files.len();
     let untracked_file_count = state.untracked_files.len();
-    let unstaged_items_count = unstaged_file_count + untracked_file_count + 2;
-
-    let file_list_height = (max_y as usize / 3).max(3).min(unstaged_items_count);
 
     match input {
         Input::Character('\t') => {
             let unstaged_file_count = state.unstaged_files.len();
-            let selected_file_name = if state.unstaged_cursor > 0
-                && state.unstaged_cursor <= unstaged_file_count
-            {
-                state
-                    .unstaged_files
-                    .get(state.unstaged_cursor - 1)
-                    .map(|f| f.file_name.clone())
-            } else if state.unstaged_cursor > unstaged_file_count + 1 {
-                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
-                state.untracked_files.get(file_index).cloned()
-            } else {
-                None
-            };
+            let selected_file_name =
+                if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
+                    state
+                        .unstaged_files
+                        .get(state.unstaged_cursor - 1)
+                        .map(|f| f.file_name.clone())
+                } else if state.unstaged_cursor > unstaged_file_count + 1 {
+                    let file_index = state.unstaged_cursor - unstaged_file_count - 2;
+                    state.untracked_files.get(file_index).cloned()
+                } else {
+                    None
+                };
 
             if let Some(file_name) = selected_file_name {
                 if let Some(index) = state.files.iter().position(|f| f.file_name == file_name) {
@@ -279,10 +275,8 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             } else if state.unstaged_cursor > unstaged_file_count + 1 {
                 let file_index = state.unstaged_cursor - unstaged_file_count - 2;
                 if let Some(file_name) = state.untracked_files.get(file_index).cloned() {
-                    let command = Box::new(StageFileCommand::new(
-                        state.repo_path.clone(),
-                        file_name,
-                    ));
+                    let command =
+                        Box::new(StageFileCommand::new(state.repo_path.clone(), file_name));
                     state.execute_and_refresh(command);
                 }
             }
@@ -292,8 +286,7 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
                 let file_index = state.unstaged_cursor - 1;
                 if let Some(file) = state.unstaged_files.get(file_index) {
-                    if let Some(patch) =
-                        git_patch::create_stage_line_patch(file, state.line_cursor)
+                    if let Some(patch) = git_patch::create_stage_line_patch(file, state.line_cursor)
                     {
                         let command =
                             Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
