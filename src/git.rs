@@ -266,6 +266,16 @@ pub fn add_all(repo_path: &Path) -> Result<()> {
     Ok(())
 }
 
+pub fn unstage_all(repo_path: &Path) -> Result<()> {
+    OsCommand::new("git")
+        .arg("reset")
+        .arg("HEAD")
+        .arg(".")
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
 pub fn get_staged_diff_output(repo_path: &Path) -> Result<std::process::Output> {
     let output = OsCommand::new("git")
         .arg("diff")
@@ -284,6 +294,16 @@ pub fn get_unstaged_diff(repo_path: &Path) -> Vec<FileDiff> {
 
     let diff_str = String::from_utf8_lossy(&output.stdout);
     parse_diff(&diff_str)
+}
+
+pub fn get_unstaged_files(repo_path: &Path) -> Result<Vec<String>> {
+    let output = OsCommand::new("git")
+        .arg("diff")
+        .arg("--name-only")
+        .current_dir(repo_path)
+        .output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.lines().map(String::from).collect())
 }
 
 pub fn get_untracked_files(repo_path: &Path) -> Result<Vec<String>> {
@@ -310,6 +330,15 @@ pub fn get_untracked_files(repo_path: &Path) -> Result<Vec<String>> {
 pub fn get_unstaged_diff_patch(repo_path: &Path) -> Result<String> {
     let output = OsCommand::new("git")
         .arg("diff")
+        .current_dir(repo_path)
+        .output()?;
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+pub fn get_staged_diff_patch(repo_path: &Path) -> Result<String> {
+    let output = OsCommand::new("git")
+        .arg("diff")
+        .arg("--staged")
         .current_dir(repo_path)
         .output()?;
     Ok(String::from_utf8_lossy(&output.stdout).to_string())

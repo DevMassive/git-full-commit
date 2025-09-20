@@ -1,5 +1,7 @@
 use crate::app_state::{AppState, Screen};
-use crate::command::{Command, StageFileCommand, StagePatchCommand};
+use crate::command::{
+    Command, StageFileCommand, StagePatchCommand, StageUnstagedCommand, StageUntrackedCommand,
+};
 use crate::external_command;
 use crate::git::{self, FileStatus};
 use crate::git_patch;
@@ -270,7 +272,10 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
         }
         Input::Character('\n') => {
             let unstaged_file_count = state.unstaged_files.len();
-            if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
+            if state.unstaged_cursor == 0 {
+                let command = Box::new(StageUnstagedCommand::new(state.repo_path.clone()));
+                state.execute_and_refresh(command);
+            } else if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
                 let file_index = state.unstaged_cursor - 1;
                 if let Some(file) = state.unstaged_files.get(file_index).cloned() {
                     let command: Box<dyn Command> =
@@ -285,6 +290,9 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input) {
                         };
                     state.execute_and_refresh(command);
                 }
+            } else if state.unstaged_cursor == unstaged_file_count + 1 {
+                let command = Box::new(StageUntrackedCommand::new(state.repo_path.clone()));
+                state.execute_and_refresh(command);
             } else if state.unstaged_cursor > unstaged_file_count + 1 {
                 let file_index = state.unstaged_cursor - unstaged_file_count - 2;
                 if let Some(file_name) = state.untracked_files.get(file_index).cloned() {
