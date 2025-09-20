@@ -256,22 +256,26 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 return state;
             }
             Input::Character('u') => {
-                let cursor_state = CursorState::from_app_state(&state);
-                if let Some(cursor) = state.command_history.undo(cursor_state) {
-                    state.refresh_diff();
-                    cursor.apply_to_app_state(&mut state);
-                } else {
-                    state.refresh_diff();
+                if !state.is_commit_mode {
+                    let cursor_state = CursorState::from_app_state(&state);
+                    if let Some(cursor) = state.command_history.undo(cursor_state) {
+                        state.refresh_diff();
+                        cursor.apply_to_app_state(&mut state);
+                    } else {
+                        state.refresh_diff();
+                    }
+                    return state;
                 }
-                return state;
             }
             Input::Character('r') => {
-                let cursor_state = CursorState::from_app_state(&state);
-                if let Some(cursor) = state.command_history.redo(cursor_state) {
-                    state.refresh_diff();
-                    cursor.apply_to_app_state(&mut state);
+                if !state.is_commit_mode {
+                    let cursor_state = CursorState::from_app_state(&state);
+                    if let Some(cursor) = state.command_history.redo(cursor_state) {
+                        state.refresh_diff();
+                        cursor.apply_to_app_state(&mut state);
+                    }
+                    return state;
                 }
-                return state;
             }
             _ => (),
         }
