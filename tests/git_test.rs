@@ -929,6 +929,45 @@ fn test_stage_hunk() {
 
 #[test]
 #[serial]
+fn test_add_all_with_size_limit() {
+    let setup = TestSetup::new();
+    let repo_path = &setup.repo_path;
+
+    // Create a small untracked file
+    let small_file_path = repo_path.join("small.txt");
+    fs::write(&small_file_path, "small").unwrap();
+
+    // Create a large untracked file
+    let large_file_path = repo_path.join("large.txt");
+    let large_content = vec![0; 1024 * 1024]; // 1MB
+    fs::write(&large_file_path, &large_content).unwrap();
+
+    // Modify an existing file
+    let modified_file_path = repo_path.join("test.txt");
+    fs::write(&modified_file_path, "modified").unwrap();
+
+    // Run add_all with a size limit of 500KB
+    git::add_all_with_size_limit(repo_path, 500 * 1024).unwrap();
+
+    // Check the status
+    let output = OsCommand::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .current_dir(repo_path)
+        .output()
+        .unwrap();
+    let status = String::from_utf8_lossy(&output.stdout);
+
+    // Assert that the small file is staged
+    assert!(status.contains("A  small.txt"));
+    // Assert that the large file is not staged
+    assert!(status.contains("?? large.txt"));
+    // Assert that the modified file is staged
+    assert!(status.contains("M  test.txt"));
+}
+
+#[test]
+#[serial]
 fn test_undo_redo_restores_cursor_position() {
     run_test_with_pancurses(|_window| {
         let setup = TestSetup::new_multi_line();

@@ -257,13 +257,45 @@ pub fn amend_commit(repo_path: &Path, message: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn add_all(repo_path: &Path) -> Result<()> {
+pub fn add_all_with_size_limit(repo_path: &Path, size_limit: u64) -> Result<()> {
+    // Stage all modified and deleted files
     OsCommand::new("git")
         .arg("add")
-        .arg("-A")
+        .arg("--update")
         .current_dir(repo_path)
         .output()?;
+
+    // Get untracked files
+    let output = OsCommand::new("git")
+        .arg("ls-files")
+        .arg("--others")
+        .arg("--exclude-standard")
+        .current_dir(repo_path)
+        .output()?;
+
+    if !output.status.success() {
+        return Ok(());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for file_name in stdout.lines() {
+        if file_name.is_empty() {
+            continue;
+        }
+
+        let file_path = repo_path.join(file_name);
+        if let Ok(metadata) = std::fs::metadata(&file_path) {
+            if metadata.len() <= size_limit {
+                stage_file(repo_path, file_name)?;
+            }
+        }
+    }
     Ok(())
+}
+
+
+pub fn add_all(repo_path: &Path) -> Result<()> {
+    add_all_with_size_limit(repo_path, 100 * 1024 * 1024)
 }
 
 pub fn unstage_all(repo_path: &Path) -> Result<()> {
