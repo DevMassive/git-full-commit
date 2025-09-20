@@ -227,7 +227,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                 state.is_commit_mode = true;
                 #[cfg(not(test))]
                 curs_set(1);
-                commit_view::handle_commit_input(state, input);
+                commit_view::handle_commit_input(state, input, max_y);
             } else {
                 scroll::handle_scroll(state, input, max_y);
             }
@@ -278,7 +278,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
         match state.screen {
             Screen::Main => {
                 if state.is_commit_mode {
-                    commit_view::handle_commit_input(&mut state, input);
+                    commit_view::handle_commit_input(&mut state, input, max_y);
                 } else if !handle_commands(&mut state, input, max_y) {
                     handle_navigation(&mut state, input, max_y, max_x);
                 }

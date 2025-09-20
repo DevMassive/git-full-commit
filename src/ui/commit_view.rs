@@ -5,7 +5,7 @@ use pancurses::Input;
 #[cfg(not(test))]
 use pancurses::curs_set;
 
-pub fn handle_commit_input(state: &mut AppState, input: Input) {
+pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
     match input {
         Input::KeyUp => {
             state.is_commit_mode = false;
@@ -14,6 +14,10 @@ pub fn handle_commit_input(state: &mut AppState, input: Input) {
             state.file_cursor = state.files.len();
             state.line_cursor = 0;
             state.scroll = 0;
+
+            if state.file_cursor < state.file_list_scroll {
+                state.file_list_scroll = state.file_cursor;
+            }
         }
         Input::KeyDown => {
             state.is_commit_mode = false;
@@ -22,6 +26,11 @@ pub fn handle_commit_input(state: &mut AppState, input: Input) {
             state.file_cursor = state.files.len() + 2;
             state.line_cursor = 0;
             state.scroll = 0;
+
+            let file_list_height = state.main_header_height(max_y).0;
+            if state.file_cursor >= state.file_list_scroll + file_list_height {
+                state.file_list_scroll = state.file_cursor - file_list_height + 1;
+            }
         }
         Input::Character('\t') => {
             state.is_amend_mode = !state.is_amend_mode;
