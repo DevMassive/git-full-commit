@@ -13,6 +13,12 @@
 
 # インストール方法
 
+## バイナリをダウンロード
+
+[Releases](https://github.com/DevMassive/git-full-commit/releases) 展開後、PATHの通った場所に置く。
+
+## ソースコードからビルド
+
 Cargoをいれてから、このレポジトリをcloneして`cargo install`する。
 
 ```
