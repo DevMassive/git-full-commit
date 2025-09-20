@@ -1,7 +1,15 @@
 use crate::command::{Command, CommandHistory};
 use crate::commit_storage;
-use crate::git::{self, FileDiff, get_diff, get_previous_commit_diff, get_previous_commit_info};
+use crate::git::{
+    self, get_diff, get_previous_commit_diff, get_previous_commit_info, get_unstaged_diff,
+    get_untracked_files, FileDiff,
+};
 use std::path::PathBuf;
+
+pub enum Screen {
+    Main,
+    Unstaged,
+}
 
 pub struct AppState {
     pub repo_path: PathBuf,
@@ -23,6 +31,11 @@ pub struct AppState {
     pub previous_commit_files: Vec<FileDiff>,
     pub is_diff_cursor_active: bool,
     pub has_unstaged_changes: bool,
+    pub screen: Screen,
+    pub unstaged_files: Vec<FileDiff>,
+    pub untracked_files: Vec<String>,
+    pub unstaged_cursor: usize,
+    pub unstaged_scroll: usize,
 }
 
 impl AppState {
@@ -34,6 +47,8 @@ impl AppState {
         let previous_commit_files =
             get_previous_commit_diff(&repo_path).unwrap_or_else(|_| Vec::new());
         let has_unstaged_changes = git::has_unstaged_changes(&repo_path).unwrap_or(false);
+        let unstaged_files = get_unstaged_diff(&repo_path);
+        let untracked_files = get_untracked_files(&repo_path).unwrap_or_default();
         Self {
             repo_path,
             scroll: 0,
@@ -54,6 +69,11 @@ impl AppState {
             previous_commit_files,
             is_diff_cursor_active: false,
             has_unstaged_changes,
+            screen: Screen::Main,
+            unstaged_files,
+            untracked_files,
+            unstaged_cursor: 0,
+            unstaged_scroll: 0,
         }
     }
 
@@ -76,6 +96,8 @@ impl AppState {
         self.previous_commit_files =
             get_previous_commit_diff(&self.repo_path).unwrap_or_else(|_| Vec::new());
         self.has_unstaged_changes = git::has_unstaged_changes(&self.repo_path).unwrap_or(false);
+        self.unstaged_files = get_unstaged_diff(&self.repo_path);
+        self.untracked_files = get_untracked_files(&self.repo_path).unwrap_or_default();
 
         if self.files.is_empty() {
             self.file_cursor = 1; // commit message line

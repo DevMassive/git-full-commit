@@ -1,12 +1,27 @@
-use crate::app_state::AppState;
+use crate::app_state::{AppState, Screen};
 use crate::git::FileStatus;
 use crate::ui::diff_view::{
-    LINE_CONTENT_OFFSET, WordDiffLine, compute_word_diffs, get_scrolled_line,
+    LINE_CONTENT_OFFSET,
+    WordDiffLine,
+    compute_word_diffs,
+    get_scrolled_line,
 };
-use pancurses::{A_REVERSE, COLOR_PAIR, Window, chtype};
+use crate::ui::unstaged_view::render_unstaged_view;
+use pancurses::{chtype, A_REVERSE, COLOR_PAIR, Window};
 use unicode_width::UnicodeWidthStr;
 
 pub fn render(window: &Window, state: &AppState) {
+    match state.screen {
+        Screen::Main => {
+            render_main_view(window, state);
+        }
+        Screen::Unstaged => {
+            render_unstaged_view(window, state);
+        }
+    }
+}
+
+fn render_main_view(window: &Window, state: &AppState) {
     window.clear();
     let (max_y, max_x) = window.get_max_yx();
 
@@ -37,7 +52,7 @@ pub fn render(window: &Window, state: &AppState) {
             window.mv(line_y, 0);
             let mut staged_changes_text = " Staged changes".to_string();
             if state.has_unstaged_changes {
-                staged_changes_text.push_str(" (Press R to re-add)");
+                staged_changes_text.push_str(" (press ENTER to view)");
             }
             window.addstr(&staged_changes_text);
             window.attroff(COLOR_PAIR(pair));
@@ -67,10 +82,10 @@ pub fn render(window: &Window, state: &AppState) {
             window.addstr("   ");
             window.attroff(COLOR_PAIR(pair));
             window.attron(COLOR_PAIR(status_pair));
-            window.addstr(format!("{status_char}"));
+            window.addstr(format!( "{status_char}"));
             window.attroff(COLOR_PAIR(status_pair));
             window.attron(COLOR_PAIR(pair));
-            window.addstr(format!(" {}", file.file_name));
+            window.addstr(format!( " {}", file.file_name));
             window.attroff(COLOR_PAIR(pair));
         } else if item_index == num_files + 1 {
             // Render commit message line
@@ -115,7 +130,7 @@ pub fn render(window: &Window, state: &AppState) {
             if state.is_amend_mode {
                 window.addstr(" |");
             } else {
-                window.addstr(format!(" o {}", &state.previous_commit_message));
+                window.addstr(format!( " o {}", &state.previous_commit_message));
             }
             window.attroff(COLOR_PAIR(pair));
         }
@@ -400,9 +415,8 @@ fn render_line(
         grey_pair
     };
 
-    if (line.starts_with(" ") || line.starts_with("+") || line.starts_with("-"))
-        && (!line.starts_with("@@ ") && !line.starts_with("+++") && !line.starts_with("---"))
-    {
+    if (line.starts_with(' ') || line.starts_with('+') || line.starts_with('-'))
+        && (!line.starts_with("@@ ") && !line.starts_with("+++") && !line.starts_with("---")) {
         window.attron(COLOR_PAIR(num_pair));
         window.mvaddstr(line_render_index, 0, &line_num_str);
         window.attroff(COLOR_PAIR(num_pair));

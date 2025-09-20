@@ -275,6 +275,38 @@ pub fn get_staged_diff_output(repo_path: &Path) -> Result<std::process::Output> 
     Ok(output)
 }
 
+pub fn get_unstaged_diff(repo_path: &Path) -> Vec<FileDiff> {
+    let output = OsCommand::new("git")
+        .arg("diff")
+        .current_dir(repo_path)
+        .output()
+        .expect("Failed to execute git diff");
+
+    let diff_str = String::from_utf8_lossy(&output.stdout);
+    parse_diff(&diff_str)
+}
+
+pub fn get_untracked_files(repo_path: &Path) -> Result<Vec<String>> {
+    let output = OsCommand::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .current_dir(repo_path)
+        .output()?;
+
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let untracked_files = stdout
+        .lines()
+        .filter(|line| line.starts_with("??"))
+        .map(|line| line.split(' ').nth(1).unwrap_or("").to_string())
+        .collect();
+
+    Ok(untracked_files)
+}
+
 pub fn get_unstaged_diff_patch(repo_path: &Path) -> Result<String> {
     let output = OsCommand::new("git")
         .arg("diff")

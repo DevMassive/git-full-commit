@@ -1,4 +1,4 @@
-use crate::app_state::AppState;
+use crate::app_state::{AppState, Screen};
 use crate::command::{
     ApplyPatchCommand,
     CheckoutFileCommand,
@@ -13,6 +13,7 @@ use crate::git;
 use crate::ui::commit_view;
 use crate::ui::diff_view::LINE_CONTENT_OFFSET;
 use crate::ui::scroll;
+use crate::ui::unstaged_view;
 use pancurses::Input;
 #[cfg(not(test))]
 use pancurses::curs_set;
@@ -102,7 +103,9 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
             }
         }
         Input::Character('\n') => {
-            if let Some(file) = state.current_file().cloned() {
+            if state.file_cursor == 0 {
+                state.screen = Screen::Unstaged;
+            } else if let Some(file) = state.current_file().cloned() {
                 let line_index = state.line_cursor;
                 if let Some(hunk) = git_patch::find_hunk(&file, line_index) {
                     let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
@@ -234,16 +237,18 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
 }
 
 pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x: i32) -> AppState {
-    if state.is_commit_mode {
-        if let Some(input) = input {
-            commit_view::handle_commit_input(&mut state, input);
-        }
-        return state;
-    }
-
     if let Some(input) = input {
-        if !handle_commands(&mut state, input, max_y) {
-            handle_navigation(&mut state, input, max_y, max_x);
+        match state.screen {
+            Screen::Main => {
+                if state.is_commit_mode {
+                    commit_view::handle_commit_input(&mut state, input);
+                } else if !handle_commands(&mut state, input, max_y) {
+                    handle_navigation(&mut state, input, max_y, max_x);
+                }
+            }
+            Screen::Unstaged => {
+                unstaged_view::handle_unstaged_view_input(&mut state, input);
+            }
         }
     }
 
@@ -545,7 +550,7 @@ mod tests {
             1,
             "File list should only contain .gitignore"
         );
-        assert_eq!(
+        assert_eq!( 
             updated_state.files[0].file_name, ".gitignore",
             "The remaining file should be .gitignore"
         );
@@ -560,7 +565,7 @@ mod tests {
             1,
             "File list should contain the original file again"
         );
-        assert_eq!(
+        assert_eq!( 
             updated_state.files[0].file_name, file_to_ignore,
             "The file should be the one we ignored"
         );
@@ -575,7 +580,7 @@ mod tests {
             1,
             "File list should contain the original file again"
         );
-        assert_eq!(
+        assert_eq!( 
             updated_state.files[0].file_name, file_to_ignore,
             "The file should be the one we ignored"
         );
