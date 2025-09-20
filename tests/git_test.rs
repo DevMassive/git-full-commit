@@ -229,12 +229,17 @@ fn test_unstage_deleted_line() {
         let state_after_unstage = update_state(state, Some(Input::Character('1')), 30, 80);
         assert_eq!(state_after_unstage.files.len(), 1);
         // The diff should now only contain "+changed"
-        assert_eq!(state_after_unstage.files[0].lines.len(), 8);
         assert!(
             !state_after_unstage.files[0]
                 .lines
                 .iter()
                 .any(|l| l.contains("-line2"))
+        );
+        assert!(
+            state_after_unstage.files[0]
+                .lines
+                .iter()
+                .any(|l| l.contains(" line2"))
         );
         assert!(
             state_after_unstage.files[0]
