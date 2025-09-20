@@ -15,6 +15,14 @@ pub fn handle_commit_input(state: &mut AppState, input: Input) {
             state.line_cursor = 0;
             state.scroll = 0;
         }
+        Input::KeyDown => {
+            state.is_commit_mode = false;
+            #[cfg(not(test))]
+            curs_set(0);
+            state.file_cursor = state.files.len() + 2;
+            state.line_cursor = 0;
+            state.scroll = 0;
+        }
         Input::Character('\t') => {
             state.is_amend_mode = !state.is_amend_mode;
             if state.is_amend_mode {

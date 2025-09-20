@@ -14,6 +14,9 @@ pub fn render(window: &Window, state: &AppState) {
     let file_list_total_items = num_files + 3;
     let file_list_height = (max_y as usize / 3).max(3).min(file_list_total_items);
 
+    let mut carret_y = 0;
+    let mut carret_x = 0;
+
     for i in 0..file_list_height {
         let item_index = state.file_list_scroll + i;
         if item_index >= file_list_total_items {
@@ -32,7 +35,7 @@ pub fn render(window: &Window, state: &AppState) {
                 }
             }
             window.mv(line_y, 0);
-            window.addstr(" o Staged changes");
+            window.addstr(" Staged changes");
             window.attroff(COLOR_PAIR(pair));
         } else if item_index > 0 && item_index <= num_files {
             let file_index = item_index - 1;
@@ -57,7 +60,7 @@ pub fn render(window: &Window, state: &AppState) {
                 FileStatus::Deleted => 'D',
             };
             window.attron(COLOR_PAIR(pair));
-            window.addstr(" | ");
+            window.addstr("   ");
             window.attroff(COLOR_PAIR(pair));
             window.attron(COLOR_PAIR(status_pair));
             window.addstr(format!("{status_char}"));
@@ -87,14 +90,13 @@ pub fn render(window: &Window, state: &AppState) {
             window.addstr(message);
             window.attroff(COLOR_PAIR(pair));
 
-            if state.file_cursor == num_files + 1 && state.is_commit_mode {
-                let commit_line_y = line_y;
-                let prefix_width = prefix.width();
-                let message_before_cursor: String =
-                    message.chars().take(state.commit_cursor).collect();
-                let cursor_display_pos = prefix_width + message_before_cursor.width();
-                window.mv(commit_line_y, cursor_display_pos as i32);
-            }
+            let commit_line_y = line_y;
+            let prefix_width = prefix.width();
+            let message_before_cursor: String = message.chars().take(state.commit_cursor).collect();
+            let cursor_display_pos = prefix_width + message_before_cursor.width();
+
+            carret_y = commit_line_y;
+            carret_x = cursor_display_pos as i32;
         } else if item_index == num_files + 2 {
             // Render previous commit info
             let is_selected = state.file_cursor == num_files + 2;
@@ -320,6 +322,8 @@ pub fn render(window: &Window, state: &AppState) {
             }
         }
     }
+
+    window.mv(carret_y, carret_x);
     window.refresh();
 }
 

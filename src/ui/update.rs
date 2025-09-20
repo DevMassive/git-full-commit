@@ -160,12 +160,6 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             if state.file_cursor >= state.file_list_scroll + file_list_height {
                 state.file_list_scroll = state.file_cursor - file_list_height + 1;
             }
-
-            if state.file_cursor == state.files.len() + 1 {
-                state.is_commit_mode = true;
-                #[cfg(not(test))]
-                curs_set(1);
-            }
         }
         Input::Character('k') => {
             state.is_diff_cursor_active = true;
@@ -217,6 +211,11 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                 scroll::handle_scroll(state, input, max_y);
             }
         }
+    }
+    if state.file_cursor == state.files.len() + 1 && !state.is_commit_mode {
+        state.is_commit_mode = true;
+        #[cfg(not(test))]
+        curs_set(1);
     }
 }
 
@@ -289,7 +288,7 @@ mod tests {
         // --- Scroll up ---
         // Move to cursor 11, scroll should be 11
         for _ in 0..9 {
-             state = update_state(state, Some(Input::KeyUp), max_y, 80);
+            state = update_state(state, Some(Input::KeyUp), max_y, 80);
         }
         assert_eq!(state.file_cursor, 11);
         assert_eq!(state.file_list_scroll, 11);
@@ -705,7 +704,10 @@ mod tests {
 
         // Create and commit a file
         let file_path = repo_path.join("test.txt");
-        let initial_content = (1..=20).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let initial_content = (1..=20)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         std::fs::write(&file_path, &initial_content).unwrap();
         OsCommand::new("git")
             .arg("add")
@@ -772,7 +774,10 @@ mod tests {
             .output()
             .expect("Failed to get working directory diff");
         let working_diff_str = String::from_utf8_lossy(&working_diff.stdout);
-        assert!(working_diff_str.is_empty(), "Working directory should be clean");
+        assert!(
+            working_diff_str.is_empty(),
+            "Working directory should be clean"
+        );
 
         // Simulate undo
         updated_state.command_history.undo();
