@@ -203,6 +203,50 @@ fn test_unstage_line() {
 
 #[test]
 #[serial]
+fn test_unstage_deleted_line() {
+    run_test_with_pancurses(|_window| {
+        let setup = TestSetup::new_multi_line();
+        let mut state = create_test_state(&setup);
+
+        // We have one file with one hunk. The hunk has 3 lines: one removed, one added, one context.
+        // diff --git a/test.txt b/test.txt
+        // index 3027459..9413563 100644
+        // --- a/test.txt
+        // +++ b/test.txt
+        // @@ -1,3 +1,3 @@
+        //  line1
+        // -line2
+        // +changed
+        //  line3
+        assert_eq!(state.files.len(), 1);
+        assert_eq!(state.files[0].hunks.len(), 1);
+        assert_eq!(state.files[0].lines.len(), 9); // 5 header + 4 hunk lines
+
+        // Let's unstage the "-line2" line. It's at index 6.
+        state.line_cursor = 6;
+
+        // Unstage line
+        let state_after_unstage = update_state(state, Some(Input::Character('1')), 30, 80);
+        assert_eq!(state_after_unstage.files.len(), 1);
+        // The diff should now only contain "+changed"
+        assert_eq!(state_after_unstage.files[0].lines.len(), 8);
+        assert!(
+            !state_after_unstage.files[0]
+                .lines
+                .iter()
+                .any(|l| l.contains("-line2"))
+        );
+        assert!(
+            state_after_unstage.files[0]
+                .lines
+                .iter()
+                .any(|l| l.contains("+changed"))
+        );
+    });
+}
+
+#[test]
+#[serial]
 fn test_commit_mode_activation_and_commit() {
     run_test_with_pancurses(|_window| {
         let setup = TestSetup::new();
