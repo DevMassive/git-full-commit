@@ -1,6 +1,6 @@
 use crate::app_state::{AppState, Screen};
 use crate::command::{
-    Command, StageFileCommand, StagePatchCommand, StageUnstagedCommand, StageUntrackedCommand,
+    StageFileCommand, StagePatchCommand, StageUnstagedCommand, StageUntrackedCommand,
 };
 use crate::external_command;
 use crate::git::{self, FileDiff, FileStatus};
@@ -332,8 +332,7 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                             let content_height =
                                 (max_y as usize).saturating_sub(file_list_height + 1);
                             if state.line_cursor >= state.unstaged_diff_scroll + content_height {
-                                state.unstaged_diff_scroll =
-                                    state.line_cursor - content_height + 1;
+                                state.unstaged_diff_scroll = state.line_cursor - content_height + 1;
                             }
                         } else {
                             state.line_cursor = 0;

@@ -20,7 +20,7 @@ use crate::git_patch;
 fn unstage_line(state: &mut AppState, max_y: i32) {
     if let Some(file) = state.current_file() {
         let line_index = state.line_cursor;
-        if let Some(patch) = git_patch::create_unstage_line_patch(file, line_index) {
+        if let Some(patch) = git_patch::create_unstage_line_patch(file, line_index, true) {
             let command = Box::new(ApplyPatchCommand::new(state.repo_path.clone(), patch));
             let old_line_cursor = state.line_cursor;
             state.execute_and_refresh(command);

@@ -664,7 +664,7 @@ fn test_create_unstage_line_patch_with_multiple_hunks() {
 
     // Create the patch
     let patch =
-        git_full_commit::git_patch::create_unstage_line_patch(file_diff, line_to_unstage_index)
+        git_full_commit::git_patch::create_unstage_line_patch(file_diff, line_to_unstage_index, true)
             .unwrap();
 
     // Apply the patch in reverse

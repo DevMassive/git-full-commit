@@ -8,7 +8,11 @@ pub fn find_hunk(file: &FileDiff, line_index: usize) -> Option<&Hunk> {
     })
 }
 
-pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<String> {
+pub fn create_unstage_line_patch(
+    file: &FileDiff,
+    line_index: usize,
+    is_unstaging: bool,
+) -> Option<String> {
     let line_to_unstage = file.lines.get(line_index)?;
 
     if !line_to_unstage.starts_with('+') && !line_to_unstage.starts_with('-') {
@@ -19,12 +23,17 @@ pub fn create_unstage_line_patch(file: &FileDiff, line_index: usize) -> Option<S
 
     let relative_line_index = line_index - hunk.start_line;
 
-    let (_old_line_num, new_line_num) = hunk.line_numbers[relative_line_index];
+    let (old_line_num, new_line_num) = hunk.line_numbers[relative_line_index];
+    let line_num = if is_unstaging || line_to_unstage.starts_with('-') {
+        new_line_num
+    } else {
+        old_line_num + 1
+    };
 
     let new_hunk_header = if line_to_unstage.starts_with('+') {
-        format!("@@ -{},0 +{},1 @@", new_line_num - 1, new_line_num)
+        format!("@@ -{},0 +{},1 @@", line_num - 1, line_num)
     } else {
-        format!("@@ -{},1 +{},0 @@", new_line_num + 1, new_line_num + 1)
+        format!("@@ -{},1 +{},0 @@", line_num + 1, line_num + 1)
     };
 
     let mut patch = String::new();
@@ -50,7 +59,7 @@ pub fn create_unstage_hunk_patch(file: &FileDiff, hunk: &Hunk) -> String {
 
 // For staging, the logic is identical to unstaging
 pub fn create_stage_line_patch(file: &FileDiff, line_index: usize) -> Option<String> {
-    create_unstage_line_patch(file, line_index)
+    create_unstage_line_patch(file, line_index, false)
 }
 
 pub fn create_stage_hunk_patch(file: &FileDiff, hunk: &Hunk) -> String {
