@@ -715,7 +715,7 @@ fn test_unstage_last_file_allows_commit_message_input() {
         // After unstaging, file list is empty.
         assert_eq!(state_after_unstage.files.len(), 0);
         // The bug is that we are not in commit mode, so we can't type.
-        assert!(!state_after_unstage.is_commit_mode);
+        assert!(state_after_unstage.is_commit_mode);
 
         // Now, simulate typing a character.
         let state_after_typing =
@@ -753,7 +753,7 @@ fn test_unstage_second_file_moves_to_commit() {
         // 4. Check state
         assert_eq!(state_after_unstage.files.len(), 1);
         assert_eq!(state_after_unstage.file_cursor, 2); // Cursor is on commit line
-        assert!(!state_after_unstage.is_commit_mode); // This is the bug
+        assert!(state_after_unstage.is_commit_mode); // This is the bug
 
         // 5. Simulate typing
         let state_after_typing =
