@@ -114,7 +114,7 @@ impl AppState {
         self.untracked_files = get_untracked_files(&self.repo_path).unwrap_or_default();
 
         if self.files.is_empty() {
-            self.file_cursor = 1; // commit message line
+            self.file_cursor = 0;
             self.line_cursor = 0;
             self.scroll = 0;
             return;

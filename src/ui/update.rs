@@ -224,19 +224,11 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         }
         _ => {
             if state.file_cursor == state.files.len() + 1 {
-                state.is_commit_mode = true;
-                #[cfg(not(test))]
-                curs_set(1);
                 commit_view::handle_commit_input(state, input, max_y);
             } else {
                 scroll::handle_scroll(state, input, max_y);
             }
         }
-    }
-    if state.file_cursor == state.files.len() + 1 && !state.is_commit_mode {
-        state.is_commit_mode = true;
-        #[cfg(not(test))]
-        curs_set(1);
     }
 }
 
@@ -259,6 +251,8 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                     } else {
                         state.refresh_diff();
                     }
+                    state.is_commit_mode = state.screen == Screen::Main
+                        && state.file_cursor == state.files.len() + 1;
                     return state;
                 }
             }
@@ -269,6 +263,8 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                         state.refresh_diff();
                         cursor.apply_to_app_state(&mut state);
                     }
+                    state.is_commit_mode = state.screen == Screen::Main
+                        && state.file_cursor == state.files.len() + 1;
                     return state;
                 }
             }
@@ -287,6 +283,16 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 unstaged_view::handle_unstaged_view_input(&mut state, input, max_y);
             }
         }
+    }
+
+    state.is_commit_mode =
+        state.screen == Screen::Main && state.file_cursor == state.files.len() + 1;
+
+    #[cfg(not(test))]
+    if state.is_commit_mode {
+        curs_set(1);
+    } else {
+        curs_set(0);
     }
 
     state
@@ -1230,7 +1236,7 @@ mod tests {
     fn test_unstage_all() {
         let repo_path = setup_temp_repo();
         // Create a committed file
-        std::fs::write(repo_path.join("committed.txt"), "a").unwrap();
+        std::fs::write(repo_path.join("committed.txt"), "a\n").unwrap();
         OsCommand::new("git")
             .arg("add")
             .arg(".")
@@ -1246,8 +1252,8 @@ mod tests {
             .unwrap();
 
         // Create a modified file and a new file, then stage them
-        std::fs::write(repo_path.join("committed.txt"), "b").unwrap();
-        std::fs::write(repo_path.join("new.txt"), "c").unwrap();
+        std::fs::write(repo_path.join("committed.txt"), "b\n").unwrap();
+        std::fs::write(repo_path.join("new.txt"), "c\n").unwrap();
         OsCommand::new("git")
             .arg("add")
             .arg(".")
@@ -1269,6 +1275,8 @@ mod tests {
         assert!(status.contains("?? new.txt"), "Should be untracked");
 
         // Undo
+        // Ensure file cursor is on "Staged changes" header
+        assert_eq!(state.file_cursor, 0);
         let state = update_state(state, Some(Input::Character('u')), 80, 80);
         let status = get_git_status(&repo_path);
         assert!(

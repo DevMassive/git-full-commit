@@ -2,15 +2,10 @@ use crate::app_state::AppState;
 use crate::commit_storage;
 use crate::git;
 use pancurses::Input;
-#[cfg(not(test))]
-use pancurses::curs_set;
 
 pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
     match input {
         Input::KeyUp => {
-            state.is_commit_mode = false;
-            #[cfg(not(test))]
-            curs_set(0);
             state.file_cursor = state.files.len();
             state.line_cursor = 0;
             state.scroll = 0;
@@ -20,9 +15,6 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
             }
         }
         Input::KeyDown => {
-            state.is_commit_mode = false;
-            #[cfg(not(test))]
-            curs_set(0);
             state.file_cursor = state.files.len() + 2;
             state.line_cursor = 0;
             state.scroll = 0;
@@ -78,10 +70,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
                 state.running = false;
             } else {
                 state.refresh_diff();
-                state.is_commit_mode = false;
                 state.file_cursor = 0;
-                #[cfg(not(test))]
-                curs_set(0);
             }
         }
         Input::KeyBackspace | Input::Character('\x7f') | Input::Character('\x08') => {
@@ -136,10 +125,8 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
         Input::Character(c) => {
             if c == '\u{1b}' {
                 // ESC key
-                state.is_commit_mode = false;
                 state.is_amend_mode = false; // Also reset amend mode
-                #[cfg(not(test))]
-                curs_set(0);
+                state.file_cursor = state.files.len();
             } else if c == '\u{1}' {
                 // Ctrl-A: beginning of line
                 state.commit_cursor = 0;
