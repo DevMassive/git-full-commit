@@ -375,6 +375,16 @@ pub fn get_staged_diff_patch(repo_path: &Path) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+pub fn get_unstaged_file_diff_patch(repo_path: &Path, file_name: &str) -> Result<String> {
+    let output = OsCommand::new("git")
+        .arg("diff")
+        .arg("--")
+        .arg(file_name)
+        .current_dir(repo_path)
+        .output()?;
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 pub fn get_file_diff_patch(repo_path: &Path, file_name: &str) -> Result<String> {
     let output = OsCommand::new("git")
         .arg("diff")

@@ -1,6 +1,8 @@
 use crate::app_state::{AppState, EditorRequest, Screen};
 use crate::command::{
-    StageFileCommand, StagePatchCommand, StageUnstagedCommand, StageUntrackedCommand,
+    CheckoutFileCommand, DeleteUntrackedFileCommand, DiscardUnstagedHunkCommand,
+    IgnoreUnstagedTrackedFileCommand, IgnoreUntrackedFileCommand, StageFileCommand,
+    StagePatchCommand, StageUnstagedCommand, StageUntrackedCommand,
 };
 use crate::git::{self, FileDiff, FileStatus};
 use crate::git_patch;
@@ -368,6 +370,91 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                             line_number: None,
                         });
                     }
+                }
+            }
+        }
+        Input::Character('!') => {
+            let unstaged_file_count = state.unstaged_files.len();
+            if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
+                // Discard unstaged (but tracked) file or hunk
+                let file_index = state.unstaged_cursor - 1;
+                if let Some(file) = state.unstaged_files.get(file_index).cloned() {
+                    if state.is_unstaged_diff_cursor_active {
+                        if let Some(hunk) = git_patch::find_hunk(&file, state.line_cursor) {
+                            let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
+                            let command = Box::new(DiscardUnstagedHunkCommand::new(
+                                state.repo_path.clone(),
+                                patch,
+                            ));
+                            state.execute_and_refresh(command);
+                        }
+                    } else {
+                        let patch =
+                            git::get_unstaged_file_diff_patch(&state.repo_path, &file.file_name)
+                                .unwrap_or_default();
+                        let command = Box::new(CheckoutFileCommand::new(
+                            state.repo_path.clone(),
+                            file.file_name.clone(),
+                            patch,
+                        ));
+                        state.execute_and_refresh(command);
+                    }
+                }
+            } else if state.unstaged_cursor > unstaged_file_count + 1 {
+                // Discard untracked file
+                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
+                if let Some(file_name) = state.untracked_files.get(file_index).cloned() {
+                    if let Ok((content, _)) =
+                        git::read_file_content(&state.repo_path, &file_name)
+                    {
+                        if is_binary(&content) {
+                            return; // Do not delete binary files
+                        }
+                        let command = Box::new(DeleteUntrackedFileCommand::new(
+                            state.repo_path.clone(),
+                            file_name,
+                            content,
+                        ));
+                        state.execute_and_refresh(command);
+                    }
+                }
+            }
+        }
+        Input::Character('i') => {
+            let unstaged_file_count = state.unstaged_files.len();
+            let mut file_to_ignore: Option<String> = None;
+            let is_tracked;
+
+            if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
+                let file_index = state.unstaged_cursor - 1;
+                if let Some(file) = state.unstaged_files.get(file_index) {
+                    file_to_ignore = Some(file.file_name.clone());
+                }
+                is_tracked = true;
+            } else if state.unstaged_cursor > unstaged_file_count + 1 {
+                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
+                if let Some(file_name) = state.untracked_files.get(file_index) {
+                    file_to_ignore = Some(file_name.clone());
+                }
+                is_tracked = false;
+            } else {
+                return; // Header selected, do nothing
+            }
+
+            if let Some(file_name) = file_to_ignore {
+                if file_name != ".gitignore" {
+                    let command: Box<dyn crate::command::Command> = if is_tracked {
+                        Box::new(IgnoreUnstagedTrackedFileCommand::new(
+                            state.repo_path.clone(),
+                            file_name,
+                        ))
+                    } else {
+                        Box::new(IgnoreUntrackedFileCommand::new(
+                            state.repo_path.clone(),
+                            file_name,
+                        ))
+                    };
+                    state.execute_and_refresh(command);
                 }
             }
         }

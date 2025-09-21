@@ -1400,4 +1400,167 @@ mod tests {
 
         std::fs::remove_dir_all(&repo_path).unwrap();
     }
+
+    #[test]
+    fn test_discard_unstaged_file() {
+        let repo_path = setup_temp_repo();
+        let file_path = repo_path.join("test.txt");
+        std::fs::write(&file_path, "line1\nline2\n").unwrap();
+        OsCommand::new("git")
+            .arg("add")
+            .arg(".")
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        OsCommand::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("initial")
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        std::fs::write(&file_path, "line1\nMODIFIED\n").unwrap();
+
+        let mut state = AppState::new(repo_path.clone(), vec![]);
+        state.refresh_diff();
+        state.screen = Screen::Unstaged;
+        state.unstaged_cursor = 1;
+
+        let state_after_discard = update_state(state, Some(Input::Character('!')), 80, 80);
+        let status = get_git_status(&repo_path);
+        assert!(
+            status.is_empty(),
+            "Git status should be clean after discard"
+        );
+        assert!(state_after_discard.unstaged_files.is_empty());
+
+        let state_after_undo =
+            update_state(state_after_discard, Some(Input::Character('<')), 80, 80);
+        let status_after_undo = get_git_status(&repo_path);
+        assert!(
+            status_after_undo.contains(" M test.txt"),
+            "File should be modified again after undo"
+        );
+        assert_eq!(state_after_undo.unstaged_files.len(), 1);
+        assert_eq!(state_after_undo.unstaged_files[0].file_name, "test.txt");
+
+        std::fs::remove_dir_all(&repo_path).unwrap();
+    }
+
+    #[test]
+    fn test_discard_untracked_file() {
+        let repo_path = setup_temp_repo();
+        let file_path = repo_path.join("untracked.txt");
+        std::fs::write(&file_path, "hello").unwrap();
+
+        let mut state = AppState::new(repo_path.clone(), vec![]);
+        state.refresh_diff();
+        state.screen = Screen::Unstaged;
+        state.unstaged_cursor = 2; // Header, Header, File
+
+        let state_after_discard = update_state(state, Some(Input::Character('!')), 80, 80);
+        assert!(!file_path.exists(), "File should be deleted");
+        assert!(state_after_discard.untracked_files.is_empty());
+
+        let state_after_undo =
+            update_state(state_after_discard, Some(Input::Character('<')), 80, 80);
+        assert!(file_path.exists(), "File should be restored after undo");
+        assert_eq!(state_after_undo.untracked_files.len(), 1);
+        assert_eq!(state_after_undo.untracked_files[0], "untracked.txt");
+
+        std::fs::remove_dir_all(&repo_path).unwrap();
+    }
+
+    #[test]
+    fn test_discard_untracked_binary_file() {
+        let repo_path = setup_temp_repo();
+        let file_path = repo_path.join("binary.bin");
+        std::fs::write(&file_path, b"hello\0world").unwrap();
+
+        let mut state = AppState::new(repo_path.clone(), vec![]);
+        state.refresh_diff();
+        state.screen = Screen::Unstaged;
+        state.unstaged_cursor = 2;
+
+        let state_after_discard = update_state(state, Some(Input::Character('!')), 80, 80);
+        assert!(
+            file_path.exists(),
+            "Binary file should not be deleted"
+        );
+        assert_eq!(state_after_discard.untracked_files.len(), 1);
+
+        std::fs::remove_dir_all(&repo_path).unwrap();
+    }
+
+    #[test]
+    fn test_ignore_unstaged_file() {
+        let repo_path = setup_temp_repo();
+        let file_path = repo_path.join("test.txt");
+        std::fs::write(&file_path, "initial").unwrap();
+        OsCommand::new("git")
+            .arg("add")
+            .arg(".")
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        OsCommand::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("initial")
+            .current_dir(&repo_path)
+            .output()
+            .unwrap();
+        std::fs::write(&file_path, "modified").unwrap();
+
+        let mut state = AppState::new(repo_path.clone(), vec![]);
+        state.refresh_diff();
+        state.screen = Screen::Unstaged;
+        state.unstaged_cursor = 1;
+
+        let state_after_ignore = update_state(state, Some(Input::Character('i')), 80, 80);
+        let gitignore_content =
+            std::fs::read_to_string(repo_path.join(".gitignore")).unwrap_or_default();
+        assert!(gitignore_content.contains("test.txt"));
+        let status = get_git_status(&repo_path);
+        assert!(status.contains("A  .gitignore"));
+        assert!(state_after_ignore.unstaged_files.is_empty());
+
+        let state_after_undo =
+            update_state(state_after_ignore, Some(Input::Character('<')), 80, 80);
+        let status_after_undo = get_git_status(&repo_path);
+        assert!(!repo_path.join(".gitignore").exists());
+        assert!(status_after_undo.contains(" M test.txt"));
+        assert_eq!(state_after_undo.unstaged_files.len(), 1);
+
+        std::fs::remove_dir_all(&repo_path).unwrap();
+    }
+
+    #[test]
+    fn test_ignore_untracked_file() {
+        let repo_path = setup_temp_repo();
+        std::fs::write(repo_path.join("untracked.txt"), "hello").unwrap();
+
+        let mut state = AppState::new(repo_path.clone(), vec![]);
+        state.refresh_diff();
+        state.screen = Screen::Unstaged;
+        state.unstaged_cursor = 2;
+
+        let state_after_ignore = update_state(state, Some(Input::Character('i')), 80, 80);
+        let gitignore_content =
+            std::fs::read_to_string(repo_path.join(".gitignore")).unwrap_or_default();
+        assert!(gitignore_content.contains("untracked.txt"));
+        let status = get_git_status(&repo_path);
+        assert!(status.contains("A  .gitignore"));
+        assert!(!status.contains("untracked.txt"));
+        assert!(state_after_ignore.untracked_files.is_empty());
+
+        let state_after_undo =
+            update_state(state_after_ignore, Some(Input::Character('<')), 80, 80);
+        let status_after_undo = get_git_status(&repo_path);
+        assert!(!repo_path.join(".gitignore").exists());
+        assert!(status_after_undo.contains("?? untracked.txt"));
+        assert_eq!(state_after_undo.untracked_files.len(), 1);
+
+        std::fs::remove_dir_all(&repo_path).unwrap();
+    }
 }
