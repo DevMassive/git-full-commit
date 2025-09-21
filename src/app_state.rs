@@ -107,6 +107,14 @@ pub struct AppState {
     }
 
     pub fn refresh_diff(&mut self) {
+        let old_file_cursor = self.file_cursor;
+        let old_line_cursor = self.line_cursor;
+        let old_scroll = self.scroll;
+        let old_file_list_scroll = self.file_list_scroll;
+        let old_unstaged_cursor = self.unstaged_cursor;
+        let old_unstaged_scroll = self.unstaged_scroll;
+        let old_unstaged_diff_scroll = self.unstaged_diff_scroll;
+
         self.files = get_diff(self.repo_path.clone());
         (self.previous_commit_hash, self.previous_commit_message) =
             get_previous_commit_info(&self.repo_path).unwrap_or((String::new(), String::new()));
@@ -122,13 +130,25 @@ pub struct AppState {
             self.file_cursor = 0;
             self.line_cursor = 0;
             self.scroll = 0;
-            return;
+        } else {
+            self.file_cursor = old_file_cursor.min(self.files.len() + 1);
+            if let Some(file) = self.current_file() {
+                let max_line = file.lines.len().saturating_sub(1);
+                self.line_cursor = old_line_cursor.min(max_line);
+                self.scroll = old_scroll.min(max_line);
+            } else {
+                self.line_cursor = 0;
+                self.scroll = 0;
+            }
         }
+        self.file_list_scroll = old_file_list_scroll;
 
-        // 0: prev commit, 1..N: files, N+1: commit message
-        self.file_cursor = self.file_cursor.min(self.files.len() + 1);
-        self.line_cursor = 0;
-        self.scroll = 0;
+        let unstaged_file_count = self.unstaged_files.len();
+        let untracked_file_count = self.untracked_files.len();
+        let max_unstaged_cursor = unstaged_file_count + untracked_file_count + 1;
+        self.unstaged_cursor = old_unstaged_cursor.min(max_unstaged_cursor);
+        self.unstaged_scroll = old_unstaged_scroll;
+        self.unstaged_diff_scroll = old_unstaged_diff_scroll;
     }
 
     pub fn execute_and_refresh(&mut self, command: Box<dyn Command>) {
