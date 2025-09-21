@@ -13,6 +13,11 @@ pub enum Screen {
     Unstaged,
 }
 
+pub struct EditorRequest {
+    pub file_path: String,
+    pub line_number: Option<usize>,
+}
+
 pub struct AppState {
     pub repo_path: PathBuf,
     pub scroll: usize,
@@ -42,9 +47,8 @@ pub struct AppState {
     pub unstaged_diff_scroll: usize,
     pub unstaged_horizontal_scroll: usize,
     pub is_unstaged_diff_cursor_active: bool,
-}
-
-impl AppState {
+    pub editor_request: Option<EditorRequest>,
+}impl AppState {
     pub fn new(repo_path: PathBuf, files: Vec<FileDiff>) -> Self {
         let commit_message =
             commit_storage::load_commit_message(&repo_path).unwrap_or_else(|_| String::new());
@@ -86,6 +90,7 @@ impl AppState {
             unstaged_diff_scroll: 0,
             unstaged_horizontal_scroll: 0,
             is_unstaged_diff_cursor_active: false,
+            editor_request: None,
         }
     }
 

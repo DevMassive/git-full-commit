@@ -1,8 +1,7 @@
-use crate::app_state::{AppState, Screen};
+use crate::app_state::{AppState, EditorRequest, Screen};
 use crate::command::{
     StageFileCommand, StagePatchCommand, StageUnstagedCommand, StageUntrackedCommand,
 };
-use crate::external_command;
 use crate::git::{self, FileDiff, FileStatus};
 use crate::git_patch;
 use crate::ui::diff_view::render_diff_view;
@@ -351,7 +350,10 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                     let line_number = git_patch::get_line_number(file, state.line_cursor);
                     let file_path = state.repo_path.join(&file.file_name);
                     if let Some(path_str) = file_path.to_str() {
-                        let _ = external_command::open_editor(path_str, line_number);
+                        state.editor_request = Some(EditorRequest {
+                            file_path: path_str.to_string(),
+                            line_number,
+                        });
                     }
                 }
             } else if state.unstaged_cursor > unstaged_file_count + 1
@@ -361,7 +363,10 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                 if let Some(file_name) = state.untracked_files.get(file_index) {
                     let file_path = state.repo_path.join(file_name);
                     if let Some(path_str) = file_path.to_str() {
-                        let _ = external_command::open_editor(path_str, None);
+                        state.editor_request = Some(EditorRequest {
+                            file_path: path_str.to_string(),
+                            line_number: None,
+                        });
                     }
                 }
             }

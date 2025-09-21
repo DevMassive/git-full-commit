@@ -1,11 +1,10 @@
-use crate::app_state::{AppState, Screen};
+use crate::app_state::{AppState, EditorRequest, Screen};
 use crate::command::{
     ApplyPatchCommand, CheckoutFileCommand, Command, DiscardHunkCommand, IgnoreFileCommand,
     RemoveFileCommand, StageAllCommand, UnstageAllCommand, UnstageFileCommand,
 };
 use crate::commit_storage;
 use crate::cursor_state::CursorState;
-use crate::external_command;
 use crate::git;
 use crate::ui::commit_view;
 use crate::ui::diff_view::LINE_CONTENT_OFFSET;
@@ -122,7 +121,10 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                 };
                 let file_path = state.repo_path.join(&file.file_name);
                 if let Some(path_str) = file_path.to_str() {
-                    let _ = external_command::open_editor(path_str, line_number);
+                    state.editor_request = Some(EditorRequest {
+                        file_path: path_str.to_string(),
+                        line_number,
+                    });
                 }
             }
         }
@@ -302,7 +304,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
 mod tests {
     use super::*;
     use crate::app_state::AppState;
-    use crate::external_command;
     use crate::git::{FileDiff, FileStatus, Hunk};
     use pancurses::Input;
     use std::path::PathBuf;
@@ -1137,20 +1138,17 @@ mod tests {
         let mut state = create_state_with_files(1);
         state.file_cursor = 1;
         state.is_diff_cursor_active = false;
-        external_command::mock::clear_calls();
         let repo_path = state.repo_path.clone();
 
-        let _ = update_state(state, Some(Input::Character('e')), 80, 80);
+        let updated_state = update_state(state, Some(Input::Character('e')), 80, 80);
 
-        let calls = external_command::mock::get_calls();
-        assert_eq!(calls.len(), 1);
+        assert!(updated_state.editor_request.is_some());
+        let request = updated_state.editor_request.unwrap();
         assert_eq!(
-            calls[0],
-            (
-                repo_path.join("file_0.txt").to_str().unwrap().to_string(),
-                None
-            )
+            request.file_path,
+            repo_path.join("file_0.txt").to_str().unwrap()
         );
+        assert_eq!(request.line_number, None);
     }
 
     #[test]
@@ -1160,21 +1158,17 @@ mod tests {
         let mut file = create_test_file_diff();
         file.file_name = "test_file.rs".to_string();
         state.files = vec![file];
-        external_command::mock::clear_calls();
         let repo_path = state.repo_path.clone();
 
-        let _ = update_state(state, Some(Input::Character('e')), 80, 80);
+        let updated_state = update_state(state, Some(Input::Character('e')), 80, 80);
 
-        let calls = external_command::mock::get_calls();
-        assert_eq!(calls.len(), 1);
-        // line_cursor is 5, which is "+line 3 new" -> new_line_num 3
+        assert!(updated_state.editor_request.is_some());
+        let request = updated_state.editor_request.unwrap();
         assert_eq!(
-            calls[0],
-            (
-                repo_path.join("test_file.rs").to_str().unwrap().to_string(),
-                Some(3)
-            )
+            request.file_path,
+            repo_path.join("test_file.rs").to_str().unwrap()
         );
+        assert_eq!(request.line_number, Some(3));
     }
 
     #[test]
@@ -1186,24 +1180,17 @@ mod tests {
         state.screen = Screen::Unstaged;
         state.unstaged_cursor = 1; // Select the file
         state.line_cursor = 4; // "+line 2 new" -> new_line_num 2
-        external_command::mock::clear_calls();
         let repo_path = state.repo_path.clone();
 
-        let _ = update_state(state, Some(Input::Character('e')), 80, 80);
+        let updated_state = update_state(state, Some(Input::Character('e')), 80, 80);
 
-        let calls = external_command::mock::get_calls();
-        assert_eq!(calls.len(), 1);
+        assert!(updated_state.editor_request.is_some());
+        let request = updated_state.editor_request.unwrap();
         assert_eq!(
-            calls[0],
-            (
-                repo_path
-                    .join("unstaged_file.txt")
-                    .to_str()
-                    .unwrap()
-                    .to_string(),
-                Some(2)
-            )
+            request.file_path,
+            repo_path.join("unstaged_file.txt").to_str().unwrap()
         );
+        assert_eq!(request.line_number, Some(2));
     }
 
     #[test]
@@ -1212,24 +1199,17 @@ mod tests {
         state.untracked_files = vec!["untracked.txt".to_string()];
         state.screen = Screen::Unstaged;
         state.unstaged_cursor = 2; // [Unstaged header, Untracked header, untracked.txt]
-        external_command::mock::clear_calls();
         let repo_path = state.repo_path.clone();
 
-        let _ = update_state(state, Some(Input::Character('e')), 80, 80);
+        let updated_state = update_state(state, Some(Input::Character('e')), 80, 80);
 
-        let calls = external_command::mock::get_calls();
-        assert_eq!(calls.len(), 1);
+        assert!(updated_state.editor_request.is_some());
+        let request = updated_state.editor_request.unwrap();
         assert_eq!(
-            calls[0],
-            (
-                repo_path
-                    .join("untracked.txt")
-                    .to_str()
-                    .unwrap()
-                    .to_string(),
-                None
-            )
+            request.file_path,
+            repo_path.join("untracked.txt").to_str().unwrap()
         );
+        assert_eq!(request.line_number, None);
     }
 
     #[test]
