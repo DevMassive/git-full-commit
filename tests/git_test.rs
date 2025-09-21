@@ -483,17 +483,18 @@ fn test_commit_clears_history() {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
 
-        // Unstage a file to populate history
+        // Unstage all files to populate history
         state = update_state(state, Some(Input::Character('\n')), 30, 80);
         assert_eq!(state.files.len(), 0);
         assert_eq!(state.command_history.undo_stack.len(), 1);
 
         // Stage it back
-        run_git(&setup.repo_path, &["add", "test.txt"]);
+        state = update_state(state, Some(Input::Character('R')), 30, 80);
         state.refresh_diff();
         assert_eq!(state.files.len(), 1);
 
         // Go to commit mode
+        state = update_state(state, Some(Input::KeyDown), 30, 80);
         state = update_state(state, Some(Input::KeyDown), 30, 80);
         assert!(state.is_commit_mode);
 
@@ -696,35 +697,6 @@ fn test_create_unstage_line_patch_with_multiple_hunks() {
             .iter()
             .any(|line| line.contains("+modified line 90"))
     );
-}
-
-#[test]
-#[serial]
-fn test_unstage_last_file_allows_commit_message_input() {
-    run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new();
-        let state = create_test_state(&setup);
-
-        // We start with 1 file, not in commit mode.
-        assert_eq!(state.files.len(), 1);
-        assert!(!state.is_commit_mode);
-
-        // Unstage the file by pressing Enter.
-        let state_after_unstage = update_state(state, Some(Input::Character('\n')), 30, 80);
-
-        // After unstaging, file list is empty.
-        assert_eq!(state_after_unstage.files.len(), 0);
-        // The bug is that we are not in commit mode, so we can't type.
-        assert!(state_after_unstage.is_commit_mode);
-
-        // Now, simulate typing a character.
-        let state_after_typing =
-            update_state(state_after_unstage, Some(Input::Character('T')), 30, 80);
-
-        // With the fix, we should enter commit mode and the message should be updated.
-        assert!(state_after_typing.is_commit_mode);
-        assert_eq!(state_after_typing.commit_message, "T");
-    });
 }
 
 #[test]

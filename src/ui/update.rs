@@ -1275,6 +1275,8 @@ mod tests {
         assert!(status.contains("?? new.txt"), "Should be untracked");
 
         // Undo
+        // Ensure file cursor is on "Staged changes" header
+        assert_eq!(state.file_cursor, 0);
         let state = update_state(state, Some(Input::Character('u')), 80, 80);
         let status = get_git_status(&repo_path);
         assert!(
