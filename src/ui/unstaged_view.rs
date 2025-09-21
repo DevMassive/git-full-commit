@@ -10,7 +10,7 @@ use crate::ui::scroll;
 use pancurses::{COLOR_PAIR, Input, Window};
 
 pub fn render_unstaged_view(window: &Window, state: &AppState) {
-    window.clear();
+    window.erase();
     let (max_y, max_x) = window.get_max_yx();
 
     let (file_list_height, file_list_total_items) = state.unstaged_header_height(max_y);

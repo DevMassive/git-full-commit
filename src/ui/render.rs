@@ -17,7 +17,7 @@ pub fn render(window: &Window, state: &AppState) {
 }
 
 fn render_main_view(window: &Window, state: &AppState) {
-    window.clear();
+    window.erase();
     let (max_y, max_x) = window.get_max_yx();
 
     let (file_list_height, file_list_total_items) = state.main_header_height(max_y);
