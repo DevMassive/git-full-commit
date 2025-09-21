@@ -10,11 +10,12 @@ pub fn open_editor(file_path: &str, line_number: Option<usize>) -> std::io::Resu
     let mut cmd = match editor_cmd {
         Ok(editor) if !editor.is_empty() => {
             // User has $EDITOR set
-            let command = if editor.contains("code") {
+            
+            if editor.contains("code") {
                 // Handle VS Code and its variants
                 let mut cmd = Command::new(&editor);
                 if let Some(line) = line_number {
-                    cmd.arg("-g").arg(format!("{}:{}", file_path, line));
+                    cmd.arg("-g").arg(format!("{file_path}:{line}"));
                 } else {
                     cmd.arg(file_path);
                 }
@@ -25,12 +26,11 @@ pub fn open_editor(file_path: &str, line_number: Option<usize>) -> std::io::Resu
                 if let Some(line) = line_number {
                     // This syntax works for vim/nvim, but might not for others.
                     // It's a reasonable default.
-                    cmd.arg(format!("+{}", line));
+                    cmd.arg(format!("+{line}"));
                 }
                 cmd.arg(file_path);
                 cmd
-            };
-            command
+            }
         }
         _ => {
             // $EDITOR is not set or is empty, use platform defaults
@@ -42,7 +42,7 @@ pub fn open_editor(file_path: &str, line_number: Option<usize>) -> std::io::Resu
                 // Default to `code` on other systems (e.g., Linux)
                 let mut command = Command::new("code");
                 if let Some(line) = line_number {
-                    command.arg("-g").arg(format!("{}:{}", file_path, line));
+                    command.arg("-g").arg(format!("{file_path}:{line}"));
                 } else {
                     command.arg(file_path);
                 }
@@ -54,7 +54,7 @@ pub fn open_editor(file_path: &str, line_number: Option<usize>) -> std::io::Resu
     cmd.status().map(|_| ()).map_err(|e| {
         // If the command fails (e.g. `code` not found), we can add a fallback here in the future.
         // For now, just return the error to the caller.
-        eprintln!("Failed to open editor: {}", e);
+        eprintln!("Failed to open editor: {e}");
         e
     })
 }

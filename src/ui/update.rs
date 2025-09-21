@@ -253,8 +253,8 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                     } else {
                         state.refresh_diff();
                     }
-                    state.is_commit_mode = state.screen == Screen::Main
-                        && state.file_cursor == state.files.len() + 1;
+                    state.is_commit_mode =
+                        state.screen == Screen::Main && state.file_cursor == state.files.len() + 1;
                     return state;
                 }
             }
@@ -265,8 +265,8 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                         state.refresh_diff();
                         cursor.apply_to_app_state(&mut state);
                     }
-                    state.is_commit_mode = state.screen == Screen::Main
-                        && state.file_cursor == state.files.len() + 1;
+                    state.is_commit_mode =
+                        state.screen == Screen::Main && state.file_cursor == state.files.len() + 1;
                     return state;
                 }
             }

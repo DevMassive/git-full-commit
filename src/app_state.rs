@@ -48,7 +48,8 @@ pub struct AppState {
     pub unstaged_horizontal_scroll: usize,
     pub is_unstaged_diff_cursor_active: bool,
     pub editor_request: Option<EditorRequest>,
-}impl AppState {
+}
+impl AppState {
     pub fn new(repo_path: PathBuf, files: Vec<FileDiff>) -> Self {
         let commit_message =
             commit_storage::load_commit_message(&repo_path).unwrap_or_else(|_| String::new());
