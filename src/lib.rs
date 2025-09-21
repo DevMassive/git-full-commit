@@ -27,11 +27,6 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
     }
 
     let files = git::get_diff(repo_path.clone());
-
-    if files.is_empty() {
-        bail!("No changes found.");
-    }
-
     ui::tui_loop(repo_path.clone(), files);
 
     Ok(())
