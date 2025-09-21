@@ -64,6 +64,199 @@ impl Command for UnstageFileCommand {
     command_impl!();
 }
 
+pub struct IgnoreUnstagedTrackedFileCommand {
+    pub repo_path: std::path::PathBuf,
+    pub file_name: String,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl IgnoreUnstagedTrackedFileCommand {
+    pub fn new(repo_path: PathBuf, file_name: String) -> Self {
+        Self {
+            repo_path,
+            file_name,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for IgnoreUnstagedTrackedFileCommand {
+    fn execute(&mut self) {
+        let gitignore_path = self.repo_path.join(".gitignore");
+        let mut gitignore = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(gitignore_path)
+            .expect("Failed to open .gitignore");
+        writeln!(gitignore, "{}", self.file_name).expect("Failed to write to .gitignore");
+
+        git::stage_path(&self.repo_path, ".gitignore").expect("Failed to stage .gitignore");
+        git::rm_cached(&self.repo_path, &self.file_name).expect("Failed to unstage file");
+    }
+
+    fn undo(&mut self) {
+        let gitignore_path = self.repo_path.join(".gitignore");
+        if gitignore_path.exists() {
+            let content = fs::read_to_string(&gitignore_path).expect("Failed to read .gitignore");
+            let new_content: String = content
+                .lines()
+                .filter(|line| !line.trim().is_empty() && *line != self.file_name)
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            if new_content.is_empty() {
+                fs::remove_file(&gitignore_path).expect("Failed to remove .gitignore");
+                git::rm_cached(&self.repo_path, ".gitignore")
+                    .expect("Failed to remove .gitignore from index");
+            } else {
+                fs::write(&gitignore_path, new_content + "\n")
+                    .expect("Failed to write to .gitignore");
+                git::stage_path(&self.repo_path, ".gitignore").expect("Failed to stage .gitignore");
+            }
+        }
+
+        // Re-track the file, then unstage it to restore original state
+        git::stage_file(&self.repo_path, &self.file_name).expect("Failed to re-track file");
+        git::unstage_file(&self.repo_path, &self.file_name)
+            .expect("Failed to unstage file to restore state");
+    }
+
+    command_impl!();
+}
+
+pub struct DeleteUntrackedFileCommand {
+    pub repo_path: PathBuf,
+    pub file_name: String,
+    content: Vec<u8>,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl DeleteUntrackedFileCommand {
+    pub fn new(repo_path: PathBuf, file_name: String, content: Vec<u8>) -> Self {
+        Self {
+            repo_path,
+            file_name,
+            content,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for DeleteUntrackedFileCommand {
+    fn execute(&mut self) {
+        fs::remove_file(self.repo_path.join(&self.file_name)).expect("Failed to delete file");
+    }
+
+    fn undo(&mut self) {
+        fs::write(self.repo_path.join(&self.file_name), &self.content)
+            .expect("Failed to restore file");
+    }
+
+    command_impl!();
+}
+
+pub struct IgnoreUntrackedFileCommand {
+    pub repo_path: std::path::PathBuf,
+    pub file_name: String,
+    was_empty_before: bool,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl IgnoreUntrackedFileCommand {
+    pub fn new(repo_path: PathBuf, file_name: String) -> Self {
+        let gitignore_path = repo_path.join(".gitignore");
+        let was_empty_before = !gitignore_path.exists()
+            || fs::read_to_string(gitignore_path)
+                .map(|c| c.trim().is_empty())
+                .unwrap_or(true);
+        Self {
+            repo_path,
+            file_name,
+            was_empty_before,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for IgnoreUntrackedFileCommand {
+    fn execute(&mut self) {
+        let gitignore_path = self.repo_path.join(".gitignore");
+        let mut gitignore = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(gitignore_path)
+            .expect("Failed to open .gitignore");
+        writeln!(gitignore, "{}", self.file_name).expect("Failed to write to .gitignore");
+
+        git::stage_path(&self.repo_path, ".gitignore").expect("Failed to stage .gitignore");
+    }
+
+    fn undo(&mut self) {
+        let gitignore_path = self.repo_path.join(".gitignore");
+        if gitignore_path.exists() {
+            let content = fs::read_to_string(&gitignore_path).expect("Failed to read .gitignore");
+            let new_content: String = content
+                .lines()
+                .filter(|line| !line.trim().is_empty() && *line != self.file_name)
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            if new_content.is_empty() {
+                fs::remove_file(&gitignore_path).expect("Failed to remove .gitignore");
+                if !self.was_empty_before {
+                    // If the file was not empty before, we need to remove it from the index
+                    git::rm_cached(&self.repo_path, ".gitignore")
+                        .expect("Failed to remove .gitignore from index");
+                }
+            } else {
+                fs::write(&gitignore_path, new_content + "\n")
+                    .expect("Failed to write to .gitignore");
+                git::stage_path(&self.repo_path, ".gitignore").expect("Failed to stage .gitignore");
+            }
+        }
+    }
+
+    command_impl!();
+}
+
+pub struct DiscardUnstagedHunkCommand {
+    pub repo_path: PathBuf,
+    pub patch: String,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl DiscardUnstagedHunkCommand {
+    pub fn new(repo_path: PathBuf, patch: String) -> Self {
+        Self {
+            repo_path,
+            patch,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for DiscardUnstagedHunkCommand {
+    fn execute(&mut self) {
+        git::apply_patch(&self.repo_path, &self.patch, true, false)
+            .expect("Failed to discard hunk from working tree.");
+    }
+
+    fn undo(&mut self) {
+        git::apply_patch(&self.repo_path, &self.patch, false, false)
+            .expect("Failed to re-apply hunk to working tree.");
+    }
+
+    command_impl!();
+}
+
 pub struct UnstageAllCommand {
     pub repo_path: PathBuf,
     patch: String,
@@ -364,6 +557,7 @@ impl Command for IgnoreFileCommand {
 
         git::stage_path(&self.repo_path, ".gitignore").expect("Failed to stage .gitignore");
 
+        // For staged files, we need to unstage them.
         git::rm_cached(&self.repo_path, &self.file_name).expect("Failed to unstage file");
     }
 

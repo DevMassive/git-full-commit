@@ -66,6 +66,27 @@ pub fn create_stage_hunk_patch(file: &FileDiff, hunk: &Hunk) -> String {
     create_unstage_hunk_patch(file, hunk)
 }
 
+pub fn create_patch_for_new_file(file_name: &str, content: &str) -> String {
+    let mut patch = String::new();
+    patch.push_str(&format!("diff --git a/{0} b/{0}\n", file_name));
+    patch.push_str("new file mode 100644\n");
+    // The index hash is not critical for applying, a dummy one is fine.
+    patch.push_str("index 0000000..e69de29\n");
+    patch.push_str("--- /dev/null\n");
+    patch.push_str(&format!("+++ b/{0}\n", file_name));
+
+    let lines: Vec<&str> = content.lines().collect();
+    patch.push_str(&format!("@@ -0,0 +1,{} @@\n", lines.len()));
+
+    for (i, line) in lines.iter().enumerate() {
+        patch.push_str(&format!("+{}", line));
+        if i < lines.len() - 1 || content.ends_with('\n') {
+            patch.push('\n');
+        }
+    }
+    patch
+}
+
 pub fn get_line_number(file: &FileDiff, line_index: usize) -> Option<usize> {
     let line_content = file.lines.get(line_index)?;
     if line_content.starts_with("@@") {
