@@ -134,8 +134,12 @@ fn scroll_unstaged_diff_view(
 
 pub fn handle_scroll(state: &mut AppState, input: Input, max_y: i32) {
     let (direction, amount) = match input {
-        Input::Character(' ') => (ScrollDirection::Down, ScrollAmount::Full),
-        Input::Character('b') => (ScrollDirection::Up, ScrollAmount::Full),
+        Input::Character(' ') | Input::Character('\u{16}') => {
+            (ScrollDirection::Down, ScrollAmount::Full)
+        }
+        Input::Character('b') | Input::Character('\u{2}') => {
+            (ScrollDirection::Up, ScrollAmount::Full)
+        }
         Input::Character('\u{4}') => (ScrollDirection::Down, ScrollAmount::Half),
         Input::Character('\u{15}') => (ScrollDirection::Up, ScrollAmount::Half),
         _ => return,

@@ -135,7 +135,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
 
 fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
     match input {
-        Input::KeyUp => {
+        Input::KeyUp | Input::Character('\u{10}') => {
             state.file_cursor = state.file_cursor.saturating_sub(1);
             state.scroll = 0;
             state.line_cursor = 0;
@@ -145,7 +145,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                 state.file_list_scroll = state.file_cursor;
             }
         }
-        Input::KeyDown => {
+        Input::KeyDown | Input::Character('\u{e}') => {
             if state.file_cursor < state.files.len() + 2 {
                 state.file_cursor += 1;
                 state.scroll = 0;
@@ -244,7 +244,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 state.running = false;
                 return state;
             }
-            Input::Character('u') => {
+            Input::Character('<') => {
                 if !state.is_commit_mode {
                     let cursor_state = CursorState::from_app_state(&state);
                     if let Some(cursor) = state.command_history.undo(cursor_state) {
@@ -258,7 +258,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                     return state;
                 }
             }
-            Input::Character('r') => {
+            Input::Character('>') => {
                 if !state.is_commit_mode {
                     let cursor_state = CursorState::from_app_state(&state);
                     if let Some(cursor) = state.command_history.redo(cursor_state) {
@@ -676,7 +676,7 @@ mod tests {
         );
 
         // Simulate undo
-        updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
+        updated_state = update_state(updated_state, Some(Input::Character('<')), 80, 80);
 
         // After undo, the original file should be back and .gitignore should be gone
         assert_eq!(
@@ -689,8 +689,8 @@ mod tests {
             "The file should be the one we ignored"
         );
 
-        // Simulate undo again
-        let updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
+        // Simulate undo
+        updated_state = update_state(updated_state, Some(Input::Character('<')), 80, 80);
 
         // After undo, the original file should be back and .gitignore should be gone
         assert_eq!(
@@ -935,7 +935,7 @@ mod tests {
         );
 
         // Simulate undo
-        let _updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
+        let _updated_state = update_state(updated_state, Some(Input::Character('<')), 80, 80);
 
         // Check that the hunk is back
         let staged_diff_after_undo = OsCommand::new("git")
@@ -1048,7 +1048,7 @@ mod tests {
         assert!(status_str.contains("A  untracked.txt"));
 
         // Simulate undo
-        let _updated_state = update_state(updated_state, Some(Input::Character('u')), 80, 80);
+        let _updated_state = update_state(updated_state, Some(Input::Character('<')), 80, 80);
 
         // Check that the original state is restored
         let status_output_after_undo = OsCommand::new("git")
@@ -1257,7 +1257,7 @@ mod tests {
         // Undo
         // Ensure file cursor is on "Staged changes" header
         assert_eq!(state.file_cursor, 0);
-        let state = update_state(state, Some(Input::Character('u')), 80, 80);
+        let state = update_state(state, Some(Input::Character('<')), 80, 80);
         let status = get_git_status(&repo_path);
         assert!(
             status.contains("M  committed.txt"),
@@ -1266,7 +1266,7 @@ mod tests {
         assert!(status.contains("A  new.txt"), "Should be staged new");
 
         // Redo
-        let _ = update_state(state, Some(Input::Character('r')), 80, 80);
+        let _ = update_state(state, Some(Input::Character('>')), 80, 80);
         let status = get_git_status(&repo_path);
         assert!(status.contains(" M committed.txt"));
         assert!(status.contains("?? new.txt"));
@@ -1311,7 +1311,7 @@ mod tests {
         );
 
         // Undo
-        let state = update_state(state, Some(Input::Character('u')), 80, 80);
+        let state = update_state(state, Some(Input::Character('<')), 80, 80);
         let status = get_git_status(&repo_path);
         assert!(
             status.contains(" M file1.txt"),
@@ -1323,7 +1323,7 @@ mod tests {
         );
 
         // Redo
-        let _ = update_state(state, Some(Input::Character('r')), 80, 80);
+        let _ = update_state(state, Some(Input::Character('>')), 80, 80);
         let status = get_git_status(&repo_path);
         assert!(status.contains("M  file1.txt"));
         assert!(status.contains("?? untracked.txt"));
@@ -1376,7 +1376,7 @@ mod tests {
         );
 
         // Undo
-        let state = update_state(state, Some(Input::Character('u')), 80, 80);
+        let state = update_state(state, Some(Input::Character('<')), 80, 80);
         let status = get_git_status(&repo_path);
         assert!(
             status.contains("?? untracked1.txt"),
@@ -1392,7 +1392,7 @@ mod tests {
         );
 
         // Redo
-        let _ = update_state(state, Some(Input::Character('r')), 80, 80);
+        let _ = update_state(state, Some(Input::Character('>')), 80, 80);
         let status = get_git_status(&repo_path);
         assert!(status.contains("A  untracked1.txt"));
         assert!(status.contains("A  untracked2.txt"));

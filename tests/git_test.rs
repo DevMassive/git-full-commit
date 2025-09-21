@@ -148,12 +148,12 @@ fn test_unstage_hunk_by_line_with_undo_redo() {
 
         // Undo
         let state_after_undo =
-            update_state(state_after_unstage, Some(Input::Character('u')), 30, 80);
+            update_state(state_after_unstage, Some(Input::Character('<')), 30, 80);
         assert_eq!(state_after_undo.files.len(), 1);
         assert_eq!(state_after_undo.files[0].hunks.len(), 1);
 
         // Redo
-        let state_after_redo = update_state(state_after_undo, Some(Input::Character('r')), 30, 80);
+        let state_after_redo = update_state(state_after_undo, Some(Input::Character('>')), 30, 80);
         assert_eq!(state_after_redo.files.len(), 0);
     });
 }
@@ -542,11 +542,11 @@ fn test_stage_all() {
         assert_eq!(state.files.len(), 1);
 
         // Undo staging all changes
-        state = update_state(state, Some(Input::Character('u')), 30, 80);
+        state = update_state(state, Some(Input::Character('<')), 30, 80);
         assert_eq!(state.files.len(), 0);
 
         // Redo staging all changes
-        state = update_state(state, Some(Input::Character('r')), 30, 80);
+        state = update_state(state, Some(Input::Character('>')), 30, 80);
         assert_eq!(state.files.len(), 1);
     });
 }
@@ -822,7 +822,7 @@ fn test_stage_untracked_file() {
         assert_eq!(state.files[0].file_name, file_name);
 
         // Undo
-        state = update_state(state, Some(Input::Character('u')), 30, 80);
+        state = update_state(state, Some(Input::Character('<')), 30, 80);
         assert!(!state.untracked_files.is_empty());
         assert!(state.files.is_empty());
     });
@@ -854,7 +854,7 @@ fn test_stage_modified_file() {
         assert_eq!(state.files[0].file_name, file_name);
 
         // Undo
-        let state = update_state(state, Some(Input::Character('u')), 30, 80);
+        let state = update_state(state, Some(Input::Character('<')), 30, 80);
         assert!(!state.unstaged_files.is_empty());
         assert!(state.files.is_empty());
     });
@@ -900,7 +900,7 @@ fn test_stage_hunk() {
         assert!(staged_diff.contains("+MODIFIED line 3"));
 
         // Undo
-        let _ = update_state(state, Some(Input::Character('u')), 30, 80);
+        let _ = update_state(state, Some(Input::Character('<')), 30, 80);
         assert_eq!(
             git::get_diff(repo_path).len(),
             0,
@@ -974,7 +974,7 @@ fn test_undo_redo_restores_cursor_position() {
         let cursor_before_undo = git_full_commit::cursor_state::CursorState::from_app_state(&state);
 
         // 4. Undo
-        state = update_state(state, Some(Input::Character('u')), 30, 80);
+        state = update_state(state, Some(Input::Character('<')), 30, 80);
 
         // 5. Assert cursor is restored to the position before the action
         let cursor_after_undo = git_full_commit::cursor_state::CursorState::from_app_state(&state);
@@ -990,7 +990,7 @@ fn test_undo_redo_restores_cursor_position() {
         assert_eq!(cursor_after_undo.screen, cursor_before_action.screen);
 
         // 6. Redo
-        state = update_state(state, Some(Input::Character('r')), 30, 80);
+        state = update_state(state, Some(Input::Character('>')), 30, 80);
 
         // 7. Assert cursor is restored to the position before the undo
         let cursor_after_redo = git_full_commit::cursor_state::CursorState::from_app_state(&state);
@@ -1039,7 +1039,7 @@ fn test_stage_line() {
         assert!(!staged_diff.contains("-line2"));
 
         // Undo
-        update_state(state, Some(Input::Character('u')), 30, 80);
+        update_state(state, Some(Input::Character('<')), 30, 80);
         assert_eq!(
             git::get_diff(repo_path).len(),
             0,
