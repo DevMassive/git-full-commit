@@ -1483,10 +1483,7 @@ mod tests {
         state.unstaged_cursor = 2;
 
         let state_after_discard = update_state(state, Some(Input::Character('!')), 80, 80);
-        assert!(
-            file_path.exists(),
-            "Binary file should not be deleted"
-        );
+        assert!(file_path.exists(), "Binary file should not be deleted");
         assert_eq!(state_after_discard.untracked_files.len(), 1);
 
         std::fs::remove_dir_all(&repo_path).unwrap();

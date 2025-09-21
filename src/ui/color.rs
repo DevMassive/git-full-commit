@@ -38,4 +38,5 @@ pub fn setup_colors() {
     init_pair(13, color_green, color_inactive_cursor_bg);
     init_pair(14, color_cyan, color_inactive_cursor_bg);
     init_pair(15, color_grey, color_inactive_cursor_bg);
+    init_pair(16, COLOR_BLACK, color_selected_bg); // Black on selected
 }

@@ -10,7 +10,7 @@ pub fn open_editor(file_path: &str, line_number: Option<usize>) -> std::io::Resu
     let mut cmd = match editor_cmd {
         Ok(editor) if !editor.is_empty() => {
             // User has $EDITOR set
-            
+
             if editor.contains("code") {
                 // Handle VS Code and its variants
                 let mut cmd = Command::new(&editor);

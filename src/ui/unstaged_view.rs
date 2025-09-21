@@ -404,9 +404,7 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                 // Discard untracked file
                 let file_index = state.unstaged_cursor - unstaged_file_count - 2;
                 if let Some(file_name) = state.untracked_files.get(file_index).cloned() {
-                    if let Ok((content, _)) =
-                        git::read_file_content(&state.repo_path, &file_name)
-                    {
+                    if let Ok((content, _)) = git::read_file_content(&state.repo_path, &file_name) {
                         if is_binary(&content) {
                             return; // Do not delete binary files
                         }
