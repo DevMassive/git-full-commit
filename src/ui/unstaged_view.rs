@@ -321,7 +321,23 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                     {
                         let command =
                             Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
+
+                        let old_line_cursor = state.line_cursor;
                         state.execute_and_refresh(command);
+
+                        if let Some(updated_file) = state.get_unstaged_file() {
+                            state.line_cursor =
+                                old_line_cursor.min(updated_file.lines.len().saturating_sub(1));
+                            let (file_list_height, _) = state.unstaged_header_height(max_y);
+                            let content_height =
+                                (max_y as usize).saturating_sub(file_list_height + 1);
+                            if state.line_cursor >= state.unstaged_diff_scroll + content_height {
+                                state.unstaged_diff_scroll =
+                                    state.line_cursor - content_height + 1;
+                            }
+                        } else {
+                            state.line_cursor = 0;
+                        }
                     }
                 }
             }
