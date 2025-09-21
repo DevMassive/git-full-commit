@@ -2,7 +2,7 @@ use crate::app_state::{AppState, Screen};
 use crate::git::FileStatus;
 use crate::ui::diff_view::{render_diff_view, render_line};
 use crate::ui::unstaged_view::render_unstaged_view;
-use pancurses::{COLOR_PAIR, Window};
+use pancurses::{A_REVERSE, COLOR_PAIR, Window};
 use unicode_width::UnicodeWidthStr;
 
 pub fn render(window: &Window, state: &AppState) {
@@ -100,7 +100,19 @@ fn render_main_view(window: &Window, state: &AppState) {
             };
 
             window.addstr(prefix);
-            window.addstr(message);
+            if message.is_empty() {
+                if is_selected {
+                    window.attron(A_REVERSE);
+                }
+                window.attron(COLOR_PAIR(9));
+                window.addstr("Enter commit message...");
+                window.attroff(COLOR_PAIR(9));
+                if is_selected {
+                    window.attroff(A_REVERSE);
+                }
+            } else {
+                window.addstr(message);
+            }
             window.attroff(COLOR_PAIR(pair));
 
             let commit_line_y = line_y;
