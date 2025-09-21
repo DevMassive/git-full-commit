@@ -88,7 +88,7 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
                 state.unstaged_horizontal_scroll,
                 file_list_height + 1,
                 state.line_cursor,
-                true,
+                state.is_unstaged_diff_cursor_active,
             );
         }
     } else if state.unstaged_cursor > unstaged_file_count + 1
@@ -127,7 +127,7 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
                 state.unstaged_horizontal_scroll,
                 file_list_height + 1,
                 state.line_cursor,
-                true,
+                state.is_unstaged_diff_cursor_active,
             );
         }
     }
@@ -185,6 +185,7 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             state.unstaged_cursor = state.unstaged_cursor.saturating_sub(1);
             state.unstaged_diff_scroll = 0;
             state.line_cursor = 0;
+            state.is_unstaged_diff_cursor_active = false;
             if state.unstaged_cursor < state.unstaged_scroll {
                 state.unstaged_scroll = state.unstaged_cursor;
             }
@@ -196,17 +197,20 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                 .min(unstaged_items_count - 1);
             state.unstaged_diff_scroll = 0;
             state.line_cursor = 0;
+            state.is_unstaged_diff_cursor_active = false;
             if state.unstaged_cursor >= state.unstaged_scroll + file_list_height {
                 state.unstaged_scroll = state.unstaged_cursor - file_list_height + 1;
             }
         }
         Input::Character('k') => {
+            state.is_unstaged_diff_cursor_active = true;
             state.line_cursor = state.line_cursor.saturating_sub(1);
             if state.line_cursor < state.unstaged_diff_scroll {
                 state.unstaged_diff_scroll = state.line_cursor;
             }
         }
         Input::Character('j') => {
+            state.is_unstaged_diff_cursor_active = true;
             let file_lines_count = if state.unstaged_cursor > 0
                 && state.unstaged_cursor <= unstaged_file_count
             {
@@ -257,17 +261,44 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             } else if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
                 let file_index = state.unstaged_cursor - 1;
                 if let Some(file) = state.unstaged_files.get(file_index).cloned() {
-                    let command: Box<dyn Command> =
+                    if state.is_unstaged_diff_cursor_active {
                         if let Some(hunk) = git_patch::find_hunk(&file, state.line_cursor) {
                             let patch = git_patch::create_stage_hunk_patch(&file, hunk);
-                            Box::new(StagePatchCommand::new(state.repo_path.clone(), patch))
+                            let command =
+                                Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
+
+                            let old_line_cursor = state.line_cursor;
+                            state.execute_and_refresh(command);
+
+                            if let Some(updated_file) = state.get_unstaged_file() {
+                                state.line_cursor =
+                                    old_line_cursor.min(updated_file.lines.len().saturating_sub(1));
+                                let (file_list_height, _) = state.unstaged_header_height(max_y);
+                                let content_height =
+                                    (max_y as usize).saturating_sub(file_list_height + 1);
+                                if state.line_cursor >= state.unstaged_diff_scroll + content_height
+                                {
+                                    state.unstaged_diff_scroll =
+                                        state.line_cursor - content_height + 1;
+                                }
+                            } else {
+                                state.line_cursor = 0;
+                            }
                         } else {
-                            Box::new(StageFileCommand::new(
+                            // No hunk found, stage the whole file as a fallback
+                            let command = Box::new(StageFileCommand::new(
                                 state.repo_path.clone(),
                                 file.file_name.clone(),
-                            ))
-                        };
-                    state.execute_and_refresh(command);
+                            ));
+                            state.execute_and_refresh(command);
+                        }
+                    } else {
+                        let command = Box::new(StageFileCommand::new(
+                            state.repo_path.clone(),
+                            file.file_name.clone(),
+                        ));
+                        state.execute_and_refresh(command);
+                    }
                 }
             } else if state.unstaged_cursor == unstaged_file_count + 1 {
                 let command = Box::new(StageUntrackedCommand::new(state.repo_path.clone()));
