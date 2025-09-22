@@ -10,7 +10,7 @@ use crate::ui::diff_view::render_diff_view;
 use crate::ui::scroll;
 use pancurses::{COLOR_PAIR, Input, Window};
 
-pub fn render_screen(window: &Window, state: &AppState) {
+pub fn render(window: &Window, state: &AppState) {
     window.erase();
     let (max_y, max_x) = window.get_max_yx();
 
