@@ -339,8 +339,9 @@ pub fn get_unstaged_files(repo_path: &Path) -> Result<Vec<String>> {
 
 pub fn get_untracked_files(repo_path: &Path) -> Result<Vec<String>> {
     let output = OsCommand::new("git")
-        .arg("status")
-        .arg("--porcelain")
+        .arg("ls-files")
+        .arg("--others")
+        .arg("--exclude-standard")
         .current_dir(repo_path)
         .output()?;
 
@@ -351,8 +352,8 @@ pub fn get_untracked_files(repo_path: &Path) -> Result<Vec<String>> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let untracked_files = stdout
         .lines()
-        .filter(|line| line.starts_with("??"))
-        .map(|line| line.split(' ').nth(1).unwrap_or("").to_string())
+        .filter(|line| !line.is_empty())
+        .map(String::from)
         .collect();
 
     Ok(untracked_files)
