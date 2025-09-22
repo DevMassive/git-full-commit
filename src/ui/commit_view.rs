@@ -20,8 +20,11 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
             state.main_screen.diff_scroll = 0;
 
             let file_list_height = state.main_header_height(max_y).0;
-            if state.main_screen.file_cursor >= state.main_screen.file_list_scroll + file_list_height {
-                state.main_screen.file_list_scroll = state.main_screen.file_cursor - file_list_height + 1;
+            if state.main_screen.file_cursor
+                >= state.main_screen.file_list_scroll + file_list_height
+            {
+                state.main_screen.file_list_scroll =
+                    state.main_screen.file_cursor - file_list_height + 1;
             }
         }
         Input::Character('\t') => {
@@ -52,7 +55,8 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
                 if state.main_screen.commit_message.is_empty() {
                     return;
                 }
-                git::commit(&state.repo_path, &state.main_screen.commit_message).expect("Failed to commit.");
+                git::commit(&state.repo_path, &state.main_screen.commit_message)
+                    .expect("Failed to commit.");
                 let _ = commit_storage::delete_commit_message(&state.repo_path);
                 state.main_screen.commit_message.clear();
                 state.command_history.clear();
@@ -100,7 +104,9 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
                 &mut state.main_screen.commit_message
             };
             if state.main_screen.commit_cursor < message.chars().count() {
-                if let Some((byte_index, _)) = message.char_indices().nth(state.main_screen.commit_cursor) {
+                if let Some((byte_index, _)) =
+                    message.char_indices().nth(state.main_screen.commit_cursor)
+                {
                     message.remove(byte_index);
                     if !state.main_screen.is_amend_mode {
                         let _ = commit_storage::save_commit_message(
@@ -120,7 +126,11 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
             } else {
                 state.main_screen.commit_message.chars().count()
             };
-            state.main_screen.commit_cursor = state.main_screen.commit_cursor.saturating_add(1).min(message_len);
+            state.main_screen.commit_cursor = state
+                .main_screen
+                .commit_cursor
+                .saturating_add(1)
+                .min(message_len);
         }
         Input::Character(c) => {
             if c == '\u{1b}' {

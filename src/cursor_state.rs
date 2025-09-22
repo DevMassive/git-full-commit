@@ -41,7 +41,8 @@ impl CursorState {
         // Restore main screen cursors
         state.main_screen.file_cursor = self.file_cursor.min(state.files.len() + 2);
         if let Some(file) = state.current_file() {
-            state.main_screen.line_cursor = self.line_cursor.min(file.lines.len().saturating_sub(1));
+            state.main_screen.line_cursor =
+                self.line_cursor.min(file.lines.len().saturating_sub(1));
         } else {
             state.main_screen.line_cursor = 0;
         }
@@ -50,7 +51,9 @@ impl CursorState {
         state.main_screen.horizontal_scroll = self.horizontal_scroll;
 
         // Restore unstaged screen cursors
-        state.unstaged_screen.unstaged_cursor = self.unstaged_cursor.min(state.unstaged_screen.unstaged_files.len() + 1);
+        state.unstaged_screen.unstaged_cursor = self
+            .unstaged_cursor
+            .min(state.unstaged_screen.unstaged_files.len() + 1);
         // This seems to be unused in the current implementation, but we restore it anyway.
         if let Some(_file) = state.get_unstaged_file() {
             // Unstaged view doesn't have a line_cursor in the same way, it's implicit

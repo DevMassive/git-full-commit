@@ -18,6 +18,7 @@ pub struct EditorRequest {
     pub line_number: Option<usize>,
 }
 
+#[derive(Default)]
 pub struct MainScreenState {
     pub diff_scroll: usize,
     pub file_list_scroll: usize,
@@ -32,25 +33,8 @@ pub struct MainScreenState {
     pub is_diff_cursor_active: bool,
     pub has_unstaged_changes: bool,
 }
-impl Default for MainScreenState {
-    fn default() -> Self {
-        Self {
-            diff_scroll: 0,
-            file_list_scroll: 0,
-            horizontal_scroll: 0,
-            file_cursor: 0,
-            line_cursor: 0,
-            commit_message: String::new(),
-            is_commit_mode: false,
-            commit_cursor: 0,
-            amend_message: String::new(),
-            is_amend_mode: false,
-            is_diff_cursor_active: false,
-            has_unstaged_changes: false,
-        }
-    }
-}
 
+#[derive(Default)]
 pub struct UnstagedScreenState {
     pub unstaged_files: Vec<FileDiff>,
     pub untracked_files: Vec<String>,
@@ -59,19 +43,6 @@ pub struct UnstagedScreenState {
     pub unstaged_diff_scroll: usize,
     pub unstaged_horizontal_scroll: usize,
     pub is_unstaged_diff_cursor_active: bool,
-}
-impl Default for UnstagedScreenState {
-    fn default() -> Self {
-        Self {
-            unstaged_files: Vec::new(),
-            untracked_files: Vec::new(),
-            unstaged_cursor: 0,
-            unstaged_scroll: 0,
-            unstaged_diff_scroll: 0,
-            unstaged_horizontal_scroll: 0,
-            is_unstaged_diff_cursor_active: false,
-        }
-    }
 }
 
 pub struct AppState {
@@ -103,7 +74,7 @@ impl AppState {
         let untracked_files = get_untracked_files(&repo_path).unwrap_or_default();
         let mut main_screen = MainScreenState::default();
         main_screen.commit_message = commit_message;
-        main_screen.file_cursor = if files.len() > 0 { 1 } else { 0 };
+        main_screen.file_cursor = if !files.is_empty() { 1 } else { 0 };
         main_screen.has_unstaged_changes = has_unstaged_changes;
         let mut unstaged_screen = UnstagedScreenState::default();
         unstaged_screen.unstaged_files = unstaged_files;
@@ -155,7 +126,8 @@ impl AppState {
         self.main_screen.has_unstaged_changes =
             git::has_unstaged_changes(&self.repo_path).unwrap_or(false);
         self.unstaged_screen.unstaged_files = get_unstaged_diff(&self.repo_path);
-        self.unstaged_screen.untracked_files = get_untracked_files(&self.repo_path).unwrap_or_default();
+        self.unstaged_screen.untracked_files =
+            get_untracked_files(&self.repo_path).unwrap_or_default();
 
         if self.files.is_empty() {
             self.main_screen.file_cursor = 0;
@@ -197,8 +169,12 @@ impl AppState {
     }
 
     pub fn get_unstaged_file(&self) -> Option<&FileDiff> {
-        if self.unstaged_screen.unstaged_cursor > 0 && self.unstaged_screen.unstaged_cursor <= self.unstaged_screen.unstaged_files.len() {
-            self.unstaged_screen.unstaged_files.get(self.unstaged_screen.unstaged_cursor - 1)
+        if self.unstaged_screen.unstaged_cursor > 0
+            && self.unstaged_screen.unstaged_cursor <= self.unstaged_screen.unstaged_files.len()
+        {
+            self.unstaged_screen
+                .unstaged_files
+                .get(self.unstaged_screen.unstaged_cursor - 1)
         } else {
             None
         }

@@ -55,20 +55,21 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
     let header_height = state.main_header_height(max_y).0;
     let content_height = (max_y as usize).saturating_sub(header_height);
     let num_files = state.files.len();
-    let lines_count = if state.main_screen.file_cursor > 0 && state.main_screen.file_cursor <= num_files {
-        state
-            .files
-            .get(state.main_screen.file_cursor - 1)
-            .map_or(0, |f| f.lines.len())
-    } else if state.main_screen.file_cursor == num_files + 2 {
-        state
-            .previous_commit_files
-            .iter()
-            .map(|f| f.lines.len())
-            .sum()
-    } else {
-        0
-    };
+    let lines_count =
+        if state.main_screen.file_cursor > 0 && state.main_screen.file_cursor <= num_files {
+            state
+                .files
+                .get(state.main_screen.file_cursor - 1)
+                .map_or(0, |f| f.lines.len())
+        } else if state.main_screen.file_cursor == num_files + 2 {
+            state
+                .previous_commit_files
+                .iter()
+                .map(|f| f.lines.len())
+                .sum()
+        } else {
+            0
+        };
 
     let (new_line_cursor, new_scroll) = scroll_content(
         state.main_screen.line_cursor,
@@ -91,7 +92,9 @@ fn scroll_unstaged_diff_view(
     let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
     let untracked_file_count = state.unstaged_screen.untracked_files.len();
 
-    let lines_count = if state.unstaged_screen.unstaged_cursor > 0 && state.unstaged_screen.unstaged_cursor <= unstaged_file_count {
+    let lines_count = if state.unstaged_screen.unstaged_cursor > 0
+        && state.unstaged_screen.unstaged_cursor <= unstaged_file_count
+    {
         state.get_unstaged_file().map_or(0, |f| f.lines.len())
     } else if state.unstaged_screen.unstaged_cursor > unstaged_file_count + 1
         && state.unstaged_screen.unstaged_cursor <= unstaged_file_count + 1 + untracked_file_count
