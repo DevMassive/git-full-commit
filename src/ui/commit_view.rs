@@ -21,11 +21,8 @@ pub fn render(
     }
     window.mv(line_y, 0);
 
-    let (prefix, message) = if state.main_screen.is_amend_mode {
-        (" o ", &state.main_screen.amend_message)
-    } else {
-        (" o ", &state.main_screen.commit_message)
-    };
+    let prefix = " o ";
+    let message = &state.main_screen.commit_message;
 
     window.addstr(prefix);
     if message.is_empty() {
@@ -76,49 +73,35 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
                     state.main_screen.file_cursor - file_list_height + 1;
             }
         }
-        Input::Character('\t') => {
-            state.main_screen.is_amend_mode = !state.main_screen.is_amend_mode;
-            if state.main_screen.is_amend_mode {
-                // Switched to amend mode
-                if state.main_screen.amend_message.is_empty() {
-                    state.main_screen.amend_message = state
-                        .previous_commits
-                        .first()
-                        .map(|c| c.message.clone())
-                        .unwrap_or_default();
-                }
-                state.main_screen.commit_cursor = state.main_screen.amend_message.chars().count();
-            } else {
-                // Switched back to commit mode
-                state.main_screen.commit_cursor = state.main_screen.commit_message.chars().count();
-            }
-        }
         Input::Character('\n') => {
+            if state.main_screen.commit_message.is_empty() {
+                return;
+            }
+
             if state.main_screen.is_amend_mode {
-                if state.main_screen.amend_message.is_empty() {
-                    return;
+                if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
+                    match git::fixup_and_rebase_autosquash(&state.repo_path, &hash) {
+                        Ok(_) => {
+                            let _ = commit_storage::delete_commit_message(&state.repo_path);
+                            state.command_history.clear();
+                            state.main_screen.is_amend_mode = false;
+                            state.main_screen.amending_commit_hash = None;
+                            state.main_screen.commit_message.clear();
+                            state.refresh_diff();
+                        }
+                        Err(e) => {
+                            // TODO: Show error to user in the UI
+                            eprintln!("Error amending commit: {}", e);
+                        }
+                    }
                 }
-                git::amend_commit(&state.repo_path, &state.main_screen.amend_message)
-                    .expect("Failed to amend commit.");
-                let _ = commit_storage::delete_commit_message(&state.repo_path);
-                state.command_history.clear();
-                state.main_screen.is_amend_mode = false;
             } else {
-                if state.main_screen.commit_message.is_empty() {
-                    return;
-                }
                 git::commit(&state.repo_path, &state.main_screen.commit_message)
                     .expect("Failed to commit.");
                 let _ = commit_storage::delete_commit_message(&state.repo_path);
                 state.main_screen.commit_message.clear();
                 state.command_history.clear();
             }
-
-            state.main_screen.amend_message = state
-                .previous_commits
-                .first()
-                .map(|c| c.message.clone())
-                .unwrap_or_default();
 
             git::add_all(&state.repo_path).expect("Failed to git add -A.");
 
@@ -134,11 +117,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
         }
         Input::KeyBackspace | Input::Character('\x7f') | Input::Character('\x08') => {
             if state.main_screen.commit_cursor > 0 {
-                let message = if state.main_screen.is_amend_mode {
-                    &mut state.main_screen.amend_message
-                } else {
-                    &mut state.main_screen.commit_message
-                };
+                let message = &mut state.main_screen.commit_message;
                 let char_index_to_remove = state.main_screen.commit_cursor - 1;
                 if let Some((byte_index, _)) = message.char_indices().nth(char_index_to_remove) {
                     message.remove(byte_index);
@@ -153,11 +132,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
             }
         }
         Input::KeyDC => {
-            let message = if state.main_screen.is_amend_mode {
-                &mut state.main_screen.amend_message
-            } else {
-                &mut state.main_screen.commit_message
-            };
+            let message = &mut state.main_screen.commit_message;
             if state.main_screen.commit_cursor < message.chars().count() {
                 if let Some((byte_index, _)) =
                     message.char_indices().nth(state.main_screen.commit_cursor)
@@ -176,11 +151,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
             state.main_screen.commit_cursor = state.main_screen.commit_cursor.saturating_sub(1);
         }
         Input::KeyRight => {
-            let message_len = if state.main_screen.is_amend_mode {
-                state.main_screen.amend_message.chars().count()
-            } else {
-                state.main_screen.commit_message.chars().count()
-            };
+            let message_len = state.main_screen.commit_message.chars().count();
             state.main_screen.commit_cursor = state
                 .main_screen
                 .commit_cursor
@@ -190,26 +161,19 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
         Input::Character(c) => {
             if c == '\u{1b}' {
                 // ESC key
-                state.main_screen.is_amend_mode = false; // Also reset amend mode
+                state.main_screen.is_amend_mode = false;
+                state.main_screen.amending_commit_hash = None;
                 state.main_screen.file_cursor = state.files.len();
             } else if c == '\u{1}' {
                 // Ctrl-A: beginning of line
                 state.main_screen.commit_cursor = 0;
             } else if c == '\u{5}' {
                 // Ctrl-E: end of line
-                let message = if state.main_screen.is_amend_mode {
-                    &state.main_screen.amend_message
-                } else {
-                    &state.main_screen.commit_message
-                };
+                let message = &state.main_screen.commit_message;
                 state.main_screen.commit_cursor = message.chars().count();
             } else if c == '\u{b}' {
                 // Ctrl-K: kill to end of line
-                let message = if state.main_screen.is_amend_mode {
-                    &mut state.main_screen.amend_message
-                } else {
-                    &mut state.main_screen.commit_message
-                };
+                let message = &mut state.main_screen.commit_message;
                 if state.main_screen.commit_cursor < message.chars().count() {
                     let byte_offset = message
                         .char_indices()
@@ -224,11 +188,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
                     }
                 }
             } else if !c.is_control() {
-                let message = if state.main_screen.is_amend_mode {
-                    &mut state.main_screen.amend_message
-                } else {
-                    &mut state.main_screen.commit_message
-                };
+                let message = &mut state.main_screen.commit_message;
                 let byte_offset = message
                     .char_indices()
                     .nth(state.main_screen.commit_cursor)

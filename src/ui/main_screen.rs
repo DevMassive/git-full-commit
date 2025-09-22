@@ -103,9 +103,9 @@ pub fn render(window: &Window, state: &AppState) {
                     commit_view::render(window, state, is_selected, line_y, max_x);
             }
             ListItem::PreviousCommitInfo {
+                hash,
                 message,
                 is_on_remote,
-                ..
             } => {
                 let pair = if is_selected { 5 } else { 1 };
                 window.attron(COLOR_PAIR(pair));
@@ -115,8 +115,12 @@ pub fn render(window: &Window, state: &AppState) {
                     }
                 }
                 window.mv(line_y, 0);
-                if state.main_screen.is_amend_mode {
-                    window.addstr(" |");
+
+                let is_amending_this_commit =
+                    state.main_screen.is_amend_mode && state.main_screen.amending_commit_hash.as_deref() == Some(hash);
+
+                if is_amending_this_commit {
+                    window.addstr(" amending... ");
                 } else {
                     let status = if *is_on_remote { "(remote)" } else { "(local)" };
                     window.addstr(format!(" o {status} {message}"));
@@ -270,6 +274,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                 .main_screen
                 .list_items
                 .get(state.main_screen.file_cursor)
+                .cloned()
             {
                 Some(ListItem::StagedChangesHeader) => {
                     let command = Box::new(UnstageAllCommand::new(state.repo_path.clone()));
@@ -277,8 +282,8 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                 }
                 Some(ListItem::File(file)) => {
                     let line_index = state.main_screen.line_cursor;
-                    if let Some(hunk) = git_patch::find_hunk(file, line_index) {
-                        let patch = git_patch::create_unstage_hunk_patch(file, hunk);
+                    if let Some(hunk) = git_patch::find_hunk(&file, line_index) {
+                        let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
                         let command =
                             Box::new(ApplyPatchCommand::new(state.repo_path.clone(), patch));
                         state.execute_and_refresh(command);
@@ -288,6 +293,21 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                             file.file_name.clone(),
                         ));
                         state.execute_and_refresh(command);
+                    }
+                }
+                Some(ListItem::PreviousCommitInfo { hash, message, .. }) => {
+                    state.main_screen.is_amend_mode = true;
+                    state.main_screen.amending_commit_hash = Some(hash);
+                    state.main_screen.commit_message = message;
+                    state.main_screen.commit_cursor = state.main_screen.commit_message.len();
+
+                    // Move cursor to the commit message input
+                    if let Some(index) =
+                        state.main_screen.list_items.iter().position(|item| {
+                            matches!(item, ListItem::CommitMessageInput)
+                        })
+                    {
+                        state.main_screen.file_cursor = index;
                     }
                 }
                 _ => {}
