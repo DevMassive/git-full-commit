@@ -51,9 +51,33 @@ impl Default for MainScreenState {
     }
 }
 
+pub struct UnstagedScreenState {
+    pub unstaged_files: Vec<FileDiff>,
+    pub untracked_files: Vec<String>,
+    pub unstaged_cursor: usize,
+    pub unstaged_scroll: usize,
+    pub unstaged_diff_scroll: usize,
+    pub unstaged_horizontal_scroll: usize,
+    pub is_unstaged_diff_cursor_active: bool,
+}
+impl Default for UnstagedScreenState {
+    fn default() -> Self {
+        Self {
+            unstaged_files: Vec::new(),
+            untracked_files: Vec::new(),
+            unstaged_cursor: 0,
+            unstaged_scroll: 0,
+            unstaged_diff_scroll: 0,
+            unstaged_horizontal_scroll: 0,
+            is_unstaged_diff_cursor_active: false,
+        }
+    }
+}
+
 pub struct AppState {
     pub repo_path: PathBuf,
     pub main_screen: MainScreenState,
+    pub unstaged_screen: UnstagedScreenState,
     pub running: bool,
     pub files: Vec<FileDiff>,
     pub command_history: CommandHistory,
@@ -62,13 +86,6 @@ pub struct AppState {
     pub previous_commit_is_on_remote: bool,
     pub previous_commit_files: Vec<FileDiff>,
     pub screen: Screen,
-    pub unstaged_files: Vec<FileDiff>,
-    pub untracked_files: Vec<String>,
-    pub unstaged_cursor: usize,
-    pub unstaged_scroll: usize,
-    pub unstaged_diff_scroll: usize,
-    pub unstaged_horizontal_scroll: usize,
-    pub is_unstaged_diff_cursor_active: bool,
     pub editor_request: Option<EditorRequest>,
 }
 impl AppState {
@@ -88,9 +105,13 @@ impl AppState {
         main_screen.commit_message = commit_message;
         main_screen.file_cursor = if files.len() > 0 { 1 } else { 0 };
         main_screen.has_unstaged_changes = has_unstaged_changes;
+        let mut unstaged_screen = UnstagedScreenState::default();
+        unstaged_screen.unstaged_files = unstaged_files;
+        unstaged_screen.untracked_files = untracked_files;
         Self {
             repo_path,
             main_screen,
+            unstaged_screen,
             running: true,
             files,
             command_history: CommandHistory::new(),
@@ -99,13 +120,6 @@ impl AppState {
             previous_commit_is_on_remote,
             previous_commit_files,
             screen: Screen::Main,
-            unstaged_files,
-            untracked_files,
-            unstaged_cursor: 0,
-            unstaged_scroll: 0,
-            unstaged_diff_scroll: 0,
-            unstaged_horizontal_scroll: 0,
-            is_unstaged_diff_cursor_active: false,
             editor_request: None,
         }
     }
@@ -127,9 +141,9 @@ impl AppState {
         let old_line_cursor = self.main_screen.line_cursor;
         let old_scroll = self.main_screen.diff_scroll;
         let old_file_list_scroll = self.main_screen.file_list_scroll;
-        let old_unstaged_cursor = self.unstaged_cursor;
-        let old_unstaged_scroll = self.unstaged_scroll;
-        let old_unstaged_diff_scroll = self.unstaged_diff_scroll;
+        let old_unstaged_cursor = self.unstaged_screen.unstaged_cursor;
+        let old_unstaged_scroll = self.unstaged_screen.unstaged_scroll;
+        let old_unstaged_diff_scroll = self.unstaged_screen.unstaged_diff_scroll;
 
         self.files = get_diff(self.repo_path.clone());
         (self.previous_commit_hash, self.previous_commit_message) =
@@ -140,8 +154,8 @@ impl AppState {
             get_previous_commit_diff(&self.repo_path).unwrap_or_else(|_| Vec::new());
         self.main_screen.has_unstaged_changes =
             git::has_unstaged_changes(&self.repo_path).unwrap_or(false);
-        self.unstaged_files = get_unstaged_diff(&self.repo_path);
-        self.untracked_files = get_untracked_files(&self.repo_path).unwrap_or_default();
+        self.unstaged_screen.unstaged_files = get_unstaged_diff(&self.repo_path);
+        self.unstaged_screen.untracked_files = get_untracked_files(&self.repo_path).unwrap_or_default();
 
         if self.files.is_empty() {
             self.main_screen.file_cursor = 0;
@@ -160,12 +174,12 @@ impl AppState {
         }
         self.main_screen.file_list_scroll = old_file_list_scroll;
 
-        let unstaged_file_count = self.unstaged_files.len();
-        let untracked_file_count = self.untracked_files.len();
+        let unstaged_file_count = self.unstaged_screen.unstaged_files.len();
+        let untracked_file_count = self.unstaged_screen.untracked_files.len();
         let max_unstaged_cursor = unstaged_file_count + untracked_file_count + 1;
-        self.unstaged_cursor = old_unstaged_cursor.min(max_unstaged_cursor);
-        self.unstaged_scroll = old_unstaged_scroll;
-        self.unstaged_diff_scroll = old_unstaged_diff_scroll;
+        self.unstaged_screen.unstaged_cursor = old_unstaged_cursor.min(max_unstaged_cursor);
+        self.unstaged_screen.unstaged_scroll = old_unstaged_scroll;
+        self.unstaged_screen.unstaged_diff_scroll = old_unstaged_diff_scroll;
     }
 
     pub fn execute_and_refresh(&mut self, command: Box<dyn Command>) {
@@ -183,8 +197,8 @@ impl AppState {
     }
 
     pub fn get_unstaged_file(&self) -> Option<&FileDiff> {
-        if self.unstaged_cursor > 0 && self.unstaged_cursor <= self.unstaged_files.len() {
-            self.unstaged_files.get(self.unstaged_cursor - 1)
+        if self.unstaged_screen.unstaged_cursor > 0 && self.unstaged_screen.unstaged_cursor <= self.unstaged_screen.unstaged_files.len() {
+            self.unstaged_screen.unstaged_files.get(self.unstaged_screen.unstaged_cursor - 1)
         } else {
             None
         }
@@ -198,8 +212,8 @@ impl AppState {
     }
 
     pub fn unstaged_header_height(&self, max_y: i32) -> (usize, usize) {
-        let unstaged_file_count = self.unstaged_files.len();
-        let untracked_file_count = self.untracked_files.len();
+        let unstaged_file_count = self.unstaged_screen.unstaged_files.len();
+        let untracked_file_count = self.unstaged_screen.untracked_files.len();
         let file_list_total_items = unstaged_file_count + untracked_file_count + 2;
         let height = (max_y as usize / 3).max(3).min(file_list_total_items);
         (height, file_list_total_items)

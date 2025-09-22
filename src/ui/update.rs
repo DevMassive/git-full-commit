@@ -205,20 +205,20 @@ pub(crate) fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, 
             if let Some(current_file) = state.current_file() {
                 let file_name = current_file.file_name.clone();
                 if let Some(index) = state
-                    .unstaged_files
+                    .unstaged_screen.unstaged_files
                     .iter()
                     .position(|f| f.file_name == file_name)
                 {
-                    state.unstaged_cursor = index + 1;
+                    state.unstaged_screen.unstaged_cursor = index + 1;
                 } else if let Some(index) =
-                    state.untracked_files.iter().position(|f| *f == file_name)
+                    state.unstaged_screen.untracked_files.iter().position(|f| *f == file_name)
                 {
-                    state.unstaged_cursor = state.unstaged_files.len() + index + 2;
+                    state.unstaged_screen.unstaged_cursor = state.unstaged_screen.unstaged_files.len() + index + 2;
                 }
             }
             state.screen = Screen::Unstaged;
             state.main_screen.line_cursor = 0;
-            state.unstaged_diff_scroll = 0;
+            state.unstaged_screen.unstaged_diff_scroll = 0;
         }
         _ => {
             if state.main_screen.file_cursor == state.files.len() + 1 {

@@ -779,7 +779,7 @@ fn test_tab_screen_switching_and_cursor_sync() {
             hunks: vec![],
         },
     ];
-    state.unstaged_files = vec![
+    state.unstaged_screen.unstaged_files = vec![
         FileDiff {
             file_name: "common_file.txt".to_string(),
             status: FileStatus::Modified,
@@ -793,7 +793,7 @@ fn test_tab_screen_switching_and_cursor_sync() {
             hunks: vec![],
         },
     ];
-    state.untracked_files = vec!["untracked_file.txt".to_string()];
+    state.unstaged_screen.untracked_files = vec!["untracked_file.txt".to_string()];
 
     // --- Switch from Main to Unstaged (with file sync) ---
     state.screen = Screen::Main;
@@ -801,7 +801,7 @@ fn test_tab_screen_switching_and_cursor_sync() {
 
     let state = update_state(state, Some(Input::Character('\t')), 30, 80);
     assert_eq!(state.screen, Screen::Unstaged);
-    assert_eq!(state.unstaged_cursor, 1); // "common_file.txt"
+    assert_eq!(state.unstaged_screen.unstaged_cursor, 1); // "common_file.txt"
 
     // --- Switch from Unstaged to Main (with file sync) ---
     let mut state = update_state(state, Some(Input::Character('\t')), 30, 80);
@@ -821,10 +821,10 @@ fn test_tab_screen_switching_and_cursor_sync() {
     // unstaged_files(2) + untracked_files(1) + headers(2) = 5 total
     // unstaged_cursor = unstaged_files.len() + index + 2
     // unstaged_cursor = 2 + 0 + 2 = 4
-    assert_eq!(state.unstaged_cursor, 4);
+    assert_eq!(state.unstaged_screen.unstaged_cursor, 4);
 
     // --- Switch from Unstaged to Main (no sync) ---
-    state.unstaged_cursor = 2; // "unstaged_only.txt"
+    state.unstaged_screen.unstaged_cursor = 2; // "unstaged_only.txt"
     let state = update_state(state, Some(Input::Character('\t')), 30, 80);
     assert_eq!(state.screen, Screen::Main);
     assert_eq!(state.main_screen.file_cursor, 3); // Unchanged
@@ -873,9 +873,9 @@ fn test_open_editor_unstaged_view() {
     let mut state = create_state_with_files(0);
     let mut file = create_test_file_diff();
     file.file_name = "unstaged_file.txt".to_string();
-    state.unstaged_files = vec![file];
+    state.unstaged_screen.unstaged_files = vec![file];
     state.screen = Screen::Unstaged;
-    state.unstaged_cursor = 1; // Select the file
+    state.unstaged_screen.unstaged_cursor = 1; // Select the file
     state.main_screen.line_cursor = 4; // "+line 2 new" -> new_line_num 2
     let repo_path = state.repo_path.clone();
 
@@ -893,9 +893,9 @@ fn test_open_editor_unstaged_view() {
 #[test]
 fn test_open_editor_untracked_file() {
     let mut state = create_state_with_files(0);
-    state.untracked_files = vec!["untracked.txt".to_string()];
+    state.unstaged_screen.untracked_files = vec!["untracked.txt".to_string()];
     state.screen = Screen::Unstaged;
-    state.unstaged_cursor = 2; // [Unstaged header, Untracked header, untracked.txt]
+    state.unstaged_screen.unstaged_cursor = 2; // [Unstaged header, Untracked header, untracked.txt]
     let repo_path = state.repo_path.clone();
 
     let updated_state = update_state(state, Some(Input::Character('e')), 80, 80);
@@ -996,7 +996,7 @@ fn test_stage_unstaged() {
     let mut state = AppState::new(repo_path.clone(), vec![]);
     state.refresh_diff();
     state.screen = Screen::Unstaged;
-    state.unstaged_cursor = 0; // Select "Unstaged changes" header
+    state.unstaged_screen.unstaged_cursor = 0; // Select "Unstaged changes" header
 
     // Stage all unstaged
     let state = update_state(state, Some(Input::Character('\n')), 80, 80);
@@ -1054,7 +1054,7 @@ fn test_stage_untracked() {
     let mut state = AppState::new(repo_path.clone(), vec![]);
     state.refresh_diff();
     state.screen = Screen::Unstaged;
-    state.unstaged_cursor = state.unstaged_files.len() + 1; // Select "Untracked files" header
+    state.unstaged_screen.unstaged_cursor = state.unstaged_screen.unstaged_files.len() + 1; // Select "Untracked files" header
 
     // Stage all untracked
     let state = update_state(state, Some(Input::Character('\n')), 80, 80);
@@ -1121,7 +1121,7 @@ fn test_discard_unstaged_file() {
     let mut state = AppState::new(repo_path.clone(), vec![]);
     state.refresh_diff();
     state.screen = Screen::Unstaged;
-    state.unstaged_cursor = 1;
+    state.unstaged_screen.unstaged_cursor = 1;
 
     let state_after_discard = update_state(state, Some(Input::Character('!')), 80, 80);
     let status = get_git_status(&repo_path);
@@ -1129,7 +1129,7 @@ fn test_discard_unstaged_file() {
         status.is_empty(),
         "Git status should be clean after discard"
     );
-    assert!(state_after_discard.unstaged_files.is_empty());
+    assert!(state_after_discard.unstaged_screen.unstaged_files.is_empty());
 
     let state_after_undo = update_state(state_after_discard, Some(Input::Character('<')), 80, 80);
     let status_after_undo = get_git_status(&repo_path);
@@ -1137,8 +1137,8 @@ fn test_discard_unstaged_file() {
         status_after_undo.contains(" M test.txt"),
         "File should be modified again after undo"
     );
-    assert_eq!(state_after_undo.unstaged_files.len(), 1);
-    assert_eq!(state_after_undo.unstaged_files[0].file_name, "test.txt");
+    assert_eq!(state_after_undo.unstaged_screen.unstaged_files.len(), 1);
+    assert_eq!(state_after_undo.unstaged_screen.unstaged_files[0].file_name, "test.txt");
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
@@ -1152,16 +1152,16 @@ fn test_discard_untracked_file() {
     let mut state = AppState::new(repo_path.clone(), vec![]);
     state.refresh_diff();
     state.screen = Screen::Unstaged;
-    state.unstaged_cursor = 2; // Header, Header, File
+    state.unstaged_screen.unstaged_cursor = 2; // Header, Header, File
 
     let state_after_discard = update_state(state, Some(Input::Character('!')), 80, 80);
     assert!(!file_path.exists(), "File should be deleted");
-    assert!(state_after_discard.untracked_files.is_empty());
+    assert!(state_after_discard.unstaged_screen.untracked_files.is_empty());
 
     let state_after_undo = update_state(state_after_discard, Some(Input::Character('<')), 80, 80);
     assert!(file_path.exists(), "File should be restored after undo");
-    assert_eq!(state_after_undo.untracked_files.len(), 1);
-    assert_eq!(state_after_undo.untracked_files[0], "untracked.txt");
+    assert_eq!(state_after_undo.unstaged_screen.untracked_files.len(), 1);
+    assert_eq!(state_after_undo.unstaged_screen.untracked_files[0], "untracked.txt");
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
@@ -1175,11 +1175,11 @@ fn test_discard_untracked_binary_file() {
     let mut state = AppState::new(repo_path.clone(), vec![]);
     state.refresh_diff();
     state.screen = Screen::Unstaged;
-    state.unstaged_cursor = 2;
+    state.unstaged_screen.unstaged_cursor = 2;
 
     let state_after_discard = update_state(state, Some(Input::Character('!')), 80, 80);
     assert!(file_path.exists(), "Binary file should not be deleted");
-    assert_eq!(state_after_discard.untracked_files.len(), 1);
+    assert_eq!(state_after_discard.unstaged_screen.untracked_files.len(), 1);
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
@@ -1207,7 +1207,7 @@ fn test_ignore_unstaged_file() {
     let mut state = AppState::new(repo_path.clone(), vec![]);
     state.refresh_diff();
     state.screen = Screen::Unstaged;
-    state.unstaged_cursor = 1;
+    state.unstaged_screen.unstaged_cursor = 1;
 
     let state_after_ignore = update_state(state, Some(Input::Character('i')), 80, 80);
     let gitignore_content =
@@ -1215,13 +1215,13 @@ fn test_ignore_unstaged_file() {
     assert!(gitignore_content.contains("test.txt"));
     let status = get_git_status(&repo_path);
     assert!(status.contains("A  .gitignore"));
-    assert!(state_after_ignore.unstaged_files.is_empty());
+    assert!(state_after_ignore.unstaged_screen.unstaged_files.is_empty());
 
     let state_after_undo = update_state(state_after_ignore, Some(Input::Character('<')), 80, 80);
     let status_after_undo = get_git_status(&repo_path);
     assert!(!repo_path.join(".gitignore").exists());
     assert!(status_after_undo.contains(" M test.txt"));
-    assert_eq!(state_after_undo.unstaged_files.len(), 1);
+    assert_eq!(state_after_undo.unstaged_screen.unstaged_files.len(), 1);
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
@@ -1234,7 +1234,7 @@ fn test_ignore_untracked_file() {
     let mut state = AppState::new(repo_path.clone(), vec![]);
     state.refresh_diff();
     state.screen = Screen::Unstaged;
-    state.unstaged_cursor = 2;
+    state.unstaged_screen.unstaged_cursor = 2;
 
     let state_after_ignore = update_state(state, Some(Input::Character('i')), 80, 80);
     let gitignore_content =
@@ -1243,13 +1243,13 @@ fn test_ignore_untracked_file() {
     let status = get_git_status(&repo_path);
     assert!(status.contains("A  .gitignore"));
     assert!(!status.contains("untracked.txt"));
-    assert!(state_after_ignore.untracked_files.is_empty());
+    assert!(state_after_ignore.unstaged_screen.untracked_files.is_empty());
 
     let state_after_undo = update_state(state_after_ignore, Some(Input::Character('<')), 80, 80);
     let status_after_undo = get_git_status(&repo_path);
     assert!(!repo_path.join(".gitignore").exists());
     assert!(status_after_undo.contains("?? untracked.txt"));
-    assert_eq!(state_after_undo.untracked_files.len(), 1);
+    assert_eq!(state_after_undo.unstaged_screen.untracked_files.len(), 1);
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }

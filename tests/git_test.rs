@@ -808,22 +808,22 @@ fn test_stage_untracked_file() {
 
         let mut state = AppState::new(repo_path.clone(), vec![]);
         state.refresh_diff();
-        assert!(!state.untracked_files.is_empty());
+        assert!(!state.unstaged_screen.untracked_files.is_empty());
 
         // Navigate to the untracked file
-        state.unstaged_cursor = 2; // Unstaged header (0), Untracked header (1), file (2)
+        state.unstaged_screen.unstaged_cursor = 2; // Unstaged header (0), Untracked header (1), file (2)
 
         // Press Enter to stage the file
         handle_unstaged_view_input(&mut state, Input::Character('\n'), 30);
 
         // Check that the file is staged
         state.refresh_diff();
-        assert!(state.untracked_files.is_empty());
+        assert!(state.unstaged_screen.untracked_files.is_empty());
         assert_eq!(state.files[0].file_name, file_name);
 
         // Undo
         state = update_state(state, Some(Input::Character('<')), 30, 80);
-        assert!(!state.untracked_files.is_empty());
+        assert!(!state.unstaged_screen.untracked_files.is_empty());
         assert!(state.files.is_empty());
     });
 }
@@ -840,22 +840,22 @@ fn test_stage_modified_file() {
 
         let mut state = AppState::new(repo_path.clone(), vec![]);
         state.refresh_diff();
-        assert!(!state.unstaged_files.is_empty());
+        assert!(!state.unstaged_screen.unstaged_files.is_empty());
 
         // Navigate to the modified file
-        state.unstaged_cursor = 1;
+        state.unstaged_screen.unstaged_cursor = 1;
 
         // Press Enter to stage the file
         handle_unstaged_view_input(&mut state, Input::Character('\n'), 30);
 
         // Check that the file is staged
         state.refresh_diff();
-        assert!(state.unstaged_files.is_empty());
+        assert!(state.unstaged_screen.unstaged_files.is_empty());
         assert_eq!(state.files[0].file_name, file_name);
 
         // Undo
         let state = update_state(state, Some(Input::Character('<')), 30, 80);
-        assert!(!state.unstaged_files.is_empty());
+        assert!(!state.unstaged_screen.unstaged_files.is_empty());
         assert!(state.files.is_empty());
     });
 }
@@ -881,8 +881,8 @@ fn test_stage_hunk() {
         state.refresh_diff();
 
         // Navigate to the modified file and the hunk
-        state.unstaged_cursor = 1;
-        let hunk_line = state.unstaged_files[0]
+        state.unstaged_screen.unstaged_cursor = 1;
+        let hunk_line = state.unstaged_screen.unstaged_files[0]
             .lines
             .iter()
             .position(|l| l.contains("MODIFIED"))
@@ -894,7 +894,7 @@ fn test_stage_hunk() {
         state.refresh_diff();
 
         // Check that the hunk is staged
-        assert!(state.unstaged_files.is_empty());
+        assert!(state.unstaged_screen.unstaged_files.is_empty());
         assert!(!state.files.is_empty());
         let staged_diff = get_staged_diff_for_file(&repo_path, file_name);
         assert!(staged_diff.contains("+MODIFIED line 3"));
@@ -1020,8 +1020,8 @@ fn test_stage_line() {
         state.refresh_diff();
 
         // Navigate to the added line
-        state.unstaged_cursor = 1;
-        let added_line_index = state.unstaged_files[0]
+        state.unstaged_screen.unstaged_cursor = 1;
+        let added_line_index = state.unstaged_screen.unstaged_files[0]
             .lines
             .iter()
             .position(|l| l.contains("ADDED"))

@@ -28,10 +28,10 @@ impl CursorState {
             scroll: state.main_screen.diff_scroll,
             file_list_scroll: state.main_screen.file_list_scroll,
             horizontal_scroll: state.main_screen.horizontal_scroll,
-            unstaged_cursor: state.unstaged_cursor,
-            unstaged_scroll: state.unstaged_scroll,
-            unstaged_diff_scroll: state.unstaged_diff_scroll,
-            unstaged_horizontal_scroll: state.unstaged_horizontal_scroll,
+            unstaged_cursor: state.unstaged_screen.unstaged_cursor,
+            unstaged_scroll: state.unstaged_screen.unstaged_scroll,
+            unstaged_diff_scroll: state.unstaged_screen.unstaged_diff_scroll,
+            unstaged_horizontal_scroll: state.unstaged_screen.unstaged_horizontal_scroll,
         }
     }
 
@@ -50,13 +50,13 @@ impl CursorState {
         state.main_screen.horizontal_scroll = self.horizontal_scroll;
 
         // Restore unstaged screen cursors
-        state.unstaged_cursor = self.unstaged_cursor.min(state.unstaged_files.len() + 1);
+        state.unstaged_screen.unstaged_cursor = self.unstaged_cursor.min(state.unstaged_screen.unstaged_files.len() + 1);
         // This seems to be unused in the current implementation, but we restore it anyway.
         if let Some(_file) = state.get_unstaged_file() {
             // Unstaged view doesn't have a line_cursor in the same way, it's implicit
         }
-        state.unstaged_scroll = self.unstaged_scroll;
-        state.unstaged_diff_scroll = self.unstaged_diff_scroll;
-        state.unstaged_horizontal_scroll = self.unstaged_horizontal_scroll;
+        state.unstaged_screen.unstaged_scroll = self.unstaged_scroll;
+        state.unstaged_screen.unstaged_diff_scroll = self.unstaged_diff_scroll;
+        state.unstaged_screen.unstaged_horizontal_scroll = self.unstaged_horizontal_scroll;
     }
 }

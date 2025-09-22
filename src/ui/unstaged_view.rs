@@ -15,17 +15,17 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
     let (max_y, max_x) = window.get_max_yx();
 
     let (file_list_height, file_list_total_items) = state.unstaged_header_height(max_y);
-    let unstaged_file_count = state.unstaged_files.len();
-    let untracked_file_count = state.untracked_files.len();
+    let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
+    let untracked_file_count = state.unstaged_screen.untracked_files.len();
 
     // Render file list
     for i in 0..file_list_height {
-        let item_index = state.unstaged_scroll + i;
+        let item_index = state.unstaged_screen.unstaged_scroll + i;
         if item_index >= file_list_total_items {
             break;
         }
         let line_y = i as i32;
-        let is_selected = state.unstaged_cursor == item_index;
+        let is_selected = state.unstaged_screen.unstaged_cursor == item_index;
         let pair = if is_selected { 5 } else { 1 };
 
         if is_selected {
@@ -43,7 +43,7 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
             window.addstr(" Unstaged changes");
         } else if item_index > 0 && item_index <= unstaged_file_count {
             let file_index = item_index - 1;
-            let file = &state.unstaged_files[file_index];
+            let file = &state.unstaged_screen.unstaged_files[file_index];
             let status_pair = if is_selected { 6 } else { 2 };
 
             let status_char = match file.status {
@@ -63,7 +63,7 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
             window.addstr(" Untracked files");
         } else {
             let file_index = item_index - unstaged_file_count - 2;
-            let file = &state.untracked_files[file_index];
+            let file = &state.unstaged_screen.untracked_files[file_index];
             window.addstr(format!("    ? {file}"));
         }
         window.attroff(COLOR_PAIR(pair));
@@ -77,26 +77,26 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
     window.attroff(COLOR_PAIR(9));
 
     // Render diff view
-    if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
-        let file_index = state.unstaged_cursor - 1;
-        if let Some(file) = state.unstaged_files.get(file_index) {
+    if state.unstaged_screen.unstaged_cursor > 0 && state.unstaged_screen.unstaged_cursor <= unstaged_file_count {
+        let file_index = state.unstaged_screen.unstaged_cursor - 1;
+        if let Some(file) = state.unstaged_screen.unstaged_files.get(file_index) {
             let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
             render_diff_view(
                 window,
                 file,
                 content_height,
-                state.unstaged_diff_scroll,
-                state.unstaged_horizontal_scroll,
+                state.unstaged_screen.unstaged_diff_scroll,
+                state.unstaged_screen.unstaged_horizontal_scroll,
                 file_list_height + 1,
                 state.main_screen.line_cursor,
-                state.is_unstaged_diff_cursor_active,
+                state.unstaged_screen.is_unstaged_diff_cursor_active,
             );
         }
-    } else if state.unstaged_cursor > unstaged_file_count + 1
-        && state.unstaged_cursor <= unstaged_file_count + 1 + untracked_file_count
+    } else if state.unstaged_screen.unstaged_cursor > unstaged_file_count + 1
+        && state.unstaged_screen.unstaged_cursor <= unstaged_file_count + 1 + untracked_file_count
     {
-        let file_index = state.unstaged_cursor - unstaged_file_count - 2;
-        if let Some(file_path) = state.untracked_files.get(file_index) {
+        let file_index = state.unstaged_screen.unstaged_cursor - unstaged_file_count - 2;
+        if let Some(file_path) = state.unstaged_screen.untracked_files.get(file_index) {
             let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
 
             let lines = match git::read_file_content(&state.repo_path, file_path) {
@@ -124,11 +124,11 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
                 window,
                 &file_diff,
                 content_height,
-                state.unstaged_diff_scroll,
-                state.unstaged_horizontal_scroll,
+                state.unstaged_screen.unstaged_diff_scroll,
+                state.unstaged_screen.unstaged_horizontal_scroll,
                 file_list_height + 1,
                 state.main_screen.line_cursor,
-                state.is_unstaged_diff_cursor_active,
+                state.unstaged_screen.is_unstaged_diff_cursor_active,
             );
         }
     }
@@ -144,21 +144,21 @@ fn is_binary(content: &[u8]) -> bool {
 
 pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32) {
     let (file_list_height, unstaged_items_count) = state.unstaged_header_height(max_y);
-    let unstaged_file_count = state.unstaged_files.len();
-    let _untracked_file_count = state.untracked_files.len();
+    let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
+    let _untracked_file_count = state.unstaged_screen.untracked_files.len();
 
     match input {
         Input::Character('\t') => {
-            let unstaged_file_count = state.unstaged_files.len();
+            let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
             let selected_file_name =
-                if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
+                if state.unstaged_screen.unstaged_cursor > 0 && state.unstaged_screen.unstaged_cursor <= unstaged_file_count {
                     state
-                        .unstaged_files
-                        .get(state.unstaged_cursor - 1)
+                        .unstaged_screen.unstaged_files
+                        .get(state.unstaged_screen.unstaged_cursor - 1)
                         .map(|f| f.file_name.clone())
-                } else if state.unstaged_cursor > unstaged_file_count + 1 {
-                    let file_index = state.unstaged_cursor - unstaged_file_count - 2;
-                    state.untracked_files.get(file_index).cloned()
+                } else if state.unstaged_screen.unstaged_cursor > unstaged_file_count + 1 {
+                    let file_index = state.unstaged_screen.unstaged_cursor - unstaged_file_count - 2;
+                    state.unstaged_screen.untracked_files.get(file_index).cloned()
                 } else {
                     None
                 };
@@ -179,47 +179,47 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             state.main_screen.diff_scroll = 0;
         }
         Input::KeyUp => {
-            state.unstaged_cursor = state.unstaged_cursor.saturating_sub(1);
-            state.unstaged_diff_scroll = 0;
+            state.unstaged_screen.unstaged_cursor = state.unstaged_screen.unstaged_cursor.saturating_sub(1);
+            state.unstaged_screen.unstaged_diff_scroll = 0;
             state.main_screen.line_cursor = 0;
-            state.is_unstaged_diff_cursor_active = false;
-            if state.unstaged_cursor < state.unstaged_scroll {
-                state.unstaged_scroll = state.unstaged_cursor;
+            state.unstaged_screen.is_unstaged_diff_cursor_active = false;
+            if state.unstaged_screen.unstaged_cursor < state.unstaged_screen.unstaged_scroll {
+                state.unstaged_screen.unstaged_scroll = state.unstaged_screen.unstaged_cursor;
             }
         }
         Input::KeyDown => {
-            state.unstaged_cursor = state
-                .unstaged_cursor
+            state.unstaged_screen.unstaged_cursor = state
+                .unstaged_screen.unstaged_cursor
                 .saturating_add(1)
                 .min(unstaged_items_count - 1);
-            state.unstaged_diff_scroll = 0;
+            state.unstaged_screen.unstaged_diff_scroll = 0;
             state.main_screen.line_cursor = 0;
-            state.is_unstaged_diff_cursor_active = false;
-            if state.unstaged_cursor >= state.unstaged_scroll + file_list_height {
-                state.unstaged_scroll = state.unstaged_cursor - file_list_height + 1;
+            state.unstaged_screen.is_unstaged_diff_cursor_active = false;
+            if state.unstaged_screen.unstaged_cursor >= state.unstaged_screen.unstaged_scroll + file_list_height {
+                state.unstaged_screen.unstaged_scroll = state.unstaged_screen.unstaged_cursor - file_list_height + 1;
             }
         }
         Input::Character('k') => {
-            state.is_unstaged_diff_cursor_active = true;
+            state.unstaged_screen.is_unstaged_diff_cursor_active = true;
             state.main_screen.line_cursor = state.main_screen.line_cursor.saturating_sub(1);
-            if state.main_screen.line_cursor < state.unstaged_diff_scroll {
-                state.unstaged_diff_scroll = state.main_screen.line_cursor;
+            if state.main_screen.line_cursor < state.unstaged_screen.unstaged_diff_scroll {
+                state.unstaged_screen.unstaged_diff_scroll = state.main_screen.line_cursor;
             }
         }
         Input::Character('j') => {
-            state.is_unstaged_diff_cursor_active = true;
-            let file_lines_count = if state.unstaged_cursor > 0
-                && state.unstaged_cursor <= unstaged_file_count
+            state.unstaged_screen.is_unstaged_diff_cursor_active = true;
+            let file_lines_count = if state.unstaged_screen.unstaged_cursor > 0
+                && state.unstaged_screen.unstaged_cursor <= unstaged_file_count
             {
-                let file_index = state.unstaged_cursor - 1;
+                let file_index = state.unstaged_screen.unstaged_cursor - 1;
                 state
-                    .unstaged_files
+                    .unstaged_screen.unstaged_files
                     .get(file_index)
                     .map(|f| f.lines.len())
                     .unwrap_or(0)
-            } else if state.unstaged_cursor > unstaged_file_count + 1 {
-                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
-                if let Some(file_path) = state.untracked_files.get(file_index) {
+            } else if state.unstaged_screen.unstaged_cursor > unstaged_file_count + 1 {
+                let file_index = state.unstaged_screen.unstaged_cursor - unstaged_file_count - 2;
+                if let Some(file_path) = state.unstaged_screen.untracked_files.get(file_index) {
                     if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_path) {
                         if is_binary(&content) {
                             1
@@ -239,26 +239,26 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             if state.main_screen.line_cursor < file_lines_count.saturating_sub(1) {
                 state.main_screen.line_cursor += 1;
                 let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
-                if state.main_screen.line_cursor >= state.unstaged_diff_scroll + content_height {
-                    state.unstaged_diff_scroll = state.main_screen.line_cursor - content_height + 1;
+                if state.main_screen.line_cursor >= state.unstaged_screen.unstaged_diff_scroll + content_height {
+                    state.unstaged_screen.unstaged_diff_scroll = state.main_screen.line_cursor - content_height + 1;
                 }
             }
         }
         Input::KeyLeft => {
-            state.unstaged_horizontal_scroll = state.unstaged_horizontal_scroll.saturating_sub(10);
+            state.unstaged_screen.unstaged_horizontal_scroll = state.unstaged_screen.unstaged_horizontal_scroll.saturating_sub(10);
         }
         Input::KeyRight => {
-            state.unstaged_horizontal_scroll = state.unstaged_horizontal_scroll.saturating_add(10);
+            state.unstaged_screen.unstaged_horizontal_scroll = state.unstaged_screen.unstaged_horizontal_scroll.saturating_add(10);
         }
         Input::Character('\n') => {
-            let unstaged_file_count = state.unstaged_files.len();
-            if state.unstaged_cursor == 0 {
+            let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
+            if state.unstaged_screen.unstaged_cursor == 0 {
                 let command = Box::new(StageUnstagedCommand::new(state.repo_path.clone()));
                 state.execute_and_refresh(command);
-            } else if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
-                let file_index = state.unstaged_cursor - 1;
-                if let Some(file) = state.unstaged_files.get(file_index).cloned() {
-                    if state.is_unstaged_diff_cursor_active {
+            } else if state.unstaged_screen.unstaged_cursor > 0 && state.unstaged_screen.unstaged_cursor <= unstaged_file_count {
+                let file_index = state.unstaged_screen.unstaged_cursor - 1;
+                if let Some(file) = state.unstaged_screen.unstaged_files.get(file_index).cloned() {
+                    if state.unstaged_screen.is_unstaged_diff_cursor_active {
                         if let Some(hunk) = git_patch::find_hunk(&file, state.main_screen.line_cursor) {
                             let patch = git_patch::create_stage_hunk_patch(&file, hunk);
                             let command =
@@ -273,9 +273,9 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                                 let (file_list_height, _) = state.unstaged_header_height(max_y);
                                 let content_height =
                                     (max_y as usize).saturating_sub(file_list_height + 1);
-                                if state.main_screen.line_cursor >= state.unstaged_diff_scroll + content_height
+                                if state.main_screen.line_cursor >= state.unstaged_screen.unstaged_diff_scroll + content_height
                                 {
-                                    state.unstaged_diff_scroll =
+                                    state.unstaged_screen.unstaged_diff_scroll =
                                         state.main_screen.line_cursor - content_height + 1;
                                 }
                             } else {
@@ -297,12 +297,12 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                         state.execute_and_refresh(command);
                     }
                 }
-            } else if state.unstaged_cursor == unstaged_file_count + 1 {
+            } else if state.unstaged_screen.unstaged_cursor == unstaged_file_count + 1 {
                 let command = Box::new(StageUntrackedCommand::new(state.repo_path.clone()));
                 state.execute_and_refresh(command);
-            } else if state.unstaged_cursor > unstaged_file_count + 1 {
-                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
-                if let Some(file_name) = state.untracked_files.get(file_index).cloned() {
+            } else if state.unstaged_screen.unstaged_cursor > unstaged_file_count + 1 {
+                let file_index = state.unstaged_screen.unstaged_cursor - unstaged_file_count - 2;
+                if let Some(file_name) = state.unstaged_screen.untracked_files.get(file_index).cloned() {
                     let command =
                         Box::new(StageFileCommand::new(state.repo_path.clone(), file_name));
                     state.execute_and_refresh(command);
@@ -310,10 +310,10 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             }
         }
         Input::Character('1') => {
-            let unstaged_file_count = state.unstaged_files.len();
-            if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
-                let file_index = state.unstaged_cursor - 1;
-                if let Some(file) = state.unstaged_files.get(file_index) {
+            let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
+            if state.unstaged_screen.unstaged_cursor > 0 && state.unstaged_screen.unstaged_cursor <= unstaged_file_count {
+                let file_index = state.unstaged_screen.unstaged_cursor - 1;
+                if let Some(file) = state.unstaged_screen.unstaged_files.get(file_index) {
                     if let Some(patch) = git_patch::create_stage_line_patch(file, state.main_screen.line_cursor)
                     {
                         let command =
@@ -328,8 +328,8 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                             let (file_list_height, _) = state.unstaged_header_height(max_y);
                             let content_height =
                                 (max_y as usize).saturating_sub(file_list_height + 1);
-                            if state.main_screen.line_cursor >= state.unstaged_diff_scroll + content_height {
-                                state.unstaged_diff_scroll = state.main_screen.line_cursor - content_height + 1;
+                            if state.main_screen.line_cursor >= state.unstaged_screen.unstaged_diff_scroll + content_height {
+                                state.unstaged_screen.unstaged_diff_scroll = state.main_screen.line_cursor - content_height + 1;
                             }
                         } else {
                             state.main_screen.line_cursor = 0;
@@ -339,12 +339,12 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             }
         }
         Input::Character('e') => {
-            let unstaged_file_count = state.unstaged_files.len();
-            let untracked_file_count = state.untracked_files.len();
+            let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
+            let untracked_file_count = state.unstaged_screen.untracked_files.len();
 
-            if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
-                let file_index = state.unstaged_cursor - 1;
-                if let Some(file) = state.unstaged_files.get(file_index) {
+            if state.unstaged_screen.unstaged_cursor > 0 && state.unstaged_screen.unstaged_cursor <= unstaged_file_count {
+                let file_index = state.unstaged_screen.unstaged_cursor - 1;
+                if let Some(file) = state.unstaged_screen.unstaged_files.get(file_index) {
                     let line_number = git_patch::get_line_number(file, state.main_screen.line_cursor);
                     let file_path = state.repo_path.join(&file.file_name);
                     if let Some(path_str) = file_path.to_str() {
@@ -354,11 +354,11 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                         });
                     }
                 }
-            } else if state.unstaged_cursor > unstaged_file_count + 1
-                && state.unstaged_cursor <= unstaged_file_count + 1 + untracked_file_count
+            } else if state.unstaged_screen.unstaged_cursor > unstaged_file_count + 1
+                && state.unstaged_screen.unstaged_cursor <= unstaged_file_count + 1 + untracked_file_count
             {
-                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
-                if let Some(file_name) = state.untracked_files.get(file_index) {
+                let file_index = state.unstaged_screen.unstaged_cursor - unstaged_file_count - 2;
+                if let Some(file_name) = state.unstaged_screen.untracked_files.get(file_index) {
                     let file_path = state.repo_path.join(file_name);
                     if let Some(path_str) = file_path.to_str() {
                         state.editor_request = Some(EditorRequest {
@@ -370,12 +370,12 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             }
         }
         Input::Character('!') => {
-            let unstaged_file_count = state.unstaged_files.len();
-            if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
+            let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
+            if state.unstaged_screen.unstaged_cursor > 0 && state.unstaged_screen.unstaged_cursor <= unstaged_file_count {
                 // Discard unstaged (but tracked) file or hunk
-                let file_index = state.unstaged_cursor - 1;
-                if let Some(file) = state.unstaged_files.get(file_index).cloned() {
-                    if state.is_unstaged_diff_cursor_active {
+                let file_index = state.unstaged_screen.unstaged_cursor - 1;
+                if let Some(file) = state.unstaged_screen.unstaged_files.get(file_index).cloned() {
+                    if state.unstaged_screen.is_unstaged_diff_cursor_active {
                         if let Some(hunk) = git_patch::find_hunk(&file, state.main_screen.line_cursor) {
                             let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
                             let command = Box::new(DiscardUnstagedHunkCommand::new(
@@ -396,10 +396,10 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                         state.execute_and_refresh(command);
                     }
                 }
-            } else if state.unstaged_cursor > unstaged_file_count + 1 {
+            } else if state.unstaged_screen.unstaged_cursor > unstaged_file_count + 1 {
                 // Discard untracked file
-                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
-                if let Some(file_name) = state.untracked_files.get(file_index).cloned() {
+                let file_index = state.unstaged_screen.unstaged_cursor - unstaged_file_count - 2;
+                if let Some(file_name) = state.unstaged_screen.untracked_files.get(file_index).cloned() {
                     if let Ok((content, _)) = git::read_file_content(&state.repo_path, &file_name) {
                         if is_binary(&content) {
                             return; // Do not delete binary files
@@ -415,19 +415,19 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             }
         }
         Input::Character('i') => {
-            let unstaged_file_count = state.unstaged_files.len();
+            let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
             let mut file_to_ignore: Option<String> = None;
             let is_tracked;
 
-            if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
-                let file_index = state.unstaged_cursor - 1;
-                if let Some(file) = state.unstaged_files.get(file_index) {
+            if state.unstaged_screen.unstaged_cursor > 0 && state.unstaged_screen.unstaged_cursor <= unstaged_file_count {
+                let file_index = state.unstaged_screen.unstaged_cursor - 1;
+                if let Some(file) = state.unstaged_screen.unstaged_files.get(file_index) {
                     file_to_ignore = Some(file.file_name.clone());
                 }
                 is_tracked = true;
-            } else if state.unstaged_cursor > unstaged_file_count + 1 {
-                let file_index = state.unstaged_cursor - unstaged_file_count - 2;
-                if let Some(file_name) = state.untracked_files.get(file_index) {
+            } else if state.unstaged_screen.unstaged_cursor > unstaged_file_count + 1 {
+                let file_index = state.unstaged_screen.unstaged_cursor - unstaged_file_count - 2;
+                if let Some(file_name) = state.unstaged_screen.untracked_files.get(file_index) {
                     file_to_ignore = Some(file_name.clone());
                 }
                 is_tracked = false;
