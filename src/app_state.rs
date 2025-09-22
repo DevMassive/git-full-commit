@@ -5,7 +5,8 @@ use crate::git::{
     self, FileDiff, get_diff, get_previous_commit_diff, get_previous_commit_info,
     get_unstaged_diff, get_untracked_files, is_commit_on_remote,
 };
-use crate::ui::main_screen::ListItem;
+use crate::ui::main_screen::ListItem as MainScreenListItem;
+use crate::ui::unstaged_screen::ListItem as UnstagedScreenListItem;
 use std::path::PathBuf;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -33,7 +34,7 @@ pub struct MainScreenState {
     pub is_amend_mode: bool,
     pub is_diff_cursor_active: bool,
     pub has_unstaged_changes: bool,
-    pub list_items: Vec<ListItem>,
+    pub list_items: Vec<MainScreenListItem>,
 }
 
 #[derive(Default)]
@@ -45,6 +46,7 @@ pub struct UnstagedScreenState {
     pub unstaged_diff_scroll: usize,
     pub unstaged_horizontal_scroll: usize,
     pub is_unstaged_diff_cursor_active: bool,
+    pub list_items: Vec<UnstagedScreenListItem>,
 }
 
 pub struct AppState {
@@ -74,18 +76,25 @@ impl AppState {
         let has_unstaged_changes = git::has_unstaged_changes(&repo_path).unwrap_or(false);
         let unstaged_files = get_unstaged_diff(&repo_path);
         let untracked_files = get_untracked_files(&repo_path).unwrap_or_default();
+
         let mut main_screen = MainScreenState::default();
         main_screen.commit_message = commit_message;
         main_screen.has_unstaged_changes = has_unstaged_changes;
-        main_screen.list_items = Self::build_list_items(
+        main_screen.list_items = Self::build_main_screen_list_items(
             &files,
             &previous_commit_message,
             previous_commit_is_on_remote,
         );
         main_screen.file_cursor = if !files.is_empty() { 1 } else { 0 };
+
         let mut unstaged_screen = UnstagedScreenState::default();
-        unstaged_screen.unstaged_files = unstaged_files;
-        unstaged_screen.untracked_files = untracked_files;
+        unstaged_screen.unstaged_files = unstaged_files.clone();
+        unstaged_screen.untracked_files = untracked_files.clone();
+        unstaged_screen.list_items = Self::build_unstaged_screen_list_items(
+            &unstaged_files,
+            &untracked_files,
+        );
+
         Self {
             repo_path,
             main_screen,
@@ -102,28 +111,44 @@ impl AppState {
         }
     }
 
-    fn build_list_items(
+    fn build_main_screen_list_items(
         files: &[FileDiff],
         previous_commit_message: &str,
         previous_commit_is_on_remote: bool,
-    ) -> Vec<ListItem> {
+    ) -> Vec<MainScreenListItem> {
         let mut items = Vec::new();
-        items.push(ListItem::StagedChangesHeader);
+        items.push(MainScreenListItem::StagedChangesHeader);
         for file in files {
-            items.push(ListItem::File(file.clone()));
+            items.push(MainScreenListItem::File(file.clone()));
         }
-        items.push(ListItem::CommitMessageInput);
-        items.push(ListItem::PreviousCommitInfo { message: previous_commit_message.to_string(), is_on_remote: previous_commit_is_on_remote });
+        items.push(MainScreenListItem::CommitMessageInput);
+        items.push(MainScreenListItem::PreviousCommitInfo { message: previous_commit_message.to_string(), is_on_remote: previous_commit_is_on_remote });
+        items
+    }
+
+    pub fn build_unstaged_screen_list_items(
+        unstaged_files: &[FileDiff],
+        untracked_files: &[String],
+    ) -> Vec<UnstagedScreenListItem> {
+        let mut items = Vec::new();
+        items.push(UnstagedScreenListItem::UnstagedChangesHeader);
+        for file in unstaged_files {
+            items.push(UnstagedScreenListItem::File(file.clone()));
+        }
+        items.push(UnstagedScreenListItem::UntrackedFilesHeader);
+        for file_name in untracked_files {
+            items.push(UnstagedScreenListItem::UntrackedFile(file_name.clone()));
+        }
         items
     }
 
     pub fn get_cursor_line_index(&self) -> usize {
-        let num_files = self.files.len();
-        if self.main_screen.file_cursor == 0
-            || (self.main_screen.file_cursor > 0 && self.main_screen.file_cursor <= num_files)
-            || self.main_screen.file_cursor == num_files + 2
-        {
-            self.main_screen.line_cursor
+        if let Some(item) = self.main_screen.list_items.get(self.main_screen.file_cursor) {
+            if let MainScreenListItem::File(_) = item {
+                self.main_screen.line_cursor
+            } else {
+                0
+            }
         } else {
             0
         }
@@ -147,15 +172,20 @@ impl AppState {
             get_previous_commit_diff(&self.repo_path).unwrap_or_else(|_| Vec::new());
         self.main_screen.has_unstaged_changes =
             git::has_unstaged_changes(&self.repo_path).unwrap_or(false);
-        self.unstaged_screen.unstaged_files = get_unstaged_diff(&self.repo_path);
-        self.unstaged_screen.untracked_files =
-            get_untracked_files(&self.repo_path).unwrap_or_default();
+        let unstaged_files = get_unstaged_diff(&self.repo_path);
+        let untracked_files = get_untracked_files(&self.repo_path).unwrap_or_default();
 
-        self.main_screen.list_items = Self::build_list_items(
+        self.main_screen.list_items = Self::build_main_screen_list_items(
             &self.files,
             &self.previous_commit_message,
             self.previous_commit_is_on_remote,
         );
+        self.unstaged_screen.list_items = Self::build_unstaged_screen_list_items(
+            &unstaged_files,
+            &untracked_files,
+        );
+        self.unstaged_screen.unstaged_files = unstaged_files;
+        self.unstaged_screen.untracked_files = untracked_files;
 
         if self.files.is_empty() {
             self.main_screen.file_cursor = 0;
@@ -164,10 +194,15 @@ impl AppState {
         } else {
             self.main_screen.file_cursor =
                 old_file_cursor.min(self.main_screen.list_items.len() - 1);
-            if let Some(file) = self.current_file() {
-                let max_line = file.lines.len().saturating_sub(1);
-                self.main_screen.line_cursor = old_line_cursor.min(max_line);
-                self.main_screen.diff_scroll = old_scroll.min(max_line);
+            if let Some(item) = self.main_screen.list_items.get(self.main_screen.file_cursor) {
+                if let MainScreenListItem::File(file) = item {
+                    let max_line = file.lines.len().saturating_sub(1);
+                    self.main_screen.line_cursor = old_line_cursor.min(max_line);
+                    self.main_screen.diff_scroll = old_scroll.min(max_line);
+                } else {
+                    self.main_screen.line_cursor = 0;
+                    self.main_screen.diff_scroll = 0;
+                }
             } else {
                 self.main_screen.line_cursor = 0;
                 self.main_screen.diff_scroll = 0;
@@ -175,9 +210,7 @@ impl AppState {
         }
         self.main_screen.file_list_scroll = old_file_list_scroll;
 
-        let unstaged_file_count = self.unstaged_screen.unstaged_files.len();
-        let untracked_file_count = self.unstaged_screen.untracked_files.len();
-        let max_unstaged_cursor = unstaged_file_count + untracked_file_count + 1;
+        let max_unstaged_cursor = self.unstaged_screen.list_items.len().saturating_sub(1);
         self.unstaged_screen.unstaged_cursor = old_unstaged_cursor.min(max_unstaged_cursor);
         self.unstaged_screen.unstaged_scroll = old_unstaged_scroll;
         self.unstaged_screen.unstaged_diff_scroll = old_unstaged_diff_scroll;
@@ -195,7 +228,7 @@ impl AppState {
             .list_items
             .get(self.main_screen.file_cursor)
         {
-            if let ListItem::File(file_diff) = item {
+            if let MainScreenListItem::File(file_diff) = item {
                 Some(file_diff)
             } else {
                 None
@@ -206,12 +239,16 @@ impl AppState {
     }
 
     pub fn get_unstaged_file(&self) -> Option<&FileDiff> {
-        if self.unstaged_screen.unstaged_cursor > 0
-            && self.unstaged_screen.unstaged_cursor <= self.unstaged_screen.unstaged_files.len()
+        if let Some(item) = self
+            .unstaged_screen
+            .list_items
+            .get(self.unstaged_screen.unstaged_cursor)
         {
-            self.unstaged_screen
-                .unstaged_files
-                .get(self.unstaged_screen.unstaged_cursor - 1)
+            if let UnstagedScreenListItem::File(file_diff) = item {
+                Some(file_diff)
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -224,9 +261,7 @@ impl AppState {
     }
 
     pub fn unstaged_header_height(&self, max_y: i32) -> (usize, usize) {
-        let unstaged_file_count = self.unstaged_screen.unstaged_files.len();
-        let untracked_file_count = self.unstaged_screen.untracked_files.len();
-        let file_list_total_items = unstaged_file_count + untracked_file_count + 2;
+        let file_list_total_items = self.unstaged_screen.list_items.len();
         let height = (max_y as usize / 3).max(3).min(file_list_total_items);
         (height, file_list_total_items)
     }

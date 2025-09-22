@@ -909,7 +909,11 @@ fn test_open_editor_unstaged_screen() {
     let mut state = create_state_with_files(0);
     let mut file = create_test_file_diff();
     file.file_name = "unstaged_file.txt".to_string();
-    state.unstaged_screen.unstaged_files = vec![file];
+    state.unstaged_screen.unstaged_files = vec![file.clone()];
+    state.unstaged_screen.list_items = AppState::build_unstaged_screen_list_items(
+        &state.unstaged_screen.unstaged_files,
+        &state.unstaged_screen.untracked_files,
+    );
     state.screen = Screen::Unstaged;
     state.unstaged_screen.unstaged_cursor = 1; // Select the file
     state.main_screen.line_cursor = 4; // "+line 2 new" -> new_line_num 2
@@ -930,6 +934,10 @@ fn test_open_editor_unstaged_screen() {
 fn test_open_editor_untracked_file() {
     let mut state = create_state_with_files(0);
     state.unstaged_screen.untracked_files = vec!["untracked.txt".to_string()];
+    state.unstaged_screen.list_items = AppState::build_unstaged_screen_list_items(
+        &state.unstaged_screen.unstaged_files,
+        &state.unstaged_screen.untracked_files,
+    );
     state.screen = Screen::Unstaged;
     state.unstaged_screen.unstaged_cursor = 2; // [Unstaged header, Untracked header, untracked.txt]
     let repo_path = state.repo_path.clone();
