@@ -1,4 +1,4 @@
-use crate::git::FileDiff;
+use crate::git::{FileDiff, FileStatus};
 use pancurses::{A_REVERSE, COLOR_PAIR, Window, chtype};
 use similar::TextDiff;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
@@ -10,7 +10,7 @@ pub struct WordDiffLine(pub Vec<(String, bool)>);
 
 pub const LINE_CONTENT_OFFSET: usize = 10;
 
-pub fn render_diff_view(
+pub fn render(
     window: &Window,
     file: &FileDiff,
     content_height: usize,
@@ -271,7 +271,7 @@ pub fn compute_word_diffs(old: &str, new: &str) -> (Vec<WordDiffLine>, Vec<WordD
     (old_lines, new_lines)
 }
 
-pub fn render_line(
+fn render_line(
     window: &Window,
     line: &str,
     word_diff_line: Option<&WordDiffLine>,
@@ -416,6 +416,87 @@ pub fn render_line(
         }
     } else {
         render_part(window, line, base_pair, 0, &mut remaining_scroll);
+    }
+}
+
+pub fn render_plain(
+    window: &Window,
+    lines: Vec<String>,
+    content_height: usize,
+    scroll: usize,
+    horizontal_scroll: usize,
+    header_height: usize,
+    cursor_position: usize,
+    is_diff_cursor_active: bool,
+) {
+    let file_diff = FileDiff {
+        file_name: "".to_string(),
+        status: FileStatus::Added,
+        lines,
+        hunks: vec![],
+    };
+
+    render(
+        window,
+        &file_diff,
+        content_height,
+        scroll,
+        horizontal_scroll,
+        header_height,
+        cursor_position,
+        is_diff_cursor_active,
+    );
+}
+
+pub fn render_multiple(
+    window: &Window,
+    file_diffs: &Vec<FileDiff>,
+    content_height: usize,
+    scroll: usize,
+    horizontal_scroll: usize,
+    header_height: usize,
+    cursor_position: usize,
+    is_diff_cursor_active: bool,
+) {
+    let all_lines: Vec<String> = file_diffs.iter().flat_map(|f| f.lines.clone()).collect();
+
+    if !all_lines.is_empty() {
+        let mut line_numbers: Vec<(usize, usize)> = vec![(0, 0); all_lines.len()];
+        let mut line_offset = 0;
+        for file in file_diffs {
+            for hunk in &file.hunks {
+                for (hunk_line_index, (old, new)) in hunk.line_numbers.iter().enumerate() {
+                    let line_index = line_offset + hunk.start_line + hunk_line_index;
+                    if line_index >= all_lines.len() {
+                        continue;
+                    }
+                    line_numbers[line_index] = (*old, *new);
+                }
+            }
+            line_offset += file.lines.len();
+        }
+
+        for (i, line) in all_lines
+            .iter()
+            .skip(scroll)
+            .take(content_height)
+            .enumerate()
+        {
+            let line_index_in_file = i + scroll;
+            let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
+            render_line(
+                window,
+                line,
+                None,
+                line_index_in_file,
+                i as i32 + header_height as i32,
+                cursor_position,
+                old_line_num,
+                new_line_num,
+                horizontal_scroll,
+                is_diff_cursor_active,
+            );
+        }
     }
 }
 

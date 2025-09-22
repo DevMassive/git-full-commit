@@ -6,12 +6,12 @@ use crate::command::{
 use crate::commit_storage;
 use crate::git;
 use crate::ui::commit_view;
+use crate::ui::diff_view;
 use crate::ui::diff_view::LINE_CONTENT_OFFSET;
 use crate::ui::scroll;
 use pancurses::Input;
 
 use crate::git::FileStatus;
-use crate::ui::diff_view::{render_diff_view, render_line};
 use pancurses::{COLOR_PAIR, Window};
 
 use crate::git_patch;
@@ -121,52 +121,21 @@ pub fn render(window: &Window, state: &AppState) {
         // "Staged changes" is selected, do nothing for now.
     } else if state.main_screen.file_cursor == num_files + 2 {
         // Render previous commit diff
-        let all_lines: Vec<String> = state
-            .previous_commit_files
-            .iter()
-            .flat_map(|f| f.lines.clone())
-            .collect();
-        if !all_lines.is_empty() {
-            let mut line_numbers: Vec<(usize, usize)> = vec![(0, 0); all_lines.len()];
-            let mut line_offset = 0;
-            for file in &state.previous_commit_files {
-                for hunk in &file.hunks {
-                    for (hunk_line_index, (old, new)) in hunk.line_numbers.iter().enumerate() {
-                        let line_index = line_offset + hunk.start_line + hunk_line_index;
-                        if line_index >= all_lines.len() {
-                            continue;
-                        }
-                        line_numbers[line_index] = (*old, *new);
-                    }
-                }
-                line_offset += file.lines.len();
-            }
+        let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
 
-            for (i, line) in all_lines
-                .iter()
-                .skip(state.main_screen.diff_scroll)
-                .take(content_height)
-                .enumerate()
-            {
-                let line_index_in_file = i + state.main_screen.diff_scroll;
-                let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
-                render_line(
-                    window,
-                    line,
-                    None,
-                    line_index_in_file,
-                    i as i32 + header_height as i32,
-                    cursor_position,
-                    old_line_num,
-                    new_line_num,
-                    state.main_screen.horizontal_scroll,
-                    state.main_screen.is_diff_cursor_active,
-                );
-            }
-        }
+        diff_view::render_multiple(
+            window,
+            &state.previous_commit_files,
+            content_height,
+            state.main_screen.diff_scroll,
+            state.main_screen.horizontal_scroll,
+            header_height,
+            cursor_position,
+            state.main_screen.is_diff_cursor_active,
+        );
     } else if state.main_screen.file_cursor > 0 && state.main_screen.file_cursor <= num_files {
         let selected_file = &state.files[state.main_screen.file_cursor - 1];
-        render_diff_view(
+        diff_view::render(
             window,
             selected_file,
             content_height,

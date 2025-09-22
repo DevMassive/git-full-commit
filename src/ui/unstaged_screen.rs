@@ -4,9 +4,9 @@ use crate::command::{
     IgnoreUnstagedTrackedFileCommand, IgnoreUntrackedFileCommand, StageFileCommand,
     StagePatchCommand, StageUnstagedCommand, StageUntrackedCommand,
 };
-use crate::git::{self, FileDiff, FileStatus};
+use crate::git::{self, FileStatus};
 use crate::git_patch;
-use crate::ui::diff_view::render_diff_view;
+use crate::ui::diff_view;
 use crate::ui::scroll;
 use pancurses::{COLOR_PAIR, Input, Window};
 
@@ -82,7 +82,7 @@ pub fn render(window: &Window, state: &AppState) {
         let file_index = state.unstaged_screen.unstaged_cursor - 1;
         if let Some(file) = state.unstaged_screen.unstaged_files.get(file_index) {
             let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
-            render_diff_view(
+            diff_view::render(
                 window,
                 file,
                 content_height,
@@ -114,16 +114,9 @@ pub fn render(window: &Window, state: &AppState) {
                 Err(e) => vec![format!("  Error reading file: {}", e)],
             };
 
-            let file_diff = FileDiff {
-                file_name: file_path.clone(),
-                status: FileStatus::Added,
-                lines,
-                hunks: vec![],
-            };
-
-            render_diff_view(
+            diff_view::render_plain(
                 window,
-                &file_diff,
+                lines,
                 content_height,
                 state.unstaged_screen.unstaged_diff_scroll,
                 state.unstaged_screen.unstaged_horizontal_scroll,
