@@ -1,6 +1,7 @@
 use crate::app_state::{AppState, Screen};
 use crate::git::{FileDiff, FileStatus, Hunk};
 use crate::ui::diff_view::LINE_CONTENT_OFFSET;
+use crate::ui::main_screen::ListItem;
 use crate::ui::update::*;
 use pancurses::Input;
 use std::path::PathBuf;
@@ -783,21 +784,19 @@ fn test_keydown_stops_at_last_line() {
     // Staged changes (0), file_0 (1), commit (2), prev_commit (3)
     let max_y = 30;
     let max_x = 80;
+    assert_eq!(state.main_screen.list_items.len(), 3);
 
     // Cursor starts on the first file
-    assert_eq!(state.main_screen.file_cursor, 1);
+    assert!(matches!(state.current_main_item(), Some(ListItem::File(_))));
 
     // KeyDown to commit line
     let state = update_state(state, Some(Input::KeyDown), max_y, max_x);
     assert_eq!(state.main_screen.file_cursor, 2);
-
-    // KeyDown to previous commit line
-    let state = update_state(state, Some(Input::KeyDown), max_y, max_x);
-    assert_eq!(state.main_screen.file_cursor, 3);
+    assert!(matches!(state.current_main_item(), Some(ListItem::CommitMessageInput)));
 
     // KeyDown again, should not move
     let state = update_state(state, Some(Input::KeyDown), max_y, max_x);
-    assert_eq!(state.main_screen.file_cursor, 3);
+    assert_eq!(state.main_screen.file_cursor, 2);
 }
 
 #[test]

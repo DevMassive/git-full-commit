@@ -219,6 +219,7 @@ fn test_get_local_commits() {
         &repo_path,
         &["remote", "add", "origin", remote_path.to_str().unwrap()],
     );
+    run_git(&repo_path, &["checkout", "-b", "master"]);
 
     // 2. Create and push 2 commits
     fs::write(repo_path.join("a.txt"), "a").unwrap();

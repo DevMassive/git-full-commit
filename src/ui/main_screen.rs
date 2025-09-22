@@ -192,8 +192,7 @@ pub fn render(window: &Window, state: &AppState) {
         _ => {}
     }
 
-    let is_editing_commit =
-        state.main_screen.is_commit_mode || state.main_screen.is_amend_mode;
+    let is_editing_commit = state.main_screen.is_commit_mode || state.main_screen.is_amend_mode;
 
     window.mv(carret_y, carret_x);
     if is_editing_commit {
@@ -225,49 +224,20 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) 
     {
         state.main_screen.is_amend_mode = false;
         state.main_screen.amending_commit_hash = None;
-        let original_message = commit_storage::load_commit_message(&state.repo_path)
-            .unwrap_or_else(|_| String::new());
+        let original_message =
+            commit_storage::load_commit_message(&state.repo_path).unwrap_or_else(|_| String::new());
         state.main_screen.commit_message = original_message;
         state.main_screen.commit_cursor = 0;
         return;
     }
 
-    if state.main_screen.is_amend_mode {
+    if state.main_screen.is_commit_mode || state.main_screen.is_amend_mode {
         match input {
-            Input::KeyUp | Input::KeyDown => {
-                // In amend mode, just navigate the list normally
+            Input::KeyUp
+            | Input::Character('\u{10}')
+            | Input::KeyDown
+            | Input::Character('\u{e}') => {
                 handle_navigation(state, input, max_y, max_x);
-            }
-            _ => {
-                // Other keys go to the text editor
-                commit_view::handle_commit_input(state, input, max_y);
-            }
-        }
-    } else if state.main_screen.is_commit_mode {
-        match input {
-            Input::KeyUp => {
-                // Jump to last staged file
-                state.main_screen.file_cursor = state.files.len();
-                state.main_screen.line_cursor = 0;
-                state.main_screen.diff_scroll = 0;
-                if state.main_screen.file_cursor < state.main_screen.file_list_scroll {
-                    state.main_screen.file_list_scroll = state.main_screen.file_cursor;
-                }
-                state.update_selected_commit_diff();
-            }
-            Input::KeyDown => {
-                // Jump to first previous commit
-                state.main_screen.file_cursor = state.files.len() + 2;
-                state.main_screen.line_cursor = 0;
-                state.main_screen.diff_scroll = 0;
-                let file_list_height = state.main_header_height(max_y).0;
-                if state.main_screen.file_cursor
-                    >= state.main_screen.file_list_scroll + file_list_height
-                {
-                    state.main_screen.file_list_scroll =
-                        state.main_screen.file_cursor - file_list_height + 1;
-                }
-                state.update_selected_commit_diff();
             }
             _ => {
                 // Other keys go to the text editor
@@ -390,8 +360,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                         state.main_screen.is_amend_mode = true;
                         state.main_screen.amending_commit_hash = Some(hash);
                         state.main_screen.commit_message = message;
-                        state.main_screen.commit_cursor =
-                            state.main_screen.commit_message.len();
+                        state.main_screen.commit_cursor = state.main_screen.commit_message.len();
                     }
                 }
                 _ => {}
