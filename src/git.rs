@@ -267,6 +267,79 @@ pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn amend_commit_with_staged_changes(repo_path: &Path, target_hash: &str, message: &str) -> Result<()> {
+    // 1. Get the original message to check if it needs to be changed later
+    let original_message_output = git_command()
+        .arg("log")
+        .arg("-1")
+        .arg("--pretty=%s")
+        .arg(target_hash)
+        .current_dir(repo_path)
+        .output()?;
+    let original_message = String::from_utf8_lossy(&original_message_output.stdout);
+
+    // 2. Create a fixup! commit for the staged changes
+    let commit_output = git_command()
+        .arg("commit")
+        .arg("--fixup")
+        .arg(target_hash)
+        .current_dir(repo_path)
+        .output()?;
+
+    if !commit_output.status.success() {
+        anyhow::bail!(
+            "git commit --fixup failed. This usually means there are no staged changes. Stderr: {}",
+            String::from_utf8_lossy(&commit_output.stderr)
+        );
+    }
+
+    // 3. Rebase with autosquash
+    let parent_hash_output = git_command()
+        .arg("rev-parse")
+        .arg(format!("{}^", target_hash))
+        .current_dir(repo_path)
+        .output()?;
+    let is_root_commit = !parent_hash_output.status.success();
+
+    let mut rebase_cmd = git_command();
+    rebase_cmd.env("GIT_SEQUENCE_EDITOR", "true");
+    rebase_cmd.arg("rebase").arg("-i").arg("--autosquash");
+
+    if is_root_commit {
+        rebase_cmd.arg("--root");
+    } else {
+        let parent_hash = String::from_utf8_lossy(&parent_hash_output.stdout).trim().to_string();
+        rebase_cmd.arg(&parent_hash);
+    }
+
+    let rebase_output = rebase_cmd.current_dir(repo_path).output()?;
+
+    if !rebase_output.status.success() {
+        git_command().arg("rebase").arg("--abort").current_dir(repo_path).output()?;
+        anyhow::bail!("git rebase for fixup failed. Aborting.");
+    }
+
+    // 4. If the message has changed, amend the now-squashed commit
+    if message.trim() != original_message.trim() {
+        let amend_output = git_command()
+            .arg("commit")
+            .arg("--amend")
+            .arg("-m")
+            .arg(message)
+            .current_dir(repo_path)
+            .output()?;
+
+        if !amend_output.status.success() {
+            anyhow::bail!(
+                "Failed to amend commit message. Stderr: {}",
+                String::from_utf8_lossy(&amend_output.stderr)
+            );
+        }
+    }
+
+    Ok(())
+}
+
 pub fn reword_commit(repo_path: &Path, commit_hash: &str, message: &str) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
