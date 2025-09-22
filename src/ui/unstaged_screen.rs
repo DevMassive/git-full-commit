@@ -11,7 +11,6 @@ use crate::ui::scroll;
 use pancurses::{COLOR_PAIR, Input, Window};
 
 pub fn render(window: &Window, state: &AppState) {
-    window.erase();
     let (max_y, max_x) = window.get_max_yx();
 
     let (file_list_height, file_list_total_items) = state.unstaged_header_height(max_y);
@@ -137,7 +136,6 @@ pub fn render(window: &Window, state: &AppState) {
 
     #[cfg(not(test))]
     pancurses::curs_set(0);
-    window.refresh();
 }
 
 fn is_binary(content: &[u8]) -> bool {

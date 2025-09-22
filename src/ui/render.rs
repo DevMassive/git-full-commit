@@ -4,6 +4,7 @@ use crate::ui::unstaged_screen;
 use pancurses::Window;
 
 pub fn render(window: &Window, state: &AppState) {
+    window.erase();
     match state.screen {
         Screen::Main => {
             main_screen::render(window, state);
@@ -12,4 +13,5 @@ pub fn render(window: &Window, state: &AppState) {
             unstaged_screen::render(window, state);
         }
     }
+    window.refresh();
 }

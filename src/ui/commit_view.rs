@@ -1,7 +1,56 @@
 use crate::app_state::AppState;
 use crate::commit_storage;
 use crate::git;
+use pancurses::COLOR_PAIR;
 use pancurses::Input;
+use unicode_width::UnicodeWidthStr;
+
+pub fn render(
+    window: &pancurses::Window,
+    state: &AppState,
+    is_selected: bool,
+    line_y: i32,
+    max_x: i32,
+) -> (i32, i32) {
+    let pair = if is_selected { 5 } else { 1 };
+    window.attron(COLOR_PAIR(pair));
+    if is_selected {
+        for x in 0..max_x {
+            window.mvaddch(line_y, x, ' ');
+        }
+    }
+    window.mv(line_y, 0);
+
+    let (prefix, message) = if state.main_screen.is_amend_mode {
+        (" o ", &state.main_screen.amend_message)
+    } else {
+        (" o ", &state.main_screen.commit_message)
+    };
+
+    window.addstr(prefix);
+    if message.is_empty() {
+        let pair = if is_selected { 16 } else { 9 };
+        window.attron(COLOR_PAIR(pair));
+        window.addstr("Enter commit message...");
+        window.attroff(COLOR_PAIR(pair));
+    } else {
+        window.addstr(message);
+    }
+    window.attroff(COLOR_PAIR(pair));
+
+    let commit_line_y = line_y;
+    let prefix_width = prefix.width();
+    let message_before_cursor: String = message
+        .chars()
+        .take(state.main_screen.commit_cursor)
+        .collect();
+    let cursor_display_pos = prefix_width + message_before_cursor.width();
+
+    let carret_x = cursor_display_pos as i32;
+    let carret_y = commit_line_y;
+
+    (carret_x, carret_y)
+}
 
 pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
     match input {

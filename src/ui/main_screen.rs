@@ -13,12 +13,10 @@ use pancurses::Input;
 use crate::git::FileStatus;
 use crate::ui::diff_view::{render_diff_view, render_line};
 use pancurses::{COLOR_PAIR, Window};
-use unicode_width::UnicodeWidthStr;
 
 use crate::git_patch;
 
 pub fn render(window: &Window, state: &AppState) {
-    window.erase();
     let (max_y, max_x) = window.get_max_yx();
 
     let (file_list_height, file_list_total_items) = state.main_header_height(max_y);
@@ -33,10 +31,10 @@ pub fn render(window: &Window, state: &AppState) {
             break;
         }
         let line_y = i as i32;
+        let is_selected = state.main_screen.file_cursor == item_index;
 
         if item_index == 0 {
             // Render "Staged changes"
-            let is_selected = state.main_screen.file_cursor == 0;
             let pair = if is_selected { 5 } else { 1 };
             window.attron(COLOR_PAIR(pair));
             if is_selected {
@@ -54,7 +52,6 @@ pub fn render(window: &Window, state: &AppState) {
         } else if item_index > 0 && item_index <= num_files {
             let file_index = item_index - 1;
             let file = &state.files[file_index];
-            let is_selected = state.main_screen.file_cursor == item_index;
             let pair = if is_selected { 5 } else { 1 };
             let status_pair = if is_selected { 6 } else { 2 };
 
@@ -84,46 +81,9 @@ pub fn render(window: &Window, state: &AppState) {
             window.attroff(COLOR_PAIR(pair));
         } else if item_index == num_files + 1 {
             // Render commit message line
-            let is_selected = state.main_screen.file_cursor == num_files + 1;
-            let pair = if is_selected { 5 } else { 1 };
-            window.attron(COLOR_PAIR(pair));
-            if is_selected {
-                for x in 0..max_x {
-                    window.mvaddch(line_y, x, ' ');
-                }
-            }
-            window.mv(line_y, 0);
-
-            let (prefix, message) = if state.main_screen.is_amend_mode {
-                (" o ", &state.main_screen.amend_message)
-            } else {
-                (" o ", &state.main_screen.commit_message)
-            };
-
-            window.addstr(prefix);
-            if message.is_empty() {
-                let pair = if is_selected { 16 } else { 9 };
-                window.attron(COLOR_PAIR(pair));
-                window.addstr("Enter commit message...");
-                window.attroff(COLOR_PAIR(pair));
-            } else {
-                window.addstr(message);
-            }
-            window.attroff(COLOR_PAIR(pair));
-
-            let commit_line_y = line_y;
-            let prefix_width = prefix.width();
-            let message_before_cursor: String = message
-                .chars()
-                .take(state.main_screen.commit_cursor)
-                .collect();
-            let cursor_display_pos = prefix_width + message_before_cursor.width();
-
-            carret_y = commit_line_y;
-            carret_x = cursor_display_pos as i32;
+            (carret_x, carret_y) = commit_view::render(window, state, is_selected, line_y, max_x);
         } else if item_index == num_files + 2 {
             // Render previous commit info
-            let is_selected = state.main_screen.file_cursor == num_files + 2;
             let pair = if is_selected { 5 } else { 1 };
             window.attron(COLOR_PAIR(pair));
             if is_selected {
@@ -218,16 +178,14 @@ pub fn render(window: &Window, state: &AppState) {
         );
     }
 
+    window.mv(carret_y, carret_x);
     if state.main_screen.file_cursor == num_files + 1 {
         #[cfg(not(test))]
         pancurses::curs_set(1);
-        window.mv(carret_y, carret_x);
     } else {
         #[cfg(not(test))]
         pancurses::curs_set(0);
     }
-
-    window.refresh();
 }
 
 pub fn handle_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
