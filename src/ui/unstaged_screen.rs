@@ -8,7 +8,7 @@ use crate::git::{self, FileStatus};
 use crate::git_patch;
 use crate::ui::diff_view;
 use crate::ui::scroll;
-use pancurses::{Input, Window, A_DIM, COLOR_PAIR};
+use pancurses::{A_DIM, COLOR_PAIR, Input, Window};
 
 #[derive(Debug, Clone)]
 pub enum ListItem {
@@ -43,9 +43,9 @@ pub fn render(window: &Window, state: &AppState) {
                     }
                 }
                 window.mv(line_y, 0);
-                window.addstr(&" Unstaged changes ".to_string());
+                window.addstr(" Unstaged changes ");
                 window.attron(A_DIM);
-                window.addstr(&"| Staged changes".to_string());
+                window.addstr("| Staged changes");
                 window.attroff(A_DIM);
                 window.attroff(COLOR_PAIR(pair));
             }
@@ -103,7 +103,7 @@ pub fn render(window: &Window, state: &AppState) {
                     }
                 }
                 window.mv(line_y, 0);
-                window.addstr(format!("    ? {}", file_name));
+                window.addstr(format!("    ? {file_name}"));
                 window.attroff(COLOR_PAIR(pair));
             }
         }
@@ -121,7 +121,11 @@ pub fn render(window: &Window, state: &AppState) {
     let content_height = (max_y as usize).saturating_sub(header_height);
     let cursor_position = state.main_screen.line_cursor;
 
-    match state.unstaged_screen.list_items.get(state.unstaged_screen.unstaged_cursor) {
+    match state
+        .unstaged_screen
+        .list_items
+        .get(state.unstaged_screen.unstaged_cursor)
+    {
         Some(ListItem::File(selected_file)) => {
             diff_view::render(
                 window,
@@ -176,7 +180,11 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
 
     match input {
         Input::Character('\t') => {
-            if let Some(item) = state.unstaged_screen.list_items.get(state.unstaged_screen.unstaged_cursor) {
+            if let Some(item) = state
+                .unstaged_screen
+                .list_items
+                .get(state.unstaged_screen.unstaged_cursor)
+            {
                 let file_name = match item {
                     ListItem::File(file) => Some(file.file_name.clone()),
                     ListItem::UntrackedFile(file_name) => Some(file_name.clone()),
@@ -197,7 +205,8 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
             state.main_screen.diff_scroll = 0;
         }
         Input::KeyUp => {
-            state.unstaged_screen.unstaged_cursor = state.unstaged_screen.unstaged_cursor.saturating_sub(1);
+            state.unstaged_screen.unstaged_cursor =
+                state.unstaged_screen.unstaged_cursor.saturating_sub(1);
             state.unstaged_screen.unstaged_diff_scroll = 0;
             state.main_screen.line_cursor = 0;
             state.unstaged_screen.is_unstaged_diff_cursor_active = false;
@@ -230,7 +239,11 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
         }
         Input::Character('j') => {
             state.unstaged_screen.is_unstaged_diff_cursor_active = true;
-            let file_lines_count = match state.unstaged_screen.list_items.get(state.unstaged_screen.unstaged_cursor) {
+            let file_lines_count = match state
+                .unstaged_screen
+                .list_items
+                .get(state.unstaged_screen.unstaged_cursor)
+            {
                 Some(ListItem::File(file)) => file.lines.len(),
                 Some(ListItem::UntrackedFile(file_name)) => {
                     if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_name) {
@@ -270,7 +283,11 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
                 .saturating_add(10);
         }
         Input::Character('\n') | Input::Character('u') => {
-            match state.unstaged_screen.list_items.get(state.unstaged_screen.unstaged_cursor) {
+            match state
+                .unstaged_screen
+                .list_items
+                .get(state.unstaged_screen.unstaged_cursor)
+            {
                 Some(ListItem::UnstagedChangesHeader) => {
                     let command = Box::new(StageUnstagedCommand::new(state.repo_path.clone()));
                     state.execute_and_refresh(command);
@@ -323,20 +340,25 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
                     state.execute_and_refresh(command);
                 }
                 Some(ListItem::UntrackedFile(file_name)) => {
-                    let command =
-                        Box::new(StageFileCommand::new(state.repo_path.clone(), file_name.clone()));
+                    let command = Box::new(StageFileCommand::new(
+                        state.repo_path.clone(),
+                        file_name.clone(),
+                    ));
                     state.execute_and_refresh(command);
                 }
                 _ => {}
             }
         }
         Input::Character('1') => {
-            if let Some(ListItem::File(file)) = state.unstaged_screen.list_items.get(state.unstaged_screen.unstaged_cursor) {
+            if let Some(ListItem::File(file)) = state
+                .unstaged_screen
+                .list_items
+                .get(state.unstaged_screen.unstaged_cursor)
+            {
                 if let Some(patch) =
                     git_patch::create_stage_line_patch(file, state.main_screen.line_cursor)
                 {
-                    let command =
-                        Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
+                    let command = Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
 
                     let old_line_cursor = state.main_screen.line_cursor;
                     state.execute_and_refresh(command);
@@ -345,8 +367,7 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
                         state.main_screen.line_cursor =
                             old_line_cursor.min(updated_file.lines.len().saturating_sub(1));
                         let (file_list_height, _) = state.unstaged_header_height(max_y);
-                        let content_height =
-                            (max_y as usize).saturating_sub(file_list_height + 1);
+                        let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
                         if state.main_screen.line_cursor
                             >= state.unstaged_screen.unstaged_diff_scroll + content_height
                         {
@@ -360,7 +381,11 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
             }
         }
         Input::Character('e') => {
-            match state.unstaged_screen.list_items.get(state.unstaged_screen.unstaged_cursor) {
+            match state
+                .unstaged_screen
+                .list_items
+                .get(state.unstaged_screen.unstaged_cursor)
+            {
                 Some(ListItem::File(file)) => {
                     let line_number =
                         git_patch::get_line_number(file, state.main_screen.line_cursor);
@@ -385,7 +410,11 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
             }
         }
         Input::Character('!') => {
-            match state.unstaged_screen.list_items.get(state.unstaged_screen.unstaged_cursor) {
+            match state
+                .unstaged_screen
+                .list_items
+                .get(state.unstaged_screen.unstaged_cursor)
+            {
                 Some(ListItem::File(file)) => {
                     if state.unstaged_screen.is_unstaged_diff_cursor_active {
                         if let Some(hunk) =
@@ -430,7 +459,11 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
             let mut file_to_ignore: Option<String> = None;
             let mut is_tracked = false;
 
-            match state.unstaged_screen.list_items.get(state.unstaged_screen.unstaged_cursor) {
+            match state
+                .unstaged_screen
+                .list_items
+                .get(state.unstaged_screen.unstaged_cursor)
+            {
                 Some(ListItem::File(file)) => {
                     file_to_ignore = Some(file.file_name.clone());
                     is_tracked = true;
@@ -439,7 +472,7 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
                     file_to_ignore = Some(file_name.clone());
                     is_tracked = false;
                 }
-                _ => {},
+                _ => {}
             }
 
             if let Some(file_name) = file_to_ignore {

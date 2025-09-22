@@ -9,7 +9,7 @@ use crate::ui::commit_view;
 use crate::ui::diff_view;
 use crate::ui::diff_view::LINE_CONTENT_OFFSET;
 use crate::ui::scroll;
-use pancurses::{A_DIM, Input};
+use pancurses::Input;
 
 use crate::git::FileStatus;
 use pancurses::{COLOR_PAIR, Window};
@@ -94,9 +94,13 @@ pub fn render(window: &Window, state: &AppState) {
                 window.attroff(COLOR_PAIR(pair));
             }
             ListItem::CommitMessageInput => {
-                (carret_x, carret_y) = commit_view::render(window, state, is_selected, line_y, max_x);
+                (carret_x, carret_y) =
+                    commit_view::render(window, state, is_selected, line_y, max_x);
             }
-            ListItem::PreviousCommitInfo { message, is_on_remote } => {
+            ListItem::PreviousCommitInfo {
+                message,
+                is_on_remote,
+            } => {
                 let pair = if is_selected { 5 } else { 1 };
                 window.attron(COLOR_PAIR(pair));
                 if is_selected {
@@ -108,12 +112,8 @@ pub fn render(window: &Window, state: &AppState) {
                 if state.main_screen.is_amend_mode {
                     window.addstr(" |");
                 } else {
-                    let status = if *is_on_remote {
-                        "(remote)"
-                    } else {
-                        "(local)"
-                    };
-                    window.addstr(format!(" o {} {}", status, message));
+                    let status = if *is_on_remote { "(remote)" } else { "(local)" };
+                    window.addstr(format!(" o {status} {message}"));
                 }
                 window.attroff(COLOR_PAIR(pair));
             }
@@ -131,7 +131,11 @@ pub fn render(window: &Window, state: &AppState) {
     let content_height = (max_y as usize).saturating_sub(header_height);
     let cursor_position = state.get_cursor_line_index();
 
-    match state.main_screen.list_items.get(state.main_screen.file_cursor) {
+    match state
+        .main_screen
+        .list_items
+        .get(state.main_screen.file_cursor)
+    {
         Some(ListItem::StagedChangesHeader) => {
             // "Staged changes" is selected, do nothing for now.
         }
@@ -166,7 +170,11 @@ pub fn render(window: &Window, state: &AppState) {
     }
 
     window.mv(carret_y, carret_x);
-    if let Some(ListItem::CommitMessageInput) = state.main_screen.list_items.get(state.main_screen.file_cursor) {
+    if let Some(ListItem::CommitMessageInput) = state
+        .main_screen
+        .list_items
+        .get(state.main_screen.file_cursor)
+    {
         #[cfg(not(test))]
         pancurses::curs_set(1);
     } else {
@@ -260,7 +268,11 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
             }
         }
         Input::Character('\n') | Input::Character('u') => {
-            match state.main_screen.list_items.get(state.main_screen.file_cursor) {
+            match state
+                .main_screen
+                .list_items
+                .get(state.main_screen.file_cursor)
+            {
                 Some(ListItem::StagedChangesHeader) => {
                     let command = Box::new(UnstageAllCommand::new(state.repo_path.clone()));
                     state.execute_and_refresh(command);
@@ -269,7 +281,8 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                     let line_index = state.main_screen.line_cursor;
                     if let Some(hunk) = git_patch::find_hunk(file, line_index) {
                         let patch = git_patch::create_unstage_hunk_patch(file, hunk);
-                        let command = Box::new(ApplyPatchCommand::new(state.repo_path.clone(), patch));
+                        let command =
+                            Box::new(ApplyPatchCommand::new(state.repo_path.clone(), patch));
                         state.execute_and_refresh(command);
                     } else {
                         let command = Box::new(UnstageFileCommand::new(
@@ -347,9 +360,17 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         }
         Input::Character('j') => {
             state.main_screen.is_diff_cursor_active = true;
-            let lines_count = match state.main_screen.list_items.get(state.main_screen.file_cursor) {
+            let lines_count = match state
+                .main_screen
+                .list_items
+                .get(state.main_screen.file_cursor)
+            {
                 Some(ListItem::File(file)) => file.lines.len(),
-                Some(ListItem::PreviousCommitInfo { .. }) => state.previous_commit_files.iter().map(|f| f.lines.len()).sum(),
+                Some(ListItem::PreviousCommitInfo { .. }) => state
+                    .previous_commit_files
+                    .iter()
+                    .map(|f| f.lines.len())
+                    .sum(),
                 _ => 0,
             };
 
@@ -404,7 +425,11 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             state.screen = Screen::Unstaged;
         }
         _ => {
-            if let Some(ListItem::CommitMessageInput) = state.main_screen.list_items.get(state.main_screen.file_cursor) {
+            if let Some(ListItem::CommitMessageInput) = state
+                .main_screen
+                .list_items
+                .get(state.main_screen.file_cursor)
+            {
                 commit_view::handle_commit_input(state, input, max_y);
             } else {
                 scroll::handle_scroll(state, input, max_y);

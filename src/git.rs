@@ -112,8 +112,16 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
                 current_file_line_index = 0;
             }
 
-            let old_file_name = caps.get(1).map(|m| m.as_str().trim_matches('"')).unwrap_or("").to_string();
-            let file_name = caps.get(2).map(|m| m.as_str().trim_matches('"')).unwrap_or("").to_string();
+            let old_file_name = caps
+                .get(1)
+                .map(|m| m.as_str().trim_matches('"'))
+                .unwrap_or("")
+                .to_string();
+            let file_name = caps
+                .get(2)
+                .map(|m| m.as_str().trim_matches('"'))
+                .unwrap_or("")
+                .to_string();
 
             current_file = Some(FileDiff {
                 file_name,
@@ -134,7 +142,6 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
             if let Some(file) = current_file.as_mut() {
                 file.status = FileStatus::Renamed;
             }
-
         } else if line.starts_with("@@ ") {
             if let Some(mut hunk) = current_hunk.take() {
                 if let Some(file) = current_file.as_mut() {
@@ -363,10 +370,7 @@ pub fn get_untracked_files(repo_path: &Path) -> Result<Vec<String>> {
 }
 
 pub fn get_unstaged_diff_patch(repo_path: &Path) -> Result<String> {
-    let output = git_command()
-        .arg("diff")
-        .current_dir(repo_path)
-        .output()?;
+    let output = git_command().arg("diff").current_dir(repo_path).output()?;
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 

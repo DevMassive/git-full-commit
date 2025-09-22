@@ -90,10 +90,8 @@ impl AppState {
         let mut unstaged_screen = UnstagedScreenState::default();
         unstaged_screen.unstaged_files = unstaged_files.clone();
         unstaged_screen.untracked_files = untracked_files.clone();
-        unstaged_screen.list_items = Self::build_unstaged_screen_list_items(
-            &unstaged_files,
-            &untracked_files,
-        );
+        unstaged_screen.list_items =
+            Self::build_unstaged_screen_list_items(&unstaged_files, &untracked_files);
 
         Self {
             repo_path,
@@ -122,7 +120,10 @@ impl AppState {
             items.push(MainScreenListItem::File(file.clone()));
         }
         items.push(MainScreenListItem::CommitMessageInput);
-        items.push(MainScreenListItem::PreviousCommitInfo { message: previous_commit_message.to_string(), is_on_remote: previous_commit_is_on_remote });
+        items.push(MainScreenListItem::PreviousCommitInfo {
+            message: previous_commit_message.to_string(),
+            is_on_remote: previous_commit_is_on_remote,
+        });
         items
     }
 
@@ -143,7 +144,11 @@ impl AppState {
     }
 
     pub fn get_cursor_line_index(&self) -> usize {
-        if let Some(item) = self.main_screen.list_items.get(self.main_screen.file_cursor) {
+        if let Some(item) = self
+            .main_screen
+            .list_items
+            .get(self.main_screen.file_cursor)
+        {
             if let MainScreenListItem::File(_) = item {
                 self.main_screen.line_cursor
             } else {
@@ -180,10 +185,8 @@ impl AppState {
             &self.previous_commit_message,
             self.previous_commit_is_on_remote,
         );
-        self.unstaged_screen.list_items = Self::build_unstaged_screen_list_items(
-            &unstaged_files,
-            &untracked_files,
-        );
+        self.unstaged_screen.list_items =
+            Self::build_unstaged_screen_list_items(&unstaged_files, &untracked_files);
         self.unstaged_screen.unstaged_files = unstaged_files;
         self.unstaged_screen.untracked_files = untracked_files;
 
@@ -194,7 +197,11 @@ impl AppState {
         } else {
             self.main_screen.file_cursor =
                 old_file_cursor.min(self.main_screen.list_items.len() - 1);
-            if let Some(item) = self.main_screen.list_items.get(self.main_screen.file_cursor) {
+            if let Some(item) = self
+                .main_screen
+                .list_items
+                .get(self.main_screen.file_cursor)
+            {
                 if let MainScreenListItem::File(file) = item {
                     let max_line = file.lines.len().saturating_sub(1);
                     self.main_screen.line_cursor = old_line_cursor.min(max_line);

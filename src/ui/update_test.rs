@@ -814,7 +814,10 @@ fn test_tab_screen_switching_and_cursor_sync() {
         crate::ui::main_screen::ListItem::File(staged_file1.clone()),
         crate::ui::main_screen::ListItem::File(staged_file2.clone()),
         crate::ui::main_screen::ListItem::CommitMessageInput,
-        crate::ui::main_screen::ListItem::PreviousCommitInfo { message: String::new(), is_on_remote: false },
+        crate::ui::main_screen::ListItem::PreviousCommitInfo {
+            message: String::new(),
+            is_on_remote: false,
+        },
     ];
 
     // --- Switch from Main to Unstaged (with file sync) ---
@@ -839,7 +842,12 @@ fn test_tab_screen_switching_and_cursor_sync() {
         hunks: vec![],
     };
     state.files.push(untracked_file_diff.clone());
-    state.main_screen.list_items.push(crate::ui::main_screen::ListItem::File(untracked_file_diff.clone())); // Add to list_items
+    state
+        .main_screen
+        .list_items
+        .push(crate::ui::main_screen::ListItem::File(
+            untracked_file_diff.clone(),
+        )); // Add to list_items
     state.main_screen.file_cursor = 5; // "untracked_file.txt" (index 5 in list_items)
 
     let mut state = update_state(state, Some(Input::Character('\t')), 30, 80);
@@ -886,7 +894,10 @@ fn test_open_editor_main_view_with_line() {
         crate::ui::main_screen::ListItem::StagedChangesHeader,
         crate::ui::main_screen::ListItem::File(file.clone()),
         crate::ui::main_screen::ListItem::CommitMessageInput,
-        crate::ui::main_screen::ListItem::PreviousCommitInfo { message: String::new(), is_on_remote: false },
+        crate::ui::main_screen::ListItem::PreviousCommitInfo {
+            message: String::new(),
+            is_on_remote: false,
+        },
     ];
     state.main_screen.file_cursor = 1; // Select the file
     state.files = vec![file]; // Keep this for current_file() to work in the test context if it's still used elsewhere.
