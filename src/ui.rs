@@ -3,6 +3,7 @@ pub mod commit_view;
 mod diff_view;
 mod render;
 pub mod scroll;
+pub mod main_screen;
 pub mod unstaged_view;
 pub mod update;
 use crate::app_state::AppState;

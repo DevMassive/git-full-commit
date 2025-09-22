@@ -271,7 +271,10 @@ fn test_page_up_stops_at_top() {
         20_usize.saturating_sub(content_height), // 0
         "Cursor should move up by one page or saturate at 0"
     );
-    assert_eq!(final_state.main_screen.diff_scroll, 0, "Scroll should clamp at the top");
+    assert_eq!(
+        final_state.main_screen.diff_scroll, 0,
+        "Scroll should clamp at the top"
+    );
 }
 
 #[test]
@@ -282,7 +285,10 @@ fn test_page_up_at_top_does_nothing() {
 
     let final_state = update_state(initial_state, Some(Input::Character('b')), max_y, 80);
 
-    assert_eq!(final_state.main_screen.diff_scroll, 0, "Scroll should not change");
+    assert_eq!(
+        final_state.main_screen.diff_scroll, 0,
+        "Scroll should not change"
+    );
     assert_eq!(
         final_state.main_screen.line_cursor, 0,
         "Cursor should be at the first line"
@@ -651,7 +657,7 @@ fn test_discard_hunk() {
 
 #[test]
 fn test_keydown_stops_at_last_line() {
-    let mut state = create_state_with_files(1); // 1 file
+    let state = create_state_with_files(1); // 1 file
     // Staged changes (0), file_0 (1), commit (2), prev_commit (3)
     let max_y = 30;
     let max_x = 80;
@@ -660,15 +666,15 @@ fn test_keydown_stops_at_last_line() {
     assert_eq!(state.main_screen.file_cursor, 1);
 
     // KeyDown to commit line
-    handle_navigation(&mut state, Input::KeyDown, max_y, max_x);
+    let state = update_state(state, Some(Input::KeyDown), max_y, max_x);
     assert_eq!(state.main_screen.file_cursor, 2);
 
     // KeyDown to previous commit line
-    handle_navigation(&mut state, Input::KeyDown, max_y, max_x);
+    let state = update_state(state, Some(Input::KeyDown), max_y, max_x);
     assert_eq!(state.main_screen.file_cursor, 3);
 
     // KeyDown again, should not move
-    handle_navigation(&mut state, Input::KeyDown, max_y, max_x);
+    let state = update_state(state, Some(Input::KeyDown), max_y, max_x);
     assert_eq!(state.main_screen.file_cursor, 3);
 }
 
@@ -1129,7 +1135,12 @@ fn test_discard_unstaged_file() {
         status.is_empty(),
         "Git status should be clean after discard"
     );
-    assert!(state_after_discard.unstaged_screen.unstaged_files.is_empty());
+    assert!(
+        state_after_discard
+            .unstaged_screen
+            .unstaged_files
+            .is_empty()
+    );
 
     let state_after_undo = update_state(state_after_discard, Some(Input::Character('<')), 80, 80);
     let status_after_undo = get_git_status(&repo_path);
@@ -1138,7 +1149,10 @@ fn test_discard_unstaged_file() {
         "File should be modified again after undo"
     );
     assert_eq!(state_after_undo.unstaged_screen.unstaged_files.len(), 1);
-    assert_eq!(state_after_undo.unstaged_screen.unstaged_files[0].file_name, "test.txt");
+    assert_eq!(
+        state_after_undo.unstaged_screen.unstaged_files[0].file_name,
+        "test.txt"
+    );
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
@@ -1156,12 +1170,20 @@ fn test_discard_untracked_file() {
 
     let state_after_discard = update_state(state, Some(Input::Character('!')), 80, 80);
     assert!(!file_path.exists(), "File should be deleted");
-    assert!(state_after_discard.unstaged_screen.untracked_files.is_empty());
+    assert!(
+        state_after_discard
+            .unstaged_screen
+            .untracked_files
+            .is_empty()
+    );
 
     let state_after_undo = update_state(state_after_discard, Some(Input::Character('<')), 80, 80);
     assert!(file_path.exists(), "File should be restored after undo");
     assert_eq!(state_after_undo.unstaged_screen.untracked_files.len(), 1);
-    assert_eq!(state_after_undo.unstaged_screen.untracked_files[0], "untracked.txt");
+    assert_eq!(
+        state_after_undo.unstaged_screen.untracked_files[0],
+        "untracked.txt"
+    );
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
@@ -1243,7 +1265,12 @@ fn test_ignore_untracked_file() {
     let status = get_git_status(&repo_path);
     assert!(status.contains("A  .gitignore"));
     assert!(!status.contains("untracked.txt"));
-    assert!(state_after_ignore.unstaged_screen.untracked_files.is_empty());
+    assert!(
+        state_after_ignore
+            .unstaged_screen
+            .untracked_files
+            .is_empty()
+    );
 
     let state_after_undo = update_state(state_after_ignore, Some(Input::Character('<')), 80, 80);
     let status_after_undo = get_git_status(&repo_path);
