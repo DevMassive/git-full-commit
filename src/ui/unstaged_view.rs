@@ -166,11 +166,7 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             if let Some(file_name) = selected_file_name {
                 if let Some(index) = state.files.iter().position(|f| f.file_name == file_name) {
                     state.file_cursor = index + 1;
-                } else {
-                    state.file_cursor = 1;
                 }
-            } else {
-                state.file_cursor = 1;
             }
 
             state.screen = Screen::Main;

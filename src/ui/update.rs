@@ -214,11 +214,7 @@ pub(crate) fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, 
                     state.untracked_files.iter().position(|f| *f == file_name)
                 {
                     state.unstaged_cursor = state.unstaged_files.len() + index + 2;
-                } else {
-                    state.unstaged_cursor = 1;
                 }
-            } else {
-                state.unstaged_cursor = 1;
             }
             state.screen = Screen::Unstaged;
             state.line_cursor = 0;
