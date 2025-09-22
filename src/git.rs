@@ -267,14 +267,49 @@ pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn amend_commit(repo_path: &Path, message: &str) -> Result<()> {
-    git_command()
+pub fn fixup_and_rebase_autosquash(repo_path: &Path, fixup_commit_hash: &str) -> Result<()> {
+    // 1. Create a fixup! commit
+    let commit_output = git_command()
         .arg("commit")
-        .arg("--amend")
-        .arg("-m")
-        .arg(message)
+        .arg("--no-edit")
+        .arg("--fixup")
+        .arg(fixup_commit_hash)
         .current_dir(repo_path)
         .output()?;
+
+    if !commit_output.status.success() {
+        // This can happen if there's nothing to commit. For now, we'll treat this as an error.
+        anyhow::bail!(
+            "git commit --fixup failed. This usually means there are no staged changes. Stderr: {}",
+            String::from_utf8_lossy(&commit_output.stderr)
+        );
+    }
+
+    // 2. Execute git rebase -i --autosquash
+    let parent_hash_output = git_command()
+        .arg("rev-parse")
+        .arg(format!("{}^", fixup_commit_hash))
+        .current_dir(repo_path)
+        .output()?;
+    let is_root_commit = !parent_hash_output.status.success();
+
+    let mut rebase_cmd = git_command();
+    rebase_cmd.env("GIT_SEQUENCE_EDITOR", "true");
+    rebase_cmd.arg("rebase").arg("-i").arg("--autosquash");
+
+    if is_root_commit {
+        rebase_cmd.arg("--root");
+    } else {
+        rebase_cmd.arg(fixup_commit_hash);
+    }
+
+    let rebase_output = rebase_cmd.current_dir(repo_path).output()?;
+
+    if !rebase_output.status.success() {
+        git_command().arg("rebase").arg("--abort").current_dir(repo_path).output()?;
+        anyhow::bail!("git rebase for fixup failed. Aborting.");
+    }
+
     Ok(())
 }
 
