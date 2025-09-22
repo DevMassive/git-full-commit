@@ -1,7 +1,7 @@
 use crate::app_state::{AppState, Screen};
 use crate::commit_storage;
 use crate::cursor_state::CursorState;
-use crate::ui::main_screen;
+use crate::ui::main_screen::{self, ListItem as MainScreenListItem};
 use crate::ui::unstaged_screen;
 use pancurses::Input;
 #[cfg(not(test))]
@@ -58,8 +58,11 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
         }
     }
 
-    state.main_screen.is_commit_mode =
-        state.screen == Screen::Main && state.main_screen.file_cursor == state.files.len() + 1;
+    state.main_screen.is_commit_mode = state.screen == Screen::Main
+        && matches!(
+            state.current_main_item(),
+            Some(MainScreenListItem::CommitMessageInput)
+        );
 
     #[cfg(not(test))]
     if state.main_screen.is_commit_mode {

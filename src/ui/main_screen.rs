@@ -28,6 +28,7 @@ pub fn render(window: &Window, state: &AppState) {
     let (max_y, max_x) = window.get_max_yx();
 
     let (file_list_height, file_list_total_items) = state.main_header_height(max_y);
+    let current_item = state.current_main_item();
 
     let mut carret_y = 0;
     let mut carret_x = 0;
@@ -131,11 +132,7 @@ pub fn render(window: &Window, state: &AppState) {
     let content_height = (max_y as usize).saturating_sub(header_height);
     let cursor_position = state.get_cursor_line_index();
 
-    match state
-        .main_screen
-        .list_items
-        .get(state.main_screen.file_cursor)
-    {
+    match current_item {
         Some(ListItem::StagedChangesHeader) => {
             // "Staged changes" is selected, do nothing for now.
         }
@@ -170,11 +167,7 @@ pub fn render(window: &Window, state: &AppState) {
     }
 
     window.mv(carret_y, carret_x);
-    if let Some(ListItem::CommitMessageInput) = state
-        .main_screen
-        .list_items
-        .get(state.main_screen.file_cursor)
-    {
+    if let Some(ListItem::CommitMessageInput) = current_item {
         #[cfg(not(test))]
         pancurses::curs_set(1);
     } else {
@@ -192,14 +185,14 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) 
 }
 
 fn unstage_line(state: &mut AppState, max_y: i32) {
-    if let Some(file) = state.current_file() {
+    if let Some(file) = state.current_main_file() {
         let line_index = state.main_screen.line_cursor;
         if let Some(patch) = git_patch::create_unstage_line_patch(file, line_index, true) {
             let command = Box::new(ApplyPatchCommand::new(state.repo_path.clone(), patch));
             let old_line_cursor = state.main_screen.line_cursor;
             state.execute_and_refresh(command);
 
-            if let Some(file) = state.current_file() {
+            if let Some(file) = state.current_main_file() {
                 state.main_screen.line_cursor =
                     old_line_cursor.min(file.lines.len().saturating_sub(1));
                 let header_height = state.main_header_height(max_y).0;
@@ -227,7 +220,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
             }
         }
         Input::Character('i') => {
-            if let Some(file) = state.current_file().cloned() {
+            if let Some(file) = state.current_main_file().cloned() {
                 if file.file_name != ".gitignore" {
                     let command = Box::new(IgnoreFileCommand::new(
                         state.repo_path.clone(),
@@ -239,7 +232,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
         }
         Input::Character('!') => {
             if state.main_screen.is_diff_cursor_active {
-                if let Some(file) = state.current_file() {
+                if let Some(file) = state.current_main_file() {
                     let line_index = state.main_screen.line_cursor;
                     if let Some(hunk) = git_patch::find_hunk(file, line_index) {
                         let patch = git_patch::create_unstage_hunk_patch(file, hunk);
@@ -248,7 +241,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                         state.execute_and_refresh(command);
                     }
                 }
-            } else if let Some(file) = state.current_file().cloned() {
+            } else if let Some(file) = state.current_main_file().cloned() {
                 let patch = git::get_file_diff_patch(&state.repo_path, &file.file_name)
                     .expect("Failed to get diff for file.");
                 let command: Box<dyn Command> = if file.status == git::FileStatus::Added {
@@ -301,7 +294,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
             state.execute_and_refresh(command);
         }
         Input::Character('e') => {
-            if let Some(file) = state.current_file() {
+            if let Some(file) = state.current_main_file() {
                 let line_number = if state.main_screen.is_diff_cursor_active {
                     git_patch::get_line_number(file, state.main_screen.line_cursor)
                 } else {
@@ -403,7 +396,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             if !state.main_screen.has_unstaged_changes {
                 return;
             }
-            if let Some(current_file) = state.current_file() {
+            if let Some(current_file) = state.current_main_file() {
                 let file_name = current_file.file_name.clone();
                 if let Some(index) = state
                     .unstaged_screen

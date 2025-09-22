@@ -229,12 +229,14 @@ impl AppState {
         self.refresh_diff();
     }
 
-    pub fn current_file(&self) -> Option<&FileDiff> {
-        if let Some(item) = self
-            .main_screen
+    pub fn current_main_item(&self) -> Option<&MainScreenListItem> {
+        self.main_screen
             .list_items
             .get(self.main_screen.file_cursor)
-        {
+    }
+
+    pub fn current_main_file(&self) -> Option<&FileDiff> {
+        if let Some(item) = self.current_main_item() {
             if let MainScreenListItem::File(file_diff) = item {
                 Some(file_diff)
             } else {

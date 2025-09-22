@@ -40,7 +40,7 @@ impl CursorState {
 
         // Restore main screen cursors
         state.main_screen.file_cursor = self.file_cursor.min(state.files.len() + 2);
-        if let Some(file) = state.current_file() {
+        if let Some(file) = state.current_main_file() {
             state.main_screen.line_cursor =
                 self.line_cursor.min(file.lines.len().saturating_sub(1));
         } else {
