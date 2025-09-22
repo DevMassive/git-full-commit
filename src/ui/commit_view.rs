@@ -80,7 +80,11 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
 
             if state.main_screen.is_amend_mode {
                 if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
-                    match git::fixup_and_rebase_autosquash(&state.repo_path, &hash) {
+                    match git::reword_commit(
+                        &state.repo_path,
+                        &hash,
+                        &state.main_screen.commit_message,
+                    ) {
                         Ok(_) => {
                             let _ = commit_storage::delete_commit_message(&state.repo_path);
                             state.command_history.clear();

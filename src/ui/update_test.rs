@@ -1029,6 +1029,171 @@ fn test_unstage_all() {
 }
 
 #[test]
+fn test_amend_commit_message_in_place() {
+    let repo_path = setup_temp_repo();
+    std::fs::write(repo_path.join("file1.txt"), "a").unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("first commit")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    std::fs::write(repo_path.join("file2.txt"), "b").unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("second commit")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    std::fs::write(repo_path.join("file3.txt"), "c").unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("third commit")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    let mut state = AppState::new(repo_path.clone(), vec![]);
+    assert_eq!(state.previous_commits.len(), 3);
+
+    let commit_to_amend_hash = state.previous_commits[1].hash.clone();
+    let commit_to_amend_index = state
+        .main_screen
+        .list_items
+        .iter()
+        .position(|item| {
+            if let crate::ui::main_screen::ListItem::PreviousCommitInfo { message, .. } = item {
+                message == "second commit"
+            } else {
+                false
+            }
+        })
+        .unwrap();
+
+    state.main_screen.file_cursor = commit_to_amend_index;
+    state.main_screen.amending_commit_hash = Some(commit_to_amend_hash.clone());
+
+    let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
+    assert!(state.main_screen.is_amend_mode);
+    assert_eq!(state.main_screen.commit_message, "second commit");
+
+    state = update_state(state, Some(Input::Character(' ')), 80, 80);
+    state = update_state(state, Some(Input::Character('r')), 80, 80);
+    state = update_state(state, Some(Input::Character('e')), 80, 80);
+    state = update_state(state, Some(Input::Character('w')), 80, 80);
+    state = update_state(state, Some(Input::Character('o')), 80, 80);
+    state = update_state(state, Some(Input::Character('r')), 80, 80);
+    state = update_state(state, Some(Input::Character('d')), 80, 80);
+    state = update_state(state, Some(Input::Character('e')), 80, 80);
+    state = update_state(state, Some(Input::Character('d')), 80, 80);
+
+    let state = update_state(state, Some(Input::Character('\n')), 80, 80);
+    assert!(!state.main_screen.is_amend_mode);
+
+    let output = OsCommand::new("git")
+        .arg("log")
+        .arg("--pretty=%s")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    let log_messages = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(String::from)
+        .collect::<Vec<String>>();
+    assert_eq!(log_messages[0], "third commit");
+    assert_eq!(log_messages[1], "second commit reworded");
+    assert_eq!(log_messages[2], "first commit");
+
+    std::fs::remove_dir_all(&repo_path).unwrap();
+}
+
+#[test]
+fn test_cancel_amend_mode() {
+    let repo_path = setup_temp_repo();
+    std::fs::write(repo_path.join("file.txt"), "a").unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("initial commit")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    let mut state = AppState::new(repo_path.clone(), vec![]);
+    state.main_screen.commit_message = "new commit message".to_string();
+    crate::commit_storage::save_commit_message(&repo_path, &state.main_screen.commit_message)
+        .unwrap();
+
+    // Find the commit to amend
+    let commit_to_amend_index = state
+        .main_screen
+        .list_items
+        .iter()
+        .position(|item| {
+            if let crate::ui::main_screen::ListItem::PreviousCommitInfo { message, .. } = item {
+                message == "initial commit"
+            } else {
+                false
+            }
+        })
+        .unwrap();
+
+    state.main_screen.file_cursor = commit_to_amend_index;
+
+    // Press Enter to start amending
+    let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
+    assert!(state.main_screen.is_amend_mode);
+    assert_eq!(state.main_screen.commit_message, "initial commit");
+
+    // Move to the "New Commit" line
+    let new_commit_index = state
+        .main_screen
+        .list_items
+        .iter()
+        .position(|item| matches!(item, crate::ui::main_screen::ListItem::CommitMessageInput))
+        .unwrap();
+    state.main_screen.file_cursor = new_commit_index;
+
+    // Press Enter to cancel amend
+    let state = update_state(state, Some(Input::Character('\n')), 80, 80);
+    assert!(!state.main_screen.is_amend_mode);
+    assert!(state.main_screen.amending_commit_hash.is_none());
+    assert!(state.main_screen.is_commit_mode);
+    assert_eq!(state.main_screen.commit_message, "new commit message");
+
+    std::fs::remove_dir_all(&repo_path).unwrap();
+}
+
+#[test]
 fn test_stage_unstaged() {
     let repo_path = setup_temp_repo();
     std::fs::write(repo_path.join("file1.txt"), "a").unwrap();

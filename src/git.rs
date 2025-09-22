@@ -267,6 +267,71 @@ pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn reword_commit(repo_path: &Path, commit_hash: &str, message: &str) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Write the new message to a temporary file
+    let temp_message_path = repo_path.join(".git/COMMIT_EDITMSG_TEMP");
+    std::fs::write(&temp_message_path, message)?;
+
+    // Create an editor script that will overwrite the real commit message file
+    let editor_script_path = repo_path.join(".git/reword_editor.sh");
+    let script_content = format!(
+        "#!/bin/sh\ncp '{}' \"$1\"",
+        temp_message_path.to_str().unwrap()
+    );
+    std::fs::write(&editor_script_path, &script_content)?;
+    std::fs::set_permissions(&editor_script_path, std::fs::Permissions::from_mode(0o755))?;
+
+    let parent_hash_output = git_command()
+        .arg("rev-parse")
+        .arg(format!("{}^", commit_hash))
+        .current_dir(repo_path)
+        .output()?;
+    let is_root_commit = !parent_hash_output.status.success();
+    let parent_hash = String::from_utf8_lossy(&parent_hash_output.stdout)
+        .trim()
+        .to_string();
+
+    let mut rebase_cmd = git_command();
+    let short_hash = &commit_hash[0..7.min(commit_hash.len())];
+    rebase_cmd.env(
+        "GIT_SEQUENCE_EDITOR",
+        format!(
+            "sed -i -e 's/^pick {}/reword {}/'",
+            short_hash, short_hash
+        ),
+    );
+    rebase_cmd.env("GIT_EDITOR", editor_script_path.to_str().unwrap());
+    rebase_cmd.arg("rebase").arg("-i");
+
+    if is_root_commit {
+        rebase_cmd.arg("--root");
+    } else {
+        rebase_cmd.arg(&parent_hash);
+    }
+
+    let rebase_output = rebase_cmd.current_dir(repo_path).output()?;
+
+    // Clean up temporary files
+    let _ = std::fs::remove_file(&temp_message_path);
+    let _ = std::fs::remove_file(&editor_script_path);
+
+    if !rebase_output.status.success() {
+        git_command()
+            .arg("rebase")
+            .arg("--abort")
+            .current_dir(repo_path)
+            .output()?;
+        anyhow::bail!(
+            "git rebase for reword failed. Stderr: {}. Aborting.",
+            String::from_utf8_lossy(&rebase_output.stderr)
+        );
+    }
+
+    Ok(())
+}
+
 pub fn fixup_and_rebase_autosquash(repo_path: &Path, fixup_commit_hash: &str) -> Result<()> {
     // 1. Create a fixup! commit
     let commit_output = git_command()
