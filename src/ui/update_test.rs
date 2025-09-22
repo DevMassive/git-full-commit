@@ -75,6 +75,7 @@ fn create_test_file_diff() -> FileDiff {
     }];
     FileDiff {
         file_name: "test.txt".to_string(),
+        old_file_name: "test.txt".to_string(),
         hunks,
         lines,
         status: FileStatus::Modified,
@@ -85,6 +86,7 @@ fn create_state_with_files(num_files: usize) -> AppState {
     let files: Vec<FileDiff> = (0..num_files)
         .map(|i| FileDiff {
             file_name: format!("file_{i}.txt"),
+            old_file_name: format!("file_{i}.txt"),
             status: FileStatus::Modified,
             lines: vec![],
             hunks: vec![],
@@ -153,6 +155,7 @@ fn create_test_state(
         let lines = (0..lines_count).map(|i| format!("line {i}")).collect();
         files.push(FileDiff {
             file_name: "test_file.rs".to_string(),
+            old_file_name: "test_file.rs".to_string(),
             status: FileStatus::Modified,
             lines,
             hunks: vec![Hunk {
@@ -774,12 +777,14 @@ fn test_tab_screen_switching_and_cursor_sync() {
     state.files = vec![
         FileDiff {
             file_name: "staged_only.txt".to_string(),
+            old_file_name: "staged_only.txt".to_string(),
             status: FileStatus::Modified,
             lines: vec![],
             hunks: vec![],
         },
         FileDiff {
             file_name: "common_file.txt".to_string(),
+            old_file_name: "common_file.txt".to_string(),
             status: FileStatus::Modified,
             lines: vec![],
             hunks: vec![],
@@ -788,12 +793,14 @@ fn test_tab_screen_switching_and_cursor_sync() {
     state.unstaged_screen.unstaged_files = vec![
         FileDiff {
             file_name: "common_file.txt".to_string(),
+            old_file_name: "common_file.txt".to_string(),
             status: FileStatus::Modified,
             lines: vec![],
             hunks: vec![],
         },
         FileDiff {
             file_name: "unstaged_only.txt".to_string(),
+            old_file_name: "unstaged_only.txt".to_string(),
             status: FileStatus::Modified,
             lines: vec![],
             hunks: vec![],
@@ -817,6 +824,7 @@ fn test_tab_screen_switching_and_cursor_sync() {
     // --- Switch from Main to Unstaged (untracked file) ---
     state.files.push(FileDiff {
         file_name: "untracked_file.txt".to_string(),
+        old_file_name: "untracked_file.txt".to_string(),
         status: FileStatus::Added,
         lines: vec![],
         hunks: vec![],

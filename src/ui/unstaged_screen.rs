@@ -57,7 +57,11 @@ pub fn render(window: &Window, state: &AppState) {
             window.addstr(format!("{status_char}"));
             window.attroff(COLOR_PAIR(status_pair));
             window.attron(COLOR_PAIR(pair));
-            window.addstr(format!(" {}", file.file_name));
+            if file.status == FileStatus::Renamed {
+                window.addstr(format!(" {} -> {}", file.old_file_name, file.file_name));
+            } else {
+                window.addstr(format!(" {}", file.file_name));
+            }
         } else if item_index == unstaged_file_count + 1 {
             window.addstr(" Untracked files");
         } else {

@@ -31,6 +31,7 @@ fn create_test_file_diff() -> FileDiff {
     }];
     FileDiff {
         file_name: "test.txt".to_string(),
+        old_file_name: "test.txt".to_string(),
         hunks,
         lines,
         status: FileStatus::Modified,

@@ -344,9 +344,10 @@ pub fn render_plain(
 ) {
     let file_diff = FileDiff {
         file_name: "".to_string(),
-        status: FileStatus::Added,
+        old_file_name: "".to_string(),
+        hunks: Vec::new(),
         lines,
-        hunks: vec![],
+        status: FileStatus::Modified,
     };
 
     render(

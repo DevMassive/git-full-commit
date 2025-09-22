@@ -29,6 +29,7 @@ pub struct Hunk {
 #[derive(Debug, Clone)]
 pub struct FileDiff {
     pub file_name: String,
+    pub old_file_name: String,
     pub hunks: Vec<Hunk>,
     pub lines: Vec<String>,
     pub status: FileStatus,
@@ -111,10 +112,12 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
                 current_file_line_index = 0;
             }
 
+            let old_file_name = caps.get(1).map(|m| m.as_str().trim_matches('"')).unwrap_or("").to_string();
             let file_name = caps.get(2).map(|m| m.as_str().trim_matches('"')).unwrap_or("").to_string();
 
             current_file = Some(FileDiff {
                 file_name,
+                old_file_name,
                 hunks: Vec::new(),
                 lines: Vec::new(), // Will be filled in later
                 status: FileStatus::Modified,
