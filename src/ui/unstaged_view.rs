@@ -248,7 +248,7 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
         Input::KeyRight => {
             state.unstaged_screen.unstaged_horizontal_scroll = state.unstaged_screen.unstaged_horizontal_scroll.saturating_add(10);
         }
-        Input::Character('\n') => {
+        Input::Character('\n') | Input::Character('u') => {
             let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
             if state.unstaged_screen.unstaged_cursor == 0 {
                 let command = Box::new(StageUnstagedCommand::new(state.repo_path.clone()));

@@ -88,7 +88,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                 state.execute_and_refresh(command);
             }
         }
-        Input::Character('\n') => {
+        Input::Character('\n') | Input::Character('u') => {
             if state.main_screen.file_cursor == 0 {
                 let command = Box::new(UnstageAllCommand::new(state.repo_path.clone()));
                 state.execute_and_refresh(command);
