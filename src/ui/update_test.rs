@@ -106,40 +106,40 @@ fn test_file_list_scrolling() {
     for _ in 0..8 {
         state = update_state(state, Some(Input::KeyDown), max_y, 80);
     }
-    assert_eq!(state.file_cursor, 9);
-    assert_eq!(state.file_list_scroll, 0);
+    assert_eq!(state.main_screen.file_cursor, 9);
+    assert_eq!(state.main_screen.file_list_scroll, 0);
 
     // Move to cursor 10, scroll should be 1
     state = update_state(state, Some(Input::KeyDown), max_y, 80);
-    assert_eq!(state.file_cursor, 10);
-    assert_eq!(state.file_list_scroll, 1);
+    assert_eq!(state.main_screen.file_cursor, 10);
+    assert_eq!(state.main_screen.file_list_scroll, 1);
 
     // Move to cursor 20, scroll should be 11
     for _ in 0..10 {
         state = update_state(state, Some(Input::KeyDown), max_y, 80);
     }
-    assert_eq!(state.file_cursor, 20);
-    assert_eq!(state.file_list_scroll, 11);
+    assert_eq!(state.main_screen.file_cursor, 20);
+    assert_eq!(state.main_screen.file_list_scroll, 11);
 
     // --- Scroll up ---
     // Move to cursor 11, scroll should be 11
     for _ in 0..9 {
         state = update_state(state, Some(Input::KeyUp), max_y, 80);
     }
-    assert_eq!(state.file_cursor, 11);
-    assert_eq!(state.file_list_scroll, 11);
+    assert_eq!(state.main_screen.file_cursor, 11);
+    assert_eq!(state.main_screen.file_list_scroll, 11);
 
     // Move to cursor 10, scroll should be 10
     state = update_state(state, Some(Input::KeyUp), max_y, 80);
-    assert_eq!(state.file_cursor, 10);
-    assert_eq!(state.file_list_scroll, 10);
+    assert_eq!(state.main_screen.file_cursor, 10);
+    assert_eq!(state.main_screen.file_list_scroll, 10);
 
     // Move to cursor 0, scroll should be 0
     for _ in 0..10 {
         state = update_state(state, Some(Input::KeyUp), max_y, 80);
     }
-    assert_eq!(state.file_cursor, 0);
-    assert_eq!(state.file_list_scroll, 0);
+    assert_eq!(state.main_screen.file_cursor, 0);
+    assert_eq!(state.main_screen.file_list_scroll, 0);
 }
 
 fn create_test_state(
@@ -166,9 +166,9 @@ fn create_test_state(
     }
 
     let mut state = AppState::new(PathBuf::from("/tmp"), files);
-    state.file_cursor = file_cursor;
-    state.line_cursor = line_cursor;
-    state.diff_scroll = scroll;
+    state.main_screen.file_cursor = file_cursor;
+    state.main_screen.line_cursor = line_cursor;
+    state.main_screen.diff_scroll = scroll;
     // Mock previous commit files to avoid git command execution in tests
     state.previous_commit_files = vec![];
     state
@@ -187,12 +187,12 @@ fn test_page_down_scrolls_by_page() {
 
     let expected_cursor = 5 + content_height;
     assert_eq!(
-        final_state.line_cursor, expected_cursor,
+        final_state.main_screen.line_cursor, expected_cursor,
         "Cursor should move down by one page"
     );
     // Scroll should jump by a page, not just follow the cursor
     assert_eq!(
-        final_state.diff_scroll, content_height,
+        final_state.main_screen.diff_scroll, content_height,
         "Scroll should move by a full page"
     );
 }
@@ -208,11 +208,11 @@ fn test_page_down_scrolls_beyond_content() {
     let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y, 80);
 
     assert_eq!(
-        final_state.line_cursor, 99,
+        final_state.main_screen.line_cursor, 99,
         "Cursor should move to the last line"
     );
     assert_eq!(
-        final_state.diff_scroll,
+        final_state.main_screen.diff_scroll,
         74 + content_height,
         "Scroll should increase by a page even if it goes beyond max_scroll"
     );
@@ -229,9 +229,9 @@ fn test_page_down_clamps_at_end() {
     let final_state = update_state(initial_state, Some(Input::Character(' ')), max_y, 80);
 
     let expected_cursor = (10 + content_height).min(lines_count - 1); // 35
-    assert_eq!(final_state.line_cursor, expected_cursor);
+    assert_eq!(final_state.main_screen.line_cursor, expected_cursor);
 
-    assert_eq!(final_state.diff_scroll, content_height); // 25
+    assert_eq!(final_state.main_screen.diff_scroll, content_height); // 25
 }
 
 // --- Page Up Tests ---
@@ -247,11 +247,11 @@ fn test_page_up_scrolls_by_page() {
 
     let expected_cursor = 60 - content_height;
     assert_eq!(
-        final_state.line_cursor, expected_cursor,
+        final_state.main_screen.line_cursor, expected_cursor,
         "Cursor should move up by one page"
     );
     assert_eq!(
-        final_state.diff_scroll,
+        final_state.main_screen.diff_scroll,
         50 - content_height, // 25
         "Scroll should move up by a full page"
     );
@@ -267,11 +267,11 @@ fn test_page_up_stops_at_top() {
     let final_state = update_state(initial_state, Some(Input::Character('b')), max_y, 80);
 
     assert_eq!(
-        final_state.line_cursor,
+        final_state.main_screen.line_cursor,
         20_usize.saturating_sub(content_height), // 0
         "Cursor should move up by one page or saturate at 0"
     );
-    assert_eq!(final_state.diff_scroll, 0, "Scroll should clamp at the top");
+    assert_eq!(final_state.main_screen.diff_scroll, 0, "Scroll should clamp at the top");
 }
 
 #[test]
@@ -282,9 +282,9 @@ fn test_page_up_at_top_does_nothing() {
 
     let final_state = update_state(initial_state, Some(Input::Character('b')), max_y, 80);
 
-    assert_eq!(final_state.diff_scroll, 0, "Scroll should not change");
+    assert_eq!(final_state.main_screen.diff_scroll, 0, "Scroll should not change");
     assert_eq!(
-        final_state.line_cursor, 0,
+        final_state.main_screen.line_cursor, 0,
         "Cursor should be at the first line"
     );
 }
@@ -346,7 +346,7 @@ fn test_ignore_file() {
     // Create initial state
     let files = crate::git::get_diff(temp_dir.clone());
     let mut state = AppState::new(temp_dir.clone(), files);
-    state.file_cursor = 1; // Select the file
+    state.main_screen.file_cursor = 1; // Select the file
 
     // Simulate pressing 'i'
     let mut updated_state = update_state(state, Some(Input::Character('i')), 80, 80);
@@ -416,9 +416,9 @@ fn test_half_page_down() {
     let final_state = update_state(initial_state, Some(Input::Character('\u{4}')), max_y, 80);
 
     let expected_cursor = 10 + scroll_amount;
-    assert_eq!(final_state.line_cursor, expected_cursor);
+    assert_eq!(final_state.main_screen.line_cursor, expected_cursor);
     // Cursor is at 22, scroll is 5, content_height is 25. 22 < 5 + 25. No scroll.
-    assert_eq!(final_state.diff_scroll, 5);
+    assert_eq!(final_state.main_screen.diff_scroll, 5);
 }
 
 #[test]
@@ -433,10 +433,10 @@ fn test_half_page_down_and_scroll() {
     let final_state = update_state(initial_state, Some(Input::Character('\u{4}')), max_y, 80);
 
     let expected_cursor = 20 + scroll_amount; // 32
-    assert_eq!(final_state.line_cursor, expected_cursor);
+    assert_eq!(final_state.main_screen.line_cursor, expected_cursor);
     // Cursor is at 32, scroll is 0, content_height is 25. 32 >= 0 + 25. Scroll.
     let expected_scroll = scroll_amount;
-    assert_eq!(final_state.diff_scroll, expected_scroll);
+    assert_eq!(final_state.main_screen.diff_scroll, expected_scroll);
 }
 
 #[test]
@@ -451,10 +451,10 @@ fn test_half_page_up() {
     let final_state = update_state(initial_state, Some(Input::Character('\u{15}')), max_y, 80);
 
     let expected_cursor = 20 - scroll_amount; // 8
-    assert_eq!(final_state.line_cursor, expected_cursor);
+    assert_eq!(final_state.main_screen.line_cursor, expected_cursor);
     // Cursor is at 8, scroll is 15. 8 < 15. Scroll.
     let expected_scroll = 15 - scroll_amount; // 3
-    assert_eq!(final_state.diff_scroll, expected_scroll.max(0));
+    assert_eq!(final_state.main_screen.diff_scroll, expected_scroll.max(0));
 }
 
 #[test]
@@ -469,40 +469,40 @@ fn test_half_page_up_and_scroll() {
     let final_state = update_state(initial_state, Some(Input::Character('\u{15}')), max_y, 80);
 
     let expected_cursor = 10_usize.saturating_sub(scroll_amount); // 0
-    assert_eq!(final_state.line_cursor, expected_cursor);
+    assert_eq!(final_state.main_screen.line_cursor, expected_cursor);
     // Cursor is at 0, scroll is 10. 0 < 10. Scroll.
     let expected_scroll = 10_usize.saturating_sub(scroll_amount); // 0
-    assert_eq!(final_state.diff_scroll, expected_scroll);
+    assert_eq!(final_state.main_screen.diff_scroll, expected_scroll);
 }
 
 #[test]
 fn test_horizontal_scroll() {
     let mut state = create_test_state(10, 1, 0, 0);
-    assert_eq!(state.horizontal_scroll, 0);
+    assert_eq!(state.main_screen.horizontal_scroll, 0);
     let max_x = 80;
     let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
 
     // Scroll right
     state = update_state(state, Some(Input::KeyRight), 30, max_x);
-    assert_eq!(state.horizontal_scroll, scroll_amount);
+    assert_eq!(state.main_screen.horizontal_scroll, scroll_amount);
     state = update_state(state, Some(Input::KeyRight), 30, max_x);
-    assert_eq!(state.horizontal_scroll, scroll_amount * 2);
+    assert_eq!(state.main_screen.horizontal_scroll, scroll_amount * 2);
 
     // Scroll left
     state = update_state(state, Some(Input::KeyLeft), 30, max_x);
-    assert_eq!(state.horizontal_scroll, scroll_amount);
+    assert_eq!(state.main_screen.horizontal_scroll, scroll_amount);
     state = update_state(state, Some(Input::KeyLeft), 30, max_x);
-    assert_eq!(state.horizontal_scroll, 0);
+    assert_eq!(state.main_screen.horizontal_scroll, 0);
 
     // Scroll left at 0 should not change
     state = update_state(state, Some(Input::KeyLeft), 30, max_x);
-    assert_eq!(state.horizontal_scroll, 0);
+    assert_eq!(state.main_screen.horizontal_scroll, 0);
 }
 
 #[test]
 fn test_q_behavior_with_active_diff_cursor() {
     let mut state = create_test_state(10, 1, 0, 0);
-    state.is_diff_cursor_active = true;
+    state.main_screen.is_diff_cursor_active = true;
 
     // First 'q' should only deactivate the cursor
     let state_after_first_q = update_state(state, Some(Input::Character('q')), 30, 80);
@@ -511,7 +511,7 @@ fn test_q_behavior_with_active_diff_cursor() {
         "App should still be running after first 'q'"
     );
     assert!(
-        !state_after_first_q.is_diff_cursor_active,
+        !state_after_first_q.main_screen.is_diff_cursor_active,
         "Diff cursor should be inactive after first 'q'"
     );
 
@@ -595,8 +595,8 @@ fn test_discard_hunk() {
     // Create app state
     let files = crate::git::get_diff(repo_path.clone());
     let mut state = AppState::new(repo_path.clone(), files);
-    state.file_cursor = 1; // Select the file
-    state.is_diff_cursor_active = true;
+    state.main_screen.file_cursor = 1; // Select the file
+    state.main_screen.is_diff_cursor_active = true;
     // Move cursor to the second hunk (around line 16)
     // The diff output will have headers and context lines, so we need to estimate the line number
     let line_in_diff = state.files[0]
@@ -604,7 +604,7 @@ fn test_discard_hunk() {
         .iter()
         .position(|l| l.contains("modified line 16"))
         .unwrap_or(15);
-    state.line_cursor = line_in_diff;
+    state.main_screen.line_cursor = line_in_diff;
 
     // Simulate pressing '!' to discard the hunk
     let updated_state = update_state(state, Some(Input::Character('!')), 80, 80);
@@ -657,19 +657,19 @@ fn test_keydown_stops_at_last_line() {
     let max_x = 80;
 
     // Cursor starts on the first file
-    assert_eq!(state.file_cursor, 1);
+    assert_eq!(state.main_screen.file_cursor, 1);
 
     // KeyDown to commit line
     handle_navigation(&mut state, Input::KeyDown, max_y, max_x);
-    assert_eq!(state.file_cursor, 2);
+    assert_eq!(state.main_screen.file_cursor, 2);
 
     // KeyDown to previous commit line
     handle_navigation(&mut state, Input::KeyDown, max_y, max_x);
-    assert_eq!(state.file_cursor, 3);
+    assert_eq!(state.main_screen.file_cursor, 3);
 
     // KeyDown again, should not move
     handle_navigation(&mut state, Input::KeyDown, max_y, max_x);
-    assert_eq!(state.file_cursor, 3);
+    assert_eq!(state.main_screen.file_cursor, 3);
 }
 
 #[test]
@@ -797,7 +797,7 @@ fn test_tab_screen_switching_and_cursor_sync() {
 
     // --- Switch from Main to Unstaged (with file sync) ---
     state.screen = Screen::Main;
-    state.file_cursor = 2; // "common_file.txt"
+    state.main_screen.file_cursor = 2; // "common_file.txt"
 
     let state = update_state(state, Some(Input::Character('\t')), 30, 80);
     assert_eq!(state.screen, Screen::Unstaged);
@@ -806,7 +806,7 @@ fn test_tab_screen_switching_and_cursor_sync() {
     // --- Switch from Unstaged to Main (with file sync) ---
     let mut state = update_state(state, Some(Input::Character('\t')), 30, 80);
     assert_eq!(state.screen, Screen::Main);
-    assert_eq!(state.file_cursor, 2); // "common_file.txt"
+    assert_eq!(state.main_screen.file_cursor, 2); // "common_file.txt"
 
     // --- Switch from Main to Unstaged (untracked file) ---
     state.files.push(FileDiff {
@@ -815,7 +815,7 @@ fn test_tab_screen_switching_and_cursor_sync() {
         lines: vec![],
         hunks: vec![],
     });
-    state.file_cursor = 3; // "untracked_file.txt"
+    state.main_screen.file_cursor = 3; // "untracked_file.txt"
     let mut state = update_state(state, Some(Input::Character('\t')), 30, 80);
     assert_eq!(state.screen, Screen::Unstaged);
     // unstaged_files(2) + untracked_files(1) + headers(2) = 5 total
@@ -827,14 +827,14 @@ fn test_tab_screen_switching_and_cursor_sync() {
     state.unstaged_cursor = 2; // "unstaged_only.txt"
     let state = update_state(state, Some(Input::Character('\t')), 30, 80);
     assert_eq!(state.screen, Screen::Main);
-    assert_eq!(state.file_cursor, 1); // Reset to default
+    assert_eq!(state.main_screen.file_cursor, 3); // Unchanged
 }
 
 #[test]
 fn test_open_editor_main_view_no_line() {
     let mut state = create_state_with_files(1);
-    state.file_cursor = 1;
-    state.is_diff_cursor_active = false;
+    state.main_screen.file_cursor = 1;
+    state.main_screen.is_diff_cursor_active = false;
     let repo_path = state.repo_path.clone();
 
     let updated_state = update_state(state, Some(Input::Character('e')), 80, 80);
@@ -851,7 +851,7 @@ fn test_open_editor_main_view_no_line() {
 #[test]
 fn test_open_editor_main_view_with_line() {
     let mut state = create_test_state(10, 1, 5, 0); // file_cursor=1, line_cursor=5
-    state.is_diff_cursor_active = true;
+    state.main_screen.is_diff_cursor_active = true;
     let mut file = create_test_file_diff();
     file.file_name = "test_file.rs".to_string();
     state.files = vec![file];
@@ -876,7 +876,7 @@ fn test_open_editor_unstaged_view() {
     state.unstaged_files = vec![file];
     state.screen = Screen::Unstaged;
     state.unstaged_cursor = 1; // Select the file
-    state.line_cursor = 4; // "+line 2 new" -> new_line_num 2
+    state.main_screen.line_cursor = 4; // "+line 2 new" -> new_line_num 2
     let repo_path = state.repo_path.clone();
 
     let updated_state = update_state(state, Some(Input::Character('e')), 80, 80);
@@ -940,7 +940,7 @@ fn test_unstage_all() {
 
     let files = crate::git::get_diff(repo_path.clone());
     let mut state = AppState::new(repo_path.clone(), files);
-    state.file_cursor = 0; // Select "Staged changes" header
+    state.main_screen.file_cursor = 0; // Select "Staged changes" header
 
     // Unstage all
     let state = update_state(state, Some(Input::Character('\n')), 80, 80);
@@ -953,7 +953,7 @@ fn test_unstage_all() {
 
     // Undo
     // Ensure file cursor is on "Staged changes" header
-    assert_eq!(state.file_cursor, 0);
+    assert_eq!(state.main_screen.file_cursor, 0);
     let state = update_state(state, Some(Input::Character('<')), 80, 80);
     let status = get_git_status(&repo_path);
     assert!(

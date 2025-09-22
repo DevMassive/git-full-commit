@@ -23,11 +23,11 @@ impl CursorState {
     pub fn from_app_state(state: &AppState) -> Self {
         Self {
             screen: state.screen,
-            file_cursor: state.file_cursor,
-            line_cursor: state.line_cursor,
-            scroll: state.diff_scroll,
-            file_list_scroll: state.file_list_scroll,
-            horizontal_scroll: state.horizontal_scroll,
+            file_cursor: state.main_screen.file_cursor,
+            line_cursor: state.main_screen.line_cursor,
+            scroll: state.main_screen.diff_scroll,
+            file_list_scroll: state.main_screen.file_list_scroll,
+            horizontal_scroll: state.main_screen.horizontal_scroll,
             unstaged_cursor: state.unstaged_cursor,
             unstaged_scroll: state.unstaged_scroll,
             unstaged_diff_scroll: state.unstaged_diff_scroll,
@@ -39,15 +39,15 @@ impl CursorState {
         state.screen = self.screen;
 
         // Restore main screen cursors
-        state.file_cursor = self.file_cursor.min(state.files.len() + 2);
+        state.main_screen.file_cursor = self.file_cursor.min(state.files.len() + 2);
         if let Some(file) = state.current_file() {
-            state.line_cursor = self.line_cursor.min(file.lines.len().saturating_sub(1));
+            state.main_screen.line_cursor = self.line_cursor.min(file.lines.len().saturating_sub(1));
         } else {
-            state.line_cursor = 0;
+            state.main_screen.line_cursor = 0;
         }
-        state.diff_scroll = self.scroll;
-        state.file_list_scroll = self.file_list_scroll;
-        state.horizontal_scroll = self.horizontal_scroll;
+        state.main_screen.diff_scroll = self.scroll;
+        state.main_screen.file_list_scroll = self.file_list_scroll;
+        state.main_screen.horizontal_scroll = self.horizontal_scroll;
 
         // Restore unstaged screen cursors
         state.unstaged_cursor = self.unstaged_cursor.min(state.unstaged_files.len() + 1);

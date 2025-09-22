@@ -140,7 +140,7 @@ fn test_unstage_hunk_by_line_with_undo_redo() {
         assert_eq!(state.files[0].hunks.len(), 1);
         let hunk = &state.files[0].hunks[0].clone();
 
-        state.line_cursor = hunk.start_line + 1;
+        state.main_screen.line_cursor = hunk.start_line + 1;
 
         // Unstage hunk
         let state_after_unstage = update_state(state, Some(Input::Character('\n')), 30, 80);
@@ -180,7 +180,7 @@ fn test_unstage_line() {
         assert_eq!(state.files[0].lines.len(), 9); // 5 header + 4 hunk lines
 
         // Let's unstage the "+changed" line. It's at index 7.
-        state.line_cursor = 7;
+        state.main_screen.line_cursor = 7;
 
         // Unstage line
         let state_after_unstage = update_state(state, Some(Input::Character('1')), 30, 80);
@@ -224,7 +224,7 @@ fn test_unstage_deleted_line() {
         assert_eq!(state.files[0].lines.len(), 9); // 5 header + 4 hunk lines
 
         // Let's unstage the "-line2" line. It's at index 6.
-        state.line_cursor = 6;
+        state.main_screen.line_cursor = 6;
 
         // Unstage line
         let state_after_unstage = update_state(state, Some(Input::Character('1')), 30, 80);
@@ -257,19 +257,19 @@ fn test_commit_mode_activation_and_commit() {
     run_test_with_pancurses(|_window| {
         let setup = TestSetup::new();
         let mut state = create_test_state(&setup);
-        state.file_cursor = 1;
+        state.main_screen.file_cursor = 1;
 
         // We start with 1 file, cursor at index 1.
         assert_eq!(state.files.len(), 1);
-        assert_eq!(state.file_cursor, 1);
-        assert!(!state.is_commit_mode);
+        assert_eq!(state.main_screen.file_cursor, 1);
+        assert!(!state.main_screen.is_commit_mode);
 
         // 1. Press KeyDown to move to the commit line.
         state = update_state(state, Some(Input::KeyDown), 30, 80);
 
         // 2. Assert that we are in commit mode.
-        assert_eq!(state.file_cursor, 2); // Cursor is on the commit line
-        assert!(state.is_commit_mode);
+        assert_eq!(state.main_screen.file_cursor, 2); // Cursor is on the commit line
+        assert!(state.main_screen.is_commit_mode);
 
         // 3. Type a commit message
         let msg = "Test commit";
@@ -278,7 +278,7 @@ fn test_commit_mode_activation_and_commit() {
         }
 
         // 4. Assert the message is correct
-        assert_eq!(state.commit_message, msg);
+        assert_eq!(state.main_screen.commit_message, msg);
 
         // 5. Press Enter to commit
         state = update_state(state, Some(Input::Character('\n')), 30, 80);
@@ -334,13 +334,13 @@ fn test_page_up_down_with_cursor() {
 
         // Page down
         state = update_state(state, Some(Input::Character(' ')), max_y, 80);
-        assert_eq!(state.diff_scroll, content_height);
-        assert_eq!(state.line_cursor, content_height);
+        assert_eq!(state.main_screen.diff_scroll, content_height);
+        assert_eq!(state.main_screen.line_cursor, content_height);
 
         // Page up
         state = update_state(state, Some(Input::Character('b')), max_y, 80);
-        assert_eq!(state.diff_scroll, 0);
-        assert_eq!(state.line_cursor, 0);
+        assert_eq!(state.main_screen.diff_scroll, 0);
+        assert_eq!(state.main_screen.line_cursor, 0);
     });
 }
 
@@ -406,15 +406,15 @@ fn test_commit_and_continue() {
 
         // We start with 1 file, cursor at index 1.
         assert_eq!(state.files.len(), 1);
-        assert_eq!(state.file_cursor, 1);
-        assert!(!state.is_commit_mode);
+        assert_eq!(state.main_screen.file_cursor, 1);
+        assert!(!state.main_screen.is_commit_mode);
 
         // 1. Press KeyDown to move to the commit line.
         state = update_state(state, Some(Input::KeyDown), 30, 80);
 
         // 2. Assert that we are in commit mode.
-        assert_eq!(state.file_cursor, 2); // Cursor is on the commit line
-        assert!(state.is_commit_mode);
+        assert_eq!(state.main_screen.file_cursor, 2); // Cursor is on the commit line
+        assert!(state.main_screen.is_commit_mode);
 
         // 3. Type a commit message
         let msg = "Test commit";
@@ -423,7 +423,7 @@ fn test_commit_and_continue() {
         }
 
         // 4. Assert the message is correct
-        assert_eq!(state.commit_message, msg);
+        assert_eq!(state.main_screen.commit_message, msg);
 
         // 5. Press Enter to commit
         state = update_state(state, Some(Input::Character('\n')), 30, 80);
@@ -432,7 +432,7 @@ fn test_commit_and_continue() {
         assert!(state.running);
 
         // 7. Assert the commit message is cleared
-        assert!(state.commit_message.is_empty());
+        assert!(state.main_screen.commit_message.is_empty());
 
         // 8. Assert the new file is staged
         assert_eq!(state.files.len(), 1);
@@ -449,15 +449,15 @@ fn test_commit_and_exit() {
 
         // We start with 1 file, cursor at index 1.
         assert_eq!(state.files.len(), 1);
-        assert_eq!(state.file_cursor, 1);
-        assert!(!state.is_commit_mode);
+        assert_eq!(state.main_screen.file_cursor, 1);
+        assert!(!state.main_screen.is_commit_mode);
 
         // 1. Press KeyDown to move to the commit line.
         state = update_state(state, Some(Input::KeyDown), 30, 80);
 
         // 2. Assert that we are in commit mode.
-        assert_eq!(state.file_cursor, 2); // Cursor is on the commit line
-        assert!(state.is_commit_mode);
+        assert_eq!(state.main_screen.file_cursor, 2); // Cursor is on the commit line
+        assert!(state.main_screen.is_commit_mode);
 
         // 3. Type a commit message
         let msg = "Test commit";
@@ -466,7 +466,7 @@ fn test_commit_and_exit() {
         }
 
         // 4. Assert the message is correct
-        assert_eq!(state.commit_message, msg);
+        assert_eq!(state.main_screen.commit_message, msg);
 
         // 5. Press Enter to commit
         state = update_state(state, Some(Input::Character('\n')), 30, 80);
@@ -496,7 +496,7 @@ fn test_commit_clears_history() {
         // Go to commit mode
         state = update_state(state, Some(Input::KeyDown), 30, 80);
         state = update_state(state, Some(Input::KeyDown), 30, 80);
-        assert!(state.is_commit_mode);
+        assert!(state.main_screen.is_commit_mode);
 
         // Type a commit message
         let msg = "Test commit";
@@ -720,23 +720,23 @@ fn test_unstage_second_file_moves_to_commit() {
         let files = get_diff(repo_path.clone());
         let mut state = AppState::new(repo_path.clone(), files);
         assert_eq!(state.files.len(), 2);
-        state.file_cursor = 2; // Selects b.txt
+        state.main_screen.file_cursor = 2; // Selects b.txt
 
         // 3. Unstage the file
         let state_after_unstage = update_state(state, Some(Input::Character('\n')), 30, 80);
 
         // 4. Check state
         assert_eq!(state_after_unstage.files.len(), 1);
-        assert_eq!(state_after_unstage.file_cursor, 2); // Cursor is on commit line
-        assert!(state_after_unstage.is_commit_mode); // This is the bug
+        assert_eq!(state_after_unstage.main_screen.file_cursor, 2); // Cursor is on commit line
+        assert!(state_after_unstage.main_screen.is_commit_mode); // This is the bug
 
         // 5. Simulate typing
         let state_after_typing =
             update_state(state_after_unstage, Some(Input::Character('c')), 30, 80);
 
         // 6. Assert fix
-        assert!(state_after_typing.is_commit_mode);
-        assert_eq!(state_after_typing.commit_message, "c");
+        assert!(state_after_typing.main_screen.is_commit_mode);
+        assert_eq!(state_after_typing.main_screen.commit_message, "c");
     });
 }
 
@@ -887,7 +887,7 @@ fn test_stage_hunk() {
             .iter()
             .position(|l| l.contains("MODIFIED"))
             .unwrap();
-        state.line_cursor = hunk_line;
+        state.main_screen.line_cursor = hunk_line;
 
         // Press Enter to stage the hunk
         handle_unstaged_view_input(&mut state, Input::Character('\n'), 30);
@@ -956,9 +956,9 @@ fn test_undo_redo_restores_cursor_position() {
         let mut state = create_test_state(&setup);
 
         // 1. Set an initial cursor position
-        state.file_cursor = 1;
-        state.line_cursor = 7; // On "+changed" line
-        state.diff_scroll = 5;
+        state.main_screen.file_cursor = 1;
+        state.main_screen.line_cursor = 7; // On "+changed" line
+        state.main_screen.diff_scroll = 5;
         state.screen = git_full_commit::app_state::Screen::Main;
 
         let cursor_before_action =
@@ -968,9 +968,9 @@ fn test_undo_redo_restores_cursor_position() {
         state = update_state(state, Some(Input::Character('1')), 30, 80);
 
         // 3. Change cursor position
-        state.file_cursor = 0;
-        state.line_cursor = 0;
-        state.diff_scroll = 0;
+        state.main_screen.file_cursor = 0;
+        state.main_screen.line_cursor = 0;
+        state.main_screen.diff_scroll = 0;
         let cursor_before_undo = git_full_commit::cursor_state::CursorState::from_app_state(&state);
 
         // 4. Undo
@@ -1000,7 +1000,7 @@ fn test_undo_redo_restores_cursor_position() {
         );
         // line_cursor is not restored on redo of unstaging a line, as the file content changes.
         // This is acceptable. The main thing is file_cursor and screen.
-        // assert_eq!(cursor_after_redo.line_cursor, cursor_before_undo.line_cursor);
+        // assert_eq!(cursor_after_redo.main_screen.line_cursor, cursor_before_undo.main_screen.line_cursor);
         assert_eq!(cursor_after_redo.scroll, cursor_before_undo.scroll);
         assert_eq!(cursor_after_redo.screen, cursor_before_undo.screen);
     });
@@ -1026,7 +1026,7 @@ fn test_stage_line() {
             .iter()
             .position(|l| l.contains("ADDED"))
             .unwrap();
-        state.line_cursor = added_line_index;
+        state.main_screen.line_cursor = added_line_index;
 
         // Press '1' to stage the line
         handle_unstaged_view_input(&mut state, Input::Character('1'), 30);

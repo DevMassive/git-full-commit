@@ -27,7 +27,7 @@ fn render_main_view(window: &Window, state: &AppState) {
     let mut carret_x = 0;
 
     for i in 0..file_list_height {
-        let item_index = state.file_list_scroll + i;
+        let item_index = state.main_screen.file_list_scroll + i;
         if item_index >= file_list_total_items {
             break;
         }
@@ -35,7 +35,7 @@ fn render_main_view(window: &Window, state: &AppState) {
 
         if item_index == 0 {
             // Render "Staged changes"
-            let is_selected = state.file_cursor == 0;
+            let is_selected = state.main_screen.file_cursor == 0;
             let pair = if is_selected { 5 } else { 1 };
             window.attron(COLOR_PAIR(pair));
             if is_selected {
@@ -45,7 +45,7 @@ fn render_main_view(window: &Window, state: &AppState) {
             }
             window.mv(line_y, 0);
             let mut staged_changes_text = " Staged changes".to_string();
-            if state.has_unstaged_changes {
+            if state.main_screen.has_unstaged_changes {
                 staged_changes_text.push_str(" (press ENTER to view)");
             }
             window.addstr(&staged_changes_text);
@@ -53,7 +53,7 @@ fn render_main_view(window: &Window, state: &AppState) {
         } else if item_index > 0 && item_index <= num_files {
             let file_index = item_index - 1;
             let file = &state.files[file_index];
-            let is_selected = state.file_cursor == item_index;
+            let is_selected = state.main_screen.file_cursor == item_index;
             let pair = if is_selected { 5 } else { 1 };
             let status_pair = if is_selected { 6 } else { 2 };
 
@@ -83,7 +83,7 @@ fn render_main_view(window: &Window, state: &AppState) {
             window.attroff(COLOR_PAIR(pair));
         } else if item_index == num_files + 1 {
             // Render commit message line
-            let is_selected = state.file_cursor == num_files + 1;
+            let is_selected = state.main_screen.file_cursor == num_files + 1;
             let pair = if is_selected { 5 } else { 1 };
             window.attron(COLOR_PAIR(pair));
             if is_selected {
@@ -93,10 +93,10 @@ fn render_main_view(window: &Window, state: &AppState) {
             }
             window.mv(line_y, 0);
 
-            let (prefix, message) = if state.is_amend_mode {
-                (" o ", &state.amend_message)
+            let (prefix, message) = if state.main_screen.is_amend_mode {
+                (" o ", &state.main_screen.amend_message)
             } else {
-                (" o ", &state.commit_message)
+                (" o ", &state.main_screen.commit_message)
             };
 
             window.addstr(prefix);
@@ -112,14 +112,14 @@ fn render_main_view(window: &Window, state: &AppState) {
 
             let commit_line_y = line_y;
             let prefix_width = prefix.width();
-            let message_before_cursor: String = message.chars().take(state.commit_cursor).collect();
+            let message_before_cursor: String = message.chars().take(state.main_screen.commit_cursor).collect();
             let cursor_display_pos = prefix_width + message_before_cursor.width();
 
             carret_y = commit_line_y;
             carret_x = cursor_display_pos as i32;
         } else if item_index == num_files + 2 {
             // Render previous commit info
-            let is_selected = state.file_cursor == num_files + 2;
+            let is_selected = state.main_screen.file_cursor == num_files + 2;
             let pair = if is_selected { 5 } else { 1 };
             window.attron(COLOR_PAIR(pair));
             if is_selected {
@@ -128,7 +128,7 @@ fn render_main_view(window: &Window, state: &AppState) {
                 }
             }
             window.mv(line_y, 0);
-            if state.is_amend_mode {
+            if state.main_screen.is_amend_mode {
                 window.addstr(" |");
             } else {
                 let status = if state.previous_commit_is_on_remote {
@@ -153,9 +153,9 @@ fn render_main_view(window: &Window, state: &AppState) {
     let content_height = (max_y as usize).saturating_sub(header_height);
     let cursor_position = state.get_cursor_line_index();
 
-    if state.file_cursor == 0 {
+    if state.main_screen.file_cursor == 0 {
         // "Staged changes" is selected, do nothing for now.
-    } else if state.file_cursor == num_files + 2 {
+    } else if state.main_screen.file_cursor == num_files + 2 {
         // Render previous commit diff
         let all_lines: Vec<String> = state
             .previous_commit_files
@@ -180,11 +180,11 @@ fn render_main_view(window: &Window, state: &AppState) {
 
             for (i, line) in all_lines
                 .iter()
-                .skip(state.diff_scroll)
+                .skip(state.main_screen.diff_scroll)
                 .take(content_height)
                 .enumerate()
             {
-                let line_index_in_file = i + state.diff_scroll;
+                let line_index_in_file = i + state.main_screen.diff_scroll;
                 let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
                 render_line(
                     window,
@@ -195,26 +195,26 @@ fn render_main_view(window: &Window, state: &AppState) {
                     cursor_position,
                     old_line_num,
                     new_line_num,
-                    state.horizontal_scroll,
-                    state.is_diff_cursor_active,
+                    state.main_screen.horizontal_scroll,
+                    state.main_screen.is_diff_cursor_active,
                 );
             }
         }
-    } else if state.file_cursor > 0 && state.file_cursor <= num_files {
-        let selected_file = &state.files[state.file_cursor - 1];
+    } else if state.main_screen.file_cursor > 0 && state.main_screen.file_cursor <= num_files {
+        let selected_file = &state.files[state.main_screen.file_cursor - 1];
         render_diff_view(
             window,
             selected_file,
             content_height,
-            state.diff_scroll,
-            state.horizontal_scroll,
+            state.main_screen.diff_scroll,
+            state.main_screen.horizontal_scroll,
             header_height,
             cursor_position,
-            state.is_diff_cursor_active,
+            state.main_screen.is_diff_cursor_active,
         );
     }
 
-    if state.file_cursor == num_files + 1 {
+    if state.main_screen.file_cursor == num_files + 1 {
         #[cfg(not(test))]
         pancurses::curs_set(1);
         window.mv(carret_y, carret_x);

@@ -88,7 +88,7 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
                 state.unstaged_diff_scroll,
                 state.unstaged_horizontal_scroll,
                 file_list_height + 1,
-                state.line_cursor,
+                state.main_screen.line_cursor,
                 state.is_unstaged_diff_cursor_active,
             );
         }
@@ -127,7 +127,7 @@ pub fn render_unstaged_view(window: &Window, state: &AppState) {
                 state.unstaged_diff_scroll,
                 state.unstaged_horizontal_scroll,
                 file_list_height + 1,
-                state.line_cursor,
+                state.main_screen.line_cursor,
                 state.is_unstaged_diff_cursor_active,
             );
         }
@@ -165,23 +165,23 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
 
             if let Some(file_name) = selected_file_name {
                 if let Some(index) = state.files.iter().position(|f| f.file_name == file_name) {
-                    state.file_cursor = index + 1;
+                    state.main_screen.file_cursor = index + 1;
                 }
             }
 
             state.screen = Screen::Main;
-            state.line_cursor = 0;
-            state.diff_scroll = 0;
+            state.main_screen.line_cursor = 0;
+            state.main_screen.diff_scroll = 0;
         }
         Input::Character('q') | Input::Character('Q') => {
             state.screen = Screen::Main;
-            state.line_cursor = 0;
-            state.diff_scroll = 0;
+            state.main_screen.line_cursor = 0;
+            state.main_screen.diff_scroll = 0;
         }
         Input::KeyUp => {
             state.unstaged_cursor = state.unstaged_cursor.saturating_sub(1);
             state.unstaged_diff_scroll = 0;
-            state.line_cursor = 0;
+            state.main_screen.line_cursor = 0;
             state.is_unstaged_diff_cursor_active = false;
             if state.unstaged_cursor < state.unstaged_scroll {
                 state.unstaged_scroll = state.unstaged_cursor;
@@ -193,7 +193,7 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                 .saturating_add(1)
                 .min(unstaged_items_count - 1);
             state.unstaged_diff_scroll = 0;
-            state.line_cursor = 0;
+            state.main_screen.line_cursor = 0;
             state.is_unstaged_diff_cursor_active = false;
             if state.unstaged_cursor >= state.unstaged_scroll + file_list_height {
                 state.unstaged_scroll = state.unstaged_cursor - file_list_height + 1;
@@ -201,9 +201,9 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
         }
         Input::Character('k') => {
             state.is_unstaged_diff_cursor_active = true;
-            state.line_cursor = state.line_cursor.saturating_sub(1);
-            if state.line_cursor < state.unstaged_diff_scroll {
-                state.unstaged_diff_scroll = state.line_cursor;
+            state.main_screen.line_cursor = state.main_screen.line_cursor.saturating_sub(1);
+            if state.main_screen.line_cursor < state.unstaged_diff_scroll {
+                state.unstaged_diff_scroll = state.main_screen.line_cursor;
             }
         }
         Input::Character('j') => {
@@ -236,11 +236,11 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                 0
             };
 
-            if state.line_cursor < file_lines_count.saturating_sub(1) {
-                state.line_cursor += 1;
+            if state.main_screen.line_cursor < file_lines_count.saturating_sub(1) {
+                state.main_screen.line_cursor += 1;
                 let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
-                if state.line_cursor >= state.unstaged_diff_scroll + content_height {
-                    state.unstaged_diff_scroll = state.line_cursor - content_height + 1;
+                if state.main_screen.line_cursor >= state.unstaged_diff_scroll + content_height {
+                    state.unstaged_diff_scroll = state.main_screen.line_cursor - content_height + 1;
                 }
             }
         }
@@ -259,27 +259,27 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                 let file_index = state.unstaged_cursor - 1;
                 if let Some(file) = state.unstaged_files.get(file_index).cloned() {
                     if state.is_unstaged_diff_cursor_active {
-                        if let Some(hunk) = git_patch::find_hunk(&file, state.line_cursor) {
+                        if let Some(hunk) = git_patch::find_hunk(&file, state.main_screen.line_cursor) {
                             let patch = git_patch::create_stage_hunk_patch(&file, hunk);
                             let command =
                                 Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
 
-                            let old_line_cursor = state.line_cursor;
+                            let old_line_cursor = state.main_screen.line_cursor;
                             state.execute_and_refresh(command);
 
                             if let Some(updated_file) = state.get_unstaged_file() {
-                                state.line_cursor =
+                                state.main_screen.line_cursor =
                                     old_line_cursor.min(updated_file.lines.len().saturating_sub(1));
                                 let (file_list_height, _) = state.unstaged_header_height(max_y);
                                 let content_height =
                                     (max_y as usize).saturating_sub(file_list_height + 1);
-                                if state.line_cursor >= state.unstaged_diff_scroll + content_height
+                                if state.main_screen.line_cursor >= state.unstaged_diff_scroll + content_height
                                 {
                                     state.unstaged_diff_scroll =
-                                        state.line_cursor - content_height + 1;
+                                        state.main_screen.line_cursor - content_height + 1;
                                 }
                             } else {
-                                state.line_cursor = 0;
+                                state.main_screen.line_cursor = 0;
                             }
                         } else {
                             // No hunk found, stage the whole file as a fallback
@@ -314,25 +314,25 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
                 let file_index = state.unstaged_cursor - 1;
                 if let Some(file) = state.unstaged_files.get(file_index) {
-                    if let Some(patch) = git_patch::create_stage_line_patch(file, state.line_cursor)
+                    if let Some(patch) = git_patch::create_stage_line_patch(file, state.main_screen.line_cursor)
                     {
                         let command =
                             Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
 
-                        let old_line_cursor = state.line_cursor;
+                        let old_line_cursor = state.main_screen.line_cursor;
                         state.execute_and_refresh(command);
 
                         if let Some(updated_file) = state.get_unstaged_file() {
-                            state.line_cursor =
+                            state.main_screen.line_cursor =
                                 old_line_cursor.min(updated_file.lines.len().saturating_sub(1));
                             let (file_list_height, _) = state.unstaged_header_height(max_y);
                             let content_height =
                                 (max_y as usize).saturating_sub(file_list_height + 1);
-                            if state.line_cursor >= state.unstaged_diff_scroll + content_height {
-                                state.unstaged_diff_scroll = state.line_cursor - content_height + 1;
+                            if state.main_screen.line_cursor >= state.unstaged_diff_scroll + content_height {
+                                state.unstaged_diff_scroll = state.main_screen.line_cursor - content_height + 1;
                             }
                         } else {
-                            state.line_cursor = 0;
+                            state.main_screen.line_cursor = 0;
                         }
                     }
                 }
@@ -345,7 +345,7 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             if state.unstaged_cursor > 0 && state.unstaged_cursor <= unstaged_file_count {
                 let file_index = state.unstaged_cursor - 1;
                 if let Some(file) = state.unstaged_files.get(file_index) {
-                    let line_number = git_patch::get_line_number(file, state.line_cursor);
+                    let line_number = git_patch::get_line_number(file, state.main_screen.line_cursor);
                     let file_path = state.repo_path.join(&file.file_name);
                     if let Some(path_str) = file_path.to_str() {
                         state.editor_request = Some(EditorRequest {
@@ -376,7 +376,7 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
                 let file_index = state.unstaged_cursor - 1;
                 if let Some(file) = state.unstaged_files.get(file_index).cloned() {
                     if state.is_unstaged_diff_cursor_active {
-                        if let Some(hunk) = git_patch::find_hunk(&file, state.line_cursor) {
+                        if let Some(hunk) = git_patch::find_hunk(&file, state.main_screen.line_cursor) {
                             let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
                             let command = Box::new(DiscardUnstagedHunkCommand::new(
                                 state.repo_path.clone(),

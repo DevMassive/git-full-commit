@@ -55,12 +55,12 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
     let header_height = state.main_header_height(max_y).0;
     let content_height = (max_y as usize).saturating_sub(header_height);
     let num_files = state.files.len();
-    let lines_count = if state.file_cursor > 0 && state.file_cursor <= num_files {
+    let lines_count = if state.main_screen.file_cursor > 0 && state.main_screen.file_cursor <= num_files {
         state
             .files
-            .get(state.file_cursor - 1)
+            .get(state.main_screen.file_cursor - 1)
             .map_or(0, |f| f.lines.len())
-    } else if state.file_cursor == num_files + 2 {
+    } else if state.main_screen.file_cursor == num_files + 2 {
         state
             .previous_commit_files
             .iter()
@@ -71,15 +71,15 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
     };
 
     let (new_line_cursor, new_scroll) = scroll_content(
-        state.line_cursor,
-        state.diff_scroll,
+        state.main_screen.line_cursor,
+        state.main_screen.diff_scroll,
         content_height,
         lines_count,
         direction,
         amount,
     );
-    state.line_cursor = new_line_cursor;
-    state.diff_scroll = new_scroll;
+    state.main_screen.line_cursor = new_line_cursor;
+    state.main_screen.diff_scroll = new_scroll;
 }
 
 fn scroll_unstaged_diff_view(
@@ -120,14 +120,14 @@ fn scroll_unstaged_diff_view(
         let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
 
         let (new_line_cursor, new_scroll) = scroll_content(
-            state.line_cursor,
+            state.main_screen.line_cursor,
             state.unstaged_diff_scroll,
             content_height,
             lines_count,
             direction,
             amount,
         );
-        state.line_cursor = new_line_cursor;
+        state.main_screen.line_cursor = new_line_cursor;
         state.unstaged_diff_scroll = new_scroll;
     }
 }

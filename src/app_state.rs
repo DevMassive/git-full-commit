@@ -18,27 +18,49 @@ pub struct EditorRequest {
     pub line_number: Option<usize>,
 }
 
-pub struct AppState {
-    pub repo_path: PathBuf,
+pub struct MainScreenState {
     pub diff_scroll: usize,
     pub file_list_scroll: usize,
     pub horizontal_scroll: usize,
-    pub running: bool,
     pub file_cursor: usize,
     pub line_cursor: usize,
-    pub files: Vec<FileDiff>,
-    pub command_history: CommandHistory,
     pub commit_message: String,
     pub is_commit_mode: bool,
     pub commit_cursor: usize,
     pub amend_message: String,
     pub is_amend_mode: bool,
+    pub is_diff_cursor_active: bool,
+    pub has_unstaged_changes: bool,
+}
+impl Default for MainScreenState {
+    fn default() -> Self {
+        Self {
+            diff_scroll: 0,
+            file_list_scroll: 0,
+            horizontal_scroll: 0,
+            file_cursor: 0,
+            line_cursor: 0,
+            commit_message: String::new(),
+            is_commit_mode: false,
+            commit_cursor: 0,
+            amend_message: String::new(),
+            is_amend_mode: false,
+            is_diff_cursor_active: false,
+            has_unstaged_changes: false,
+        }
+    }
+}
+
+pub struct AppState {
+    pub repo_path: PathBuf,
+    pub main_screen: MainScreenState,
+    pub running: bool,
+    pub files: Vec<FileDiff>,
+    pub command_history: CommandHistory,
     pub previous_commit_hash: String,
     pub previous_commit_message: String,
     pub previous_commit_is_on_remote: bool,
     pub previous_commit_files: Vec<FileDiff>,
-    pub is_diff_cursor_active: bool,
-    pub has_unstaged_changes: bool,
     pub screen: Screen,
     pub unstaged_files: Vec<FileDiff>,
     pub untracked_files: Vec<String>,
@@ -62,27 +84,20 @@ impl AppState {
         let has_unstaged_changes = git::has_unstaged_changes(&repo_path).unwrap_or(false);
         let unstaged_files = get_unstaged_diff(&repo_path);
         let untracked_files = get_untracked_files(&repo_path).unwrap_or_default();
+        let mut main_screen = MainScreenState::default();
+        main_screen.commit_message = commit_message;
+        main_screen.file_cursor = if files.len() > 0 { 1 } else { 0 };
+        main_screen.has_unstaged_changes = has_unstaged_changes;
         Self {
             repo_path,
-            diff_scroll: 0,
-            file_list_scroll: 0,
-            horizontal_scroll: 0,
+            main_screen,
             running: true,
-            file_cursor: 1,
-            line_cursor: 0,
             files,
             command_history: CommandHistory::new(),
-            commit_message,
-            is_commit_mode: false,
-            commit_cursor: 0,
-            amend_message: String::new(),
-            is_amend_mode: false,
             previous_commit_hash,
             previous_commit_message,
             previous_commit_is_on_remote,
             previous_commit_files,
-            is_diff_cursor_active: false,
-            has_unstaged_changes,
             screen: Screen::Main,
             unstaged_files,
             untracked_files,
@@ -97,21 +112,21 @@ impl AppState {
 
     pub fn get_cursor_line_index(&self) -> usize {
         let num_files = self.files.len();
-        if self.file_cursor == 0
-            || (self.file_cursor > 0 && self.file_cursor <= num_files)
-            || self.file_cursor == num_files + 2
+        if self.main_screen.file_cursor == 0
+            || (self.main_screen.file_cursor > 0 && self.main_screen.file_cursor <= num_files)
+            || self.main_screen.file_cursor == num_files + 2
         {
-            self.line_cursor
+            self.main_screen.line_cursor
         } else {
             0
         }
     }
 
     pub fn refresh_diff(&mut self) {
-        let old_file_cursor = self.file_cursor;
-        let old_line_cursor = self.line_cursor;
-        let old_scroll = self.diff_scroll;
-        let old_file_list_scroll = self.file_list_scroll;
+        let old_file_cursor = self.main_screen.file_cursor;
+        let old_line_cursor = self.main_screen.line_cursor;
+        let old_scroll = self.main_screen.diff_scroll;
+        let old_file_list_scroll = self.main_screen.file_list_scroll;
         let old_unstaged_cursor = self.unstaged_cursor;
         let old_unstaged_scroll = self.unstaged_scroll;
         let old_unstaged_diff_scroll = self.unstaged_diff_scroll;
@@ -123,26 +138,27 @@ impl AppState {
             is_commit_on_remote(&self.repo_path, &self.previous_commit_hash).unwrap_or(false);
         self.previous_commit_files =
             get_previous_commit_diff(&self.repo_path).unwrap_or_else(|_| Vec::new());
-        self.has_unstaged_changes = git::has_unstaged_changes(&self.repo_path).unwrap_or(false);
+        self.main_screen.has_unstaged_changes =
+            git::has_unstaged_changes(&self.repo_path).unwrap_or(false);
         self.unstaged_files = get_unstaged_diff(&self.repo_path);
         self.untracked_files = get_untracked_files(&self.repo_path).unwrap_or_default();
 
         if self.files.is_empty() {
-            self.file_cursor = 0;
-            self.line_cursor = 0;
-            self.diff_scroll = 0;
+            self.main_screen.file_cursor = 0;
+            self.main_screen.line_cursor = 0;
+            self.main_screen.diff_scroll = 0;
         } else {
-            self.file_cursor = old_file_cursor.min(self.files.len() + 1);
+            self.main_screen.file_cursor = old_file_cursor.min(self.files.len() + 1);
             if let Some(file) = self.current_file() {
                 let max_line = file.lines.len().saturating_sub(1);
-                self.line_cursor = old_line_cursor.min(max_line);
-                self.diff_scroll = old_scroll.min(max_line);
+                self.main_screen.line_cursor = old_line_cursor.min(max_line);
+                self.main_screen.diff_scroll = old_scroll.min(max_line);
             } else {
-                self.line_cursor = 0;
-                self.diff_scroll = 0;
+                self.main_screen.line_cursor = 0;
+                self.main_screen.diff_scroll = 0;
             }
         }
-        self.file_list_scroll = old_file_list_scroll;
+        self.main_screen.file_list_scroll = old_file_list_scroll;
 
         let unstaged_file_count = self.unstaged_files.len();
         let untracked_file_count = self.untracked_files.len();
@@ -159,8 +175,8 @@ impl AppState {
     }
 
     pub fn current_file(&self) -> Option<&FileDiff> {
-        if self.file_cursor > 0 && self.file_cursor <= self.files.len() {
-            self.files.get(self.file_cursor - 1)
+        if self.main_screen.file_cursor > 0 && self.main_screen.file_cursor <= self.files.len() {
+            self.files.get(self.main_screen.file_cursor - 1)
         } else {
             None
         }
