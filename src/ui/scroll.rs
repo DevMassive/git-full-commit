@@ -61,9 +61,9 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
                 .files
                 .get(state.main_screen.file_cursor - 1)
                 .map_or(0, |f| f.lines.len())
-        } else if state.main_screen.file_cursor == num_files + 2 {
+        } else if state.main_screen.file_cursor > num_files + 1 {
             state
-                .previous_commit_files
+                .selected_commit_files
                 .iter()
                 .map(|f| f.lines.len())
                 .sum()

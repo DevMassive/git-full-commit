@@ -2,8 +2,8 @@ use crate::command::{Command, CommandHistory};
 use crate::commit_storage;
 use crate::cursor_state::CursorState;
 use crate::git::{
-    self, FileDiff, get_diff, get_previous_commit_diff, get_previous_commit_info,
-    get_unstaged_diff, get_untracked_files, is_commit_on_remote,
+    self, CommitInfo, FileDiff, get_commit_diff, get_diff, get_local_commits, get_unstaged_diff,
+    get_untracked_files,
 };
 use crate::ui::main_screen::ListItem as MainScreenListItem;
 use crate::ui::unstaged_screen::ListItem as UnstagedScreenListItem;
@@ -56,10 +56,8 @@ pub struct AppState {
     pub running: bool,
     pub files: Vec<FileDiff>,
     pub command_history: CommandHistory,
-    pub previous_commit_hash: String,
-    pub previous_commit_message: String,
-    pub previous_commit_is_on_remote: bool,
-    pub previous_commit_files: Vec<FileDiff>,
+    pub previous_commits: Vec<CommitInfo>,
+    pub selected_commit_files: Vec<FileDiff>,
     pub screen: Screen,
     pub editor_request: Option<EditorRequest>,
 }
@@ -67,12 +65,12 @@ impl AppState {
     pub fn new(repo_path: PathBuf, files: Vec<FileDiff>) -> Self {
         let commit_message =
             commit_storage::load_commit_message(&repo_path).unwrap_or_else(|_| String::new());
-        let (previous_commit_hash, previous_commit_message) =
-            get_previous_commit_info(&repo_path).unwrap_or((String::new(), String::new()));
-        let previous_commit_is_on_remote =
-            is_commit_on_remote(&repo_path, &previous_commit_hash).unwrap_or(false);
-        let previous_commit_files =
-            get_previous_commit_diff(&repo_path).unwrap_or_else(|_| Vec::new());
+        let previous_commits = get_local_commits(&repo_path).unwrap_or_default();
+        let selected_commit_files = previous_commits
+            .first()
+            .map(|c| get_commit_diff(&repo_path, &c.hash).unwrap_or_default())
+            .unwrap_or_default();
+
         let has_unstaged_changes = git::has_unstaged_changes(&repo_path).unwrap_or(false);
         let unstaged_files = get_unstaged_diff(&repo_path);
         let untracked_files = get_untracked_files(&repo_path).unwrap_or_default();
@@ -80,11 +78,8 @@ impl AppState {
         let mut main_screen = MainScreenState::default();
         main_screen.commit_message = commit_message;
         main_screen.has_unstaged_changes = has_unstaged_changes;
-        main_screen.list_items = Self::build_main_screen_list_items(
-            &files,
-            &previous_commit_message,
-            previous_commit_is_on_remote,
-        );
+        main_screen.list_items =
+            Self::build_main_screen_list_items(&files, &previous_commits);
         main_screen.file_cursor = if !files.is_empty() { 1 } else { 0 };
 
         let mut unstaged_screen = UnstagedScreenState::default();
@@ -100,10 +95,8 @@ impl AppState {
             running: true,
             files,
             command_history: CommandHistory::new(),
-            previous_commit_hash,
-            previous_commit_message,
-            previous_commit_is_on_remote,
-            previous_commit_files,
+            previous_commits,
+            selected_commit_files,
             screen: Screen::Main,
             editor_request: None,
         }
@@ -111,8 +104,7 @@ impl AppState {
 
     fn build_main_screen_list_items(
         files: &[FileDiff],
-        previous_commit_message: &str,
-        previous_commit_is_on_remote: bool,
+        previous_commits: &[CommitInfo],
     ) -> Vec<MainScreenListItem> {
         let mut items = Vec::new();
         items.push(MainScreenListItem::StagedChangesHeader);
@@ -120,10 +112,13 @@ impl AppState {
             items.push(MainScreenListItem::File(file.clone()));
         }
         items.push(MainScreenListItem::CommitMessageInput);
-        items.push(MainScreenListItem::PreviousCommitInfo {
-            message: previous_commit_message.to_string(),
-            is_on_remote: previous_commit_is_on_remote,
-        });
+        for commit in previous_commits {
+            items.push(MainScreenListItem::PreviousCommitInfo {
+                hash: commit.hash.clone(),
+                message: commit.message.clone(),
+                is_on_remote: commit.is_on_remote,
+            });
+        }
         items
     }
 
@@ -169,26 +164,21 @@ impl AppState {
         let old_unstaged_diff_scroll = self.unstaged_screen.unstaged_diff_scroll;
 
         self.files = get_diff(self.repo_path.clone());
-        (self.previous_commit_hash, self.previous_commit_message) =
-            get_previous_commit_info(&self.repo_path).unwrap_or((String::new(), String::new()));
-        self.previous_commit_is_on_remote =
-            is_commit_on_remote(&self.repo_path, &self.previous_commit_hash).unwrap_or(false);
-        self.previous_commit_files =
-            get_previous_commit_diff(&self.repo_path).unwrap_or_else(|_| Vec::new());
+        self.previous_commits = get_local_commits(&self.repo_path).unwrap_or_default();
+
         self.main_screen.has_unstaged_changes =
             git::has_unstaged_changes(&self.repo_path).unwrap_or(false);
         let unstaged_files = get_unstaged_diff(&self.repo_path);
         let untracked_files = get_untracked_files(&self.repo_path).unwrap_or_default();
 
-        self.main_screen.list_items = Self::build_main_screen_list_items(
-            &self.files,
-            &self.previous_commit_message,
-            self.previous_commit_is_on_remote,
-        );
+        self.main_screen.list_items =
+            Self::build_main_screen_list_items(&self.files, &self.previous_commits);
         self.unstaged_screen.list_items =
             Self::build_unstaged_screen_list_items(&unstaged_files, &untracked_files);
         self.unstaged_screen.unstaged_files = unstaged_files;
         self.unstaged_screen.untracked_files = untracked_files;
+
+        self.update_selected_commit_diff();
 
         if self.files.is_empty() {
             self.main_screen.file_cursor = 0;
@@ -227,6 +217,19 @@ impl AppState {
         let cursor_state = CursorState::from_app_state(self);
         self.command_history.execute(command, cursor_state);
         self.refresh_diff();
+    }
+
+    pub fn update_selected_commit_diff(&mut self) {
+        if let Some(item) = self.current_main_item() {
+            if let MainScreenListItem::PreviousCommitInfo { hash, .. } = item {
+                self.selected_commit_files =
+                    get_commit_diff(&self.repo_path, hash).unwrap_or_default();
+            } else {
+                self.selected_commit_files.clear();
+            }
+        } else {
+            self.selected_commit_files.clear();
+        }
     }
 
     pub fn current_main_item(&self) -> Option<&MainScreenListItem> {

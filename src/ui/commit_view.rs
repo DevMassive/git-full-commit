@@ -81,8 +81,11 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
             if state.main_screen.is_amend_mode {
                 // Switched to amend mode
                 if state.main_screen.amend_message.is_empty() {
-                    state.main_screen.amend_message =
-                        git::get_previous_commit_message(&state.repo_path).unwrap_or_default();
+                    state.main_screen.amend_message = state
+                        .previous_commits
+                        .first()
+                        .map(|c| c.message.clone())
+                        .unwrap_or_default();
                 }
                 state.main_screen.commit_cursor = state.main_screen.amend_message.chars().count();
             } else {
@@ -111,8 +114,11 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
                 state.command_history.clear();
             }
 
-            state.main_screen.amend_message =
-                git::get_previous_commit_message(&state.repo_path).unwrap_or_default();
+            state.main_screen.amend_message = state
+                .previous_commits
+                .first()
+                .map(|c| c.message.clone())
+                .unwrap_or_default();
 
             git::add_all(&state.repo_path).expect("Failed to git add -A.");
 

@@ -94,7 +94,7 @@ fn create_state_with_files(num_files: usize) -> AppState {
         .collect();
 
     let mut state = AppState::new(PathBuf::from("/tmp"), files);
-    state.previous_commit_files = vec![];
+    state.selected_commit_files = vec![];
     state
 }
 
@@ -173,7 +173,7 @@ fn create_test_state(
     state.main_screen.line_cursor = line_cursor;
     state.main_screen.diff_scroll = scroll;
     // Mock previous commit files to avoid git command execution in tests
-    state.previous_commit_files = vec![];
+    state.selected_commit_files = vec![];
     state
 }
 
@@ -815,6 +815,7 @@ fn test_tab_screen_switching_and_cursor_sync() {
         crate::ui::main_screen::ListItem::File(staged_file2.clone()),
         crate::ui::main_screen::ListItem::CommitMessageInput,
         crate::ui::main_screen::ListItem::PreviousCommitInfo {
+            hash: String::new(),
             message: String::new(),
             is_on_remote: false,
         },
@@ -895,6 +896,7 @@ fn test_open_editor_main_view_with_line() {
         crate::ui::main_screen::ListItem::File(file.clone()),
         crate::ui::main_screen::ListItem::CommitMessageInput,
         crate::ui::main_screen::ListItem::PreviousCommitInfo {
+            hash: String::new(),
             message: String::new(),
             is_on_remote: false,
         },

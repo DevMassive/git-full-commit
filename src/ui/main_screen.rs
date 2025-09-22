@@ -12,7 +12,7 @@ use crate::ui::scroll;
 use pancurses::Input;
 
 use crate::git::FileStatus;
-use pancurses::{COLOR_PAIR, Window};
+use pancurses::{A_DIM, COLOR_PAIR, Window};
 
 use crate::git_patch;
 
@@ -21,7 +21,11 @@ pub enum ListItem {
     StagedChangesHeader,
     File(crate::git::FileDiff),
     CommitMessageInput,
-    PreviousCommitInfo { message: String, is_on_remote: bool },
+    PreviousCommitInfo {
+        hash: String,
+        message: String,
+        is_on_remote: bool,
+    },
 }
 
 pub fn render(window: &Window, state: &AppState) {
@@ -101,6 +105,7 @@ pub fn render(window: &Window, state: &AppState) {
             ListItem::PreviousCommitInfo {
                 message,
                 is_on_remote,
+                ..
             } => {
                 let pair = if is_selected { 5 } else { 1 };
                 window.attron(COLOR_PAIR(pair));
@@ -142,7 +147,7 @@ pub fn render(window: &Window, state: &AppState) {
 
             diff_view::render_multiple(
                 window,
-                &state.previous_commit_files,
+                &state.selected_commit_files,
                 content_height,
                 state.main_screen.diff_scroll,
                 state.main_screen.horizontal_scroll,
@@ -325,6 +330,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             if state.main_screen.file_cursor < state.main_screen.file_list_scroll {
                 state.main_screen.file_list_scroll = state.main_screen.file_cursor;
             }
+            state.update_selected_commit_diff();
         }
         Input::KeyDown | Input::Character('\u{e}') => {
             if state.main_screen.file_cursor < state.main_screen.list_items.len() - 1 {
@@ -342,6 +348,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                 state.main_screen.file_list_scroll =
                     state.main_screen.file_cursor - file_list_height + 1;
             }
+            state.update_selected_commit_diff();
         }
         Input::Character('k') => {
             state.main_screen.is_diff_cursor_active = true;
@@ -360,7 +367,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             {
                 Some(ListItem::File(file)) => file.lines.len(),
                 Some(ListItem::PreviousCommitInfo { .. }) => state
-                    .previous_commit_files
+                    .selected_commit_files
                     .iter()
                     .map(|f| f.lines.len())
                     .sum(),
