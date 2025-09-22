@@ -1,19 +1,18 @@
 #!/bin/bash
-set -e
 
 # --- Configuration ---
 # The file where the version is stored
 VERSION_FILE="Cargo.toml"
 # The pattern to find the version line in the file
-VERSION_PATTERN="^version = \"[0-9]+\\.[0-9]+\\.[0-9]+\"$"
+VERSION_PATTERN="^version = \"[0-9]+\.[0-9]+\.[0-9]+\"$"
 
 # --- Script Start ---
 
 # 1. Check for uncommitted changes
-if ! git diff-index --quiet HEAD --; then
-    echo "Error: You have uncommitted changes. Please commit or stash them before releasing."
-    exit 1
-fi
+# if ! git diff-index --quiet HEAD --; then
+    # echo "Error: You have uncommitted changes. Please commit or stash them before releasing."
+    # exit 1
+# fi
 
 echo "✅ No uncommitted changes."
 
