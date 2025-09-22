@@ -100,16 +100,7 @@ pub fn render(window: &Window, state: &AppState) {
             }
             ListItem::CommitMessageInput => {
                 if state.main_screen.is_amend_mode {
-                    let pair = if is_selected { 5 } else { 1 };
-                    window.attron(COLOR_PAIR(pair));
-                    if is_selected {
-                        for x in 0..max_x {
-                            window.mvaddch(line_y, x, ' ');
-                        }
-                    }
-                    window.mv(line_y, 0);
-                    window.addstr(" o New Commit");
-                    window.attroff(COLOR_PAIR(pair));
+                    // Render a blank line, as we can't be amending a new commit.
                 } else {
                     (carret_x, carret_y) =
                         commit_view::render(window, state, is_selected, line_y, max_x);
@@ -358,8 +349,11 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                 }) => {
                     if !is_on_remote {
                         state.main_screen.is_amend_mode = true;
+                        if state.main_screen.amending_commit_hash.as_deref() != Some(hash.as_str())
+                        {
+                            state.main_screen.commit_message = message;
+                        }
                         state.main_screen.amending_commit_hash = Some(hash);
-                        state.main_screen.commit_message = message;
                         state.main_screen.commit_cursor = state.main_screen.commit_message.len();
                     }
                 }
@@ -393,6 +387,11 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
 }
 
 fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
+    if state.main_screen.is_commit_mode || state.main_screen.is_amend_mode {
+        state.main_screen.is_commit_mode = false;
+        state.main_screen.is_amend_mode = false;
+    }
+
     match input {
         Input::KeyUp | Input::Character('\u{10}') => {
             state.main_screen.file_cursor = state.main_screen.file_cursor.saturating_sub(1);

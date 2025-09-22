@@ -4,8 +4,6 @@ use crate::cursor_state::CursorState;
 use crate::ui::main_screen::{self, ListItem as MainScreenListItem};
 use crate::ui::unstaged_screen;
 use pancurses::Input;
-#[cfg(not(test))]
-use pancurses::curs_set;
 
 pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x: i32) -> AppState {
     state.error_message = None;
