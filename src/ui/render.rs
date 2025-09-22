@@ -180,11 +180,11 @@ fn render_main_view(window: &Window, state: &AppState) {
 
             for (i, line) in all_lines
                 .iter()
-                .skip(state.scroll)
+                .skip(state.diff_scroll)
                 .take(content_height)
                 .enumerate()
             {
-                let line_index_in_file = i + state.scroll;
+                let line_index_in_file = i + state.diff_scroll;
                 let (old_line_num, new_line_num) = line_numbers[line_index_in_file];
                 render_line(
                     window,
@@ -206,7 +206,7 @@ fn render_main_view(window: &Window, state: &AppState) {
             window,
             selected_file,
             content_height,
-            state.scroll,
+            state.diff_scroll,
             state.horizontal_scroll,
             header_height,
             cursor_position,

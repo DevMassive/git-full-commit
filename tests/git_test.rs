@@ -334,12 +334,12 @@ fn test_page_up_down_with_cursor() {
 
         // Page down
         state = update_state(state, Some(Input::Character(' ')), max_y, 80);
-        assert_eq!(state.scroll, content_height);
+        assert_eq!(state.diff_scroll, content_height);
         assert_eq!(state.line_cursor, content_height);
 
         // Page up
         state = update_state(state, Some(Input::Character('b')), max_y, 80);
-        assert_eq!(state.scroll, 0);
+        assert_eq!(state.diff_scroll, 0);
         assert_eq!(state.line_cursor, 0);
     });
 }
@@ -958,7 +958,7 @@ fn test_undo_redo_restores_cursor_position() {
         // 1. Set an initial cursor position
         state.file_cursor = 1;
         state.line_cursor = 7; // On "+changed" line
-        state.scroll = 5;
+        state.diff_scroll = 5;
         state.screen = git_full_commit::app_state::Screen::Main;
 
         let cursor_before_action =
@@ -970,7 +970,7 @@ fn test_undo_redo_restores_cursor_position() {
         // 3. Change cursor position
         state.file_cursor = 0;
         state.line_cursor = 0;
-        state.scroll = 0;
+        state.diff_scroll = 0;
         let cursor_before_undo = git_full_commit::cursor_state::CursorState::from_app_state(&state);
 
         // 4. Undo

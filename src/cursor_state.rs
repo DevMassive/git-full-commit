@@ -25,7 +25,7 @@ impl CursorState {
             screen: state.screen,
             file_cursor: state.file_cursor,
             line_cursor: state.line_cursor,
-            scroll: state.scroll,
+            scroll: state.diff_scroll,
             file_list_scroll: state.file_list_scroll,
             horizontal_scroll: state.horizontal_scroll,
             unstaged_cursor: state.unstaged_cursor,
@@ -45,7 +45,7 @@ impl CursorState {
         } else {
             state.line_cursor = 0;
         }
-        state.scroll = self.scroll;
+        state.diff_scroll = self.scroll;
         state.file_list_scroll = self.file_list_scroll;
         state.horizontal_scroll = self.horizontal_scroll;
 

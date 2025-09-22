@@ -8,7 +8,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
         Input::KeyUp => {
             state.file_cursor = state.files.len();
             state.line_cursor = 0;
-            state.scroll = 0;
+            state.diff_scroll = 0;
 
             if state.file_cursor < state.file_list_scroll {
                 state.file_list_scroll = state.file_cursor;
@@ -17,7 +17,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
         Input::KeyDown => {
             state.file_cursor = state.files.len() + 2;
             state.line_cursor = 0;
-            state.scroll = 0;
+            state.diff_scroll = 0;
 
             let file_list_height = state.main_header_height(max_y).0;
             if state.file_cursor >= state.file_list_scroll + file_list_height {

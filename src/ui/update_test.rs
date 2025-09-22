@@ -168,7 +168,7 @@ fn create_test_state(
     let mut state = AppState::new(PathBuf::from("/tmp"), files);
     state.file_cursor = file_cursor;
     state.line_cursor = line_cursor;
-    state.scroll = scroll;
+    state.diff_scroll = scroll;
     // Mock previous commit files to avoid git command execution in tests
     state.previous_commit_files = vec![];
     state
@@ -192,7 +192,7 @@ fn test_page_down_scrolls_by_page() {
     );
     // Scroll should jump by a page, not just follow the cursor
     assert_eq!(
-        final_state.scroll, content_height,
+        final_state.diff_scroll, content_height,
         "Scroll should move by a full page"
     );
 }
@@ -212,7 +212,7 @@ fn test_page_down_scrolls_beyond_content() {
         "Cursor should move to the last line"
     );
     assert_eq!(
-        final_state.scroll,
+        final_state.diff_scroll,
         74 + content_height,
         "Scroll should increase by a page even if it goes beyond max_scroll"
     );
@@ -231,7 +231,7 @@ fn test_page_down_clamps_at_end() {
     let expected_cursor = (10 + content_height).min(lines_count - 1); // 35
     assert_eq!(final_state.line_cursor, expected_cursor);
 
-    assert_eq!(final_state.scroll, content_height); // 25
+    assert_eq!(final_state.diff_scroll, content_height); // 25
 }
 
 // --- Page Up Tests ---
@@ -251,7 +251,7 @@ fn test_page_up_scrolls_by_page() {
         "Cursor should move up by one page"
     );
     assert_eq!(
-        final_state.scroll,
+        final_state.diff_scroll,
         50 - content_height, // 25
         "Scroll should move up by a full page"
     );
@@ -271,7 +271,7 @@ fn test_page_up_stops_at_top() {
         20_usize.saturating_sub(content_height), // 0
         "Cursor should move up by one page or saturate at 0"
     );
-    assert_eq!(final_state.scroll, 0, "Scroll should clamp at the top");
+    assert_eq!(final_state.diff_scroll, 0, "Scroll should clamp at the top");
 }
 
 #[test]
@@ -282,7 +282,7 @@ fn test_page_up_at_top_does_nothing() {
 
     let final_state = update_state(initial_state, Some(Input::Character('b')), max_y, 80);
 
-    assert_eq!(final_state.scroll, 0, "Scroll should not change");
+    assert_eq!(final_state.diff_scroll, 0, "Scroll should not change");
     assert_eq!(
         final_state.line_cursor, 0,
         "Cursor should be at the first line"
@@ -418,7 +418,7 @@ fn test_half_page_down() {
     let expected_cursor = 10 + scroll_amount;
     assert_eq!(final_state.line_cursor, expected_cursor);
     // Cursor is at 22, scroll is 5, content_height is 25. 22 < 5 + 25. No scroll.
-    assert_eq!(final_state.scroll, 5);
+    assert_eq!(final_state.diff_scroll, 5);
 }
 
 #[test]
@@ -436,7 +436,7 @@ fn test_half_page_down_and_scroll() {
     assert_eq!(final_state.line_cursor, expected_cursor);
     // Cursor is at 32, scroll is 0, content_height is 25. 32 >= 0 + 25. Scroll.
     let expected_scroll = scroll_amount;
-    assert_eq!(final_state.scroll, expected_scroll);
+    assert_eq!(final_state.diff_scroll, expected_scroll);
 }
 
 #[test]
@@ -454,7 +454,7 @@ fn test_half_page_up() {
     assert_eq!(final_state.line_cursor, expected_cursor);
     // Cursor is at 8, scroll is 15. 8 < 15. Scroll.
     let expected_scroll = 15 - scroll_amount; // 3
-    assert_eq!(final_state.scroll, expected_scroll.max(0));
+    assert_eq!(final_state.diff_scroll, expected_scroll.max(0));
 }
 
 #[test]
@@ -472,7 +472,7 @@ fn test_half_page_up_and_scroll() {
     assert_eq!(final_state.line_cursor, expected_cursor);
     // Cursor is at 0, scroll is 10. 0 < 10. Scroll.
     let expected_scroll = 10_usize.saturating_sub(scroll_amount); // 0
-    assert_eq!(final_state.scroll, expected_scroll);
+    assert_eq!(final_state.diff_scroll, expected_scroll);
 }
 
 #[test]

@@ -28,8 +28,8 @@ fn unstage_line(state: &mut AppState, max_y: i32) {
                 state.line_cursor = old_line_cursor.min(file.lines.len().saturating_sub(1));
                 let header_height = state.main_header_height(max_y).0;
                 let content_height = (max_y as usize).saturating_sub(header_height);
-                if state.line_cursor >= state.scroll + content_height {
-                    state.scroll = state.line_cursor - content_height + 1;
+                if state.line_cursor >= state.diff_scroll + content_height {
+                    state.diff_scroll = state.line_cursor - content_height + 1;
                 }
             }
         }
@@ -137,7 +137,7 @@ pub(crate) fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, 
     match input {
         Input::KeyUp | Input::Character('\u{10}') => {
             state.file_cursor = state.file_cursor.saturating_sub(1);
-            state.scroll = 0;
+            state.diff_scroll = 0;
             state.line_cursor = 0;
             state.is_diff_cursor_active = false;
 
@@ -148,7 +148,7 @@ pub(crate) fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, 
         Input::KeyDown | Input::Character('\u{e}') => {
             if state.file_cursor < state.files.len() + 2 {
                 state.file_cursor += 1;
-                state.scroll = 0;
+                state.diff_scroll = 0;
                 state.line_cursor = 0;
             }
             state.is_diff_cursor_active = false;
@@ -163,8 +163,8 @@ pub(crate) fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, 
             state.is_diff_cursor_active = true;
             state.line_cursor = state.line_cursor.saturating_sub(1);
             let cursor_line = state.get_cursor_line_index();
-            if cursor_line < state.scroll {
-                state.scroll = cursor_line;
+            if cursor_line < state.diff_scroll {
+                state.diff_scroll = cursor_line;
             }
         }
         Input::Character('j') => {
@@ -188,8 +188,8 @@ pub(crate) fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, 
                 let content_height = (max_y as usize).saturating_sub(header_height);
                 let cursor_line = state.get_cursor_line_index();
 
-                if cursor_line >= state.scroll + content_height {
-                    state.scroll = cursor_line - content_height + 1;
+                if cursor_line >= state.diff_scroll + content_height {
+                    state.diff_scroll = cursor_line - content_height + 1;
                 }
             }
         }

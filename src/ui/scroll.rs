@@ -72,14 +72,14 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
 
     let (new_line_cursor, new_scroll) = scroll_content(
         state.line_cursor,
-        state.scroll,
+        state.diff_scroll,
         content_height,
         lines_count,
         direction,
         amount,
     );
     state.line_cursor = new_line_cursor;
-    state.scroll = new_scroll;
+    state.diff_scroll = new_scroll;
 }
 
 fn scroll_unstaged_diff_view(
