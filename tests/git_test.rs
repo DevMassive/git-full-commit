@@ -203,6 +203,56 @@ fn test_unstage_line() {
 }
 
 #[test]
+fn test_get_local_commits() {
+    // 1. Setup a repo and a remote
+    let tmp_dir = TempDir::new().unwrap();
+    let repo_path = tmp_dir.path().to_path_buf();
+    run_git(&repo_path, &["init"]);
+    run_git(&repo_path, &["config", "user.name", "Test"]);
+    run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+
+    let remote_dir = TempDir::new().unwrap();
+    let remote_path = remote_dir.path().to_path_buf();
+    run_git(&remote_path, &["init", "--bare"]);
+
+    run_git(
+        &repo_path,
+        &["remote", "add", "origin", remote_path.to_str().unwrap()],
+    );
+
+    // 2. Create and push 2 commits
+    fs::write(repo_path.join("a.txt"), "a").unwrap();
+    run_git(&repo_path, &["add", "a.txt"]);
+    run_git(&repo_path, &["commit", "-m", "commit 1"]);
+
+    fs::write(repo_path.join("b.txt"), "b").unwrap();
+    run_git(&repo_path, &["add", "b.txt"]);
+    run_git(&repo_path, &["commit", "-m", "commit 2"]);
+    run_git(&repo_path, &["push", "origin", "master"]);
+
+    // 3. Create 2 local commits
+    fs::write(repo_path.join("c.txt"), "c").unwrap();
+    run_git(&repo_path, &["add", "c.txt"]);
+    run_git(&repo_path, &["commit", "-m", "commit 3"]);
+
+    fs::write(repo_path.join("d.txt"), "d").unwrap();
+    run_git(&repo_path, &["add", "d.txt"]);
+    run_git(&repo_path, &["commit", "-m", "commit 4"]);
+
+    // 4. Call get_local_commits
+    let commits = git::get_local_commits(&repo_path).unwrap();
+
+    // 5. Assert results
+    assert_eq!(commits.len(), 3);
+    assert_eq!(commits[0].message, "commit 4");
+    assert!(!commits[0].is_on_remote);
+    assert_eq!(commits[1].message, "commit 3");
+    assert!(!commits[1].is_on_remote);
+    assert_eq!(commits[2].message, "commit 2");
+    assert!(commits[2].is_on_remote);
+}
+
+#[test]
 #[serial]
 fn test_unstage_deleted_line() {
     run_test_with_pancurses(|_window| {
@@ -552,14 +602,14 @@ fn test_stage_all() {
 }
 
 #[test]
-fn test_get_previous_commit_diff() {
+fn test_get_commit_diff() {
     let setup = TestSetup::new();
 
     // Commit the staged changes to create a new commit
     run_git(&setup.repo_path, &["commit", "-m", "second commit"]);
 
     // Call the function to get the diff of the last commit
-    let diffs = git_full_commit::git::get_previous_commit_diff(&setup.repo_path).unwrap();
+    let diffs = git_full_commit::git::get_commit_diff(&setup.repo_path, "HEAD").unwrap();
 
     // There should be one file in the diff
     assert_eq!(diffs.len(), 1);

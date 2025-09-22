@@ -35,34 +35,45 @@ pub struct FileDiff {
     pub status: FileStatus,
 }
 
-pub fn get_previous_commit_message(repo_path: &Path) -> Result<String> {
-    let output = git_command()
-        .arg("log")
-        .arg("-1")
-        .arg("--pretty=%s")
-        .current_dir(repo_path)
-        .output()?;
-    if !output.status.success() {
-        return Ok(String::new());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommitInfo {
+    pub hash: String,
+    pub message: String,
+    pub is_on_remote: bool,
 }
 
-pub fn get_previous_commit_info(repo_path: &Path) -> Result<(String, String)> {
+pub fn get_local_commits(repo_path: &Path) -> Result<Vec<CommitInfo>> {
     let output = git_command()
         .arg("log")
-        .arg("-1")
         .arg("--pretty=%h %s")
         .current_dir(repo_path)
         .output()?;
+
     if !output.status.success() {
-        return Ok((String::new(), String::new()));
+        return Ok(Vec::new());
     }
-    let full_string = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let mut parts = full_string.splitn(2, ' ');
-    let hash = parts.next().unwrap_or("").to_string();
-    let message = parts.next().unwrap_or("").to_string();
-    Ok((hash, message))
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut commits = Vec::new();
+
+    for line in stdout.lines() {
+        let mut parts = line.splitn(2, ' ');
+        let hash = parts.next().unwrap_or("").to_string();
+        let message = parts.next().unwrap_or("").to_string();
+
+        let is_on_remote = is_commit_on_remote(repo_path, &hash)?;
+        commits.push(CommitInfo {
+            hash,
+            message,
+            is_on_remote,
+        });
+
+        if is_on_remote {
+            break;
+        }
+    }
+
+    Ok(commits)
 }
 
 fn calc_line_numbers(hunk: &Hunk) -> Vec<(usize, usize)> {
@@ -203,10 +214,10 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
     parse_diff(&diff_str)
 }
 
-pub fn get_previous_commit_diff(repo_path: &Path) -> Result<Vec<FileDiff>> {
+pub fn get_commit_diff(repo_path: &Path, hash: &str) -> Result<Vec<FileDiff>> {
     let output = git_command()
         .arg("show")
-        .arg("HEAD")
+        .arg(hash)
         .current_dir(repo_path)
         .output()?;
 
