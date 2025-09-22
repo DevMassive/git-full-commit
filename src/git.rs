@@ -1,6 +1,13 @@
 use anyhow::Result;
+use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::process::Command as OsCommand;
+
+fn git_command() -> OsCommand {
+    let mut command = OsCommand::new("git");
+    command.arg("-c").arg("core.quotepath=false");
+    command
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FileStatus {
@@ -28,7 +35,7 @@ pub struct FileDiff {
 }
 
 pub fn get_previous_commit_message(repo_path: &Path) -> Result<String> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("log")
         .arg("-1")
         .arg("--pretty=%s")
@@ -41,7 +48,7 @@ pub fn get_previous_commit_message(repo_path: &Path) -> Result<String> {
 }
 
 pub fn get_previous_commit_info(repo_path: &Path) -> Result<(String, String)> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("log")
         .arg("-1")
         .arg("--pretty=%h %s")
@@ -89,8 +96,10 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
     let mut current_file_lines: Vec<String> = Vec::new();
     let mut current_file_line_index = 0;
 
+    let diff_line_re = Regex::new(r#"^diff --git a/("[^"]+"|\S+) b/("[^"]+"|\S+)"#).unwrap();
+
     for line in diff_str.lines() {
-        if line.starts_with("diff --git") {
+        if let Some(caps) = diff_line_re.captures(line) {
             if let Some(mut file) = current_file.take() {
                 if let Some(mut hunk) = current_hunk.take() {
                     hunk.line_numbers = calc_line_numbers(&hunk);
@@ -101,14 +110,11 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
                 current_file_lines = Vec::new();
                 current_file_line_index = 0;
             }
-            let file_name_part = line.split(' ').nth(2).unwrap_or("");
-            let file_name = if file_name_part.starts_with("a/") {
-                &file_name_part[2..]
-            } else {
-                file_name_part
-            };
+
+            let file_name = caps.get(2).map(|m| m.as_str().trim_matches('"')).unwrap_or("").to_string();
+
             current_file = Some(FileDiff {
-                file_name: file_name.to_string(),
+                file_name,
                 hunks: Vec::new(),
                 lines: Vec::new(), // Will be filled in later
                 status: FileStatus::Modified,
@@ -125,13 +131,7 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
             if let Some(file) = current_file.as_mut() {
                 file.status = FileStatus::Renamed;
             }
-        } else if line.starts_with("rename to") {
-            let new_name = line.split(' ').nth(2).unwrap_or("").trim();
-            if !new_name.is_empty() {
-                if let Some(file) = current_file.as_mut() {
-                    file.file_name = new_name.to_string();
-                }
-            }
+
         } else if line.starts_with("@@ ") {
             if let Some(mut hunk) = current_hunk.take() {
                 if let Some(file) = current_file.as_mut() {
@@ -182,7 +182,7 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
 }
 
 pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("diff")
         .arg("--staged")
         .current_dir(&repo_path)
@@ -194,7 +194,7 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
 }
 
 pub fn get_previous_commit_diff(repo_path: &Path) -> Result<Vec<FileDiff>> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("show")
         .arg("HEAD")
         .current_dir(repo_path)
@@ -205,7 +205,7 @@ pub fn get_previous_commit_diff(repo_path: &Path) -> Result<Vec<FileDiff>> {
 }
 
 pub fn has_unstaged_changes(repo_path: &Path) -> Result<bool> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("status")
         .arg("--porcelain")
         .current_dir(repo_path)
@@ -237,7 +237,7 @@ pub fn is_git_repository(path: &Path) -> bool {
 }
 
 pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
-    OsCommand::new("git")
+    git_command()
         .arg("commit")
         .arg("-m")
         .arg(message)
@@ -247,7 +247,7 @@ pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
 }
 
 pub fn amend_commit(repo_path: &Path, message: &str) -> Result<()> {
-    OsCommand::new("git")
+    git_command()
         .arg("commit")
         .arg("--amend")
         .arg("-m")
@@ -259,14 +259,14 @@ pub fn amend_commit(repo_path: &Path, message: &str) -> Result<()> {
 
 pub fn add_all_with_size_limit(repo_path: &Path, size_limit: u64) -> Result<()> {
     // Stage all modified and deleted files
-    OsCommand::new("git")
+    git_command()
         .arg("add")
         .arg("--update")
         .current_dir(repo_path)
         .output()?;
 
     // Get untracked files
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("ls-files")
         .arg("--others")
         .arg("--exclude-standard")
@@ -298,7 +298,7 @@ pub fn add_all(repo_path: &Path) -> Result<()> {
 }
 
 pub fn unstage_all(repo_path: &Path) -> Result<()> {
-    OsCommand::new("git")
+    git_command()
         .arg("reset")
         .arg("HEAD")
         .arg(".")
@@ -308,7 +308,7 @@ pub fn unstage_all(repo_path: &Path) -> Result<()> {
 }
 
 pub fn get_staged_diff_output(repo_path: &Path) -> Result<std::process::Output> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("diff")
         .arg("--staged")
         .current_dir(repo_path)
@@ -317,7 +317,7 @@ pub fn get_staged_diff_output(repo_path: &Path) -> Result<std::process::Output> 
 }
 
 pub fn get_unstaged_diff(repo_path: &Path) -> Vec<FileDiff> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("diff")
         .current_dir(repo_path)
         .output()
@@ -328,7 +328,7 @@ pub fn get_unstaged_diff(repo_path: &Path) -> Vec<FileDiff> {
 }
 
 pub fn get_unstaged_files(repo_path: &Path) -> Result<Vec<String>> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("diff")
         .arg("--name-only")
         .current_dir(repo_path)
@@ -338,7 +338,7 @@ pub fn get_unstaged_files(repo_path: &Path) -> Result<Vec<String>> {
 }
 
 pub fn get_untracked_files(repo_path: &Path) -> Result<Vec<String>> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("ls-files")
         .arg("--others")
         .arg("--exclude-standard")
@@ -360,7 +360,7 @@ pub fn get_untracked_files(repo_path: &Path) -> Result<Vec<String>> {
 }
 
 pub fn get_unstaged_diff_patch(repo_path: &Path) -> Result<String> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("diff")
         .current_dir(repo_path)
         .output()?;
@@ -368,7 +368,7 @@ pub fn get_unstaged_diff_patch(repo_path: &Path) -> Result<String> {
 }
 
 pub fn get_staged_diff_patch(repo_path: &Path) -> Result<String> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("diff")
         .arg("--staged")
         .current_dir(repo_path)
@@ -377,7 +377,7 @@ pub fn get_staged_diff_patch(repo_path: &Path) -> Result<String> {
 }
 
 pub fn get_unstaged_file_diff_patch(repo_path: &Path, file_name: &str) -> Result<String> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("diff")
         .arg("--")
         .arg(file_name)
@@ -387,7 +387,7 @@ pub fn get_unstaged_file_diff_patch(repo_path: &Path, file_name: &str) -> Result
 }
 
 pub fn get_file_diff_patch(repo_path: &Path, file_name: &str) -> Result<String> {
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("diff")
         .arg("--staged")
         .arg("--")
@@ -398,7 +398,7 @@ pub fn get_file_diff_patch(repo_path: &Path, file_name: &str) -> Result<String> 
 }
 
 pub fn unstage_file(repo_path: &Path, file_name: &str) -> Result<()> {
-    OsCommand::new("git")
+    git_command()
         .arg("reset")
         .arg("HEAD")
         .arg("--")
@@ -409,7 +409,7 @@ pub fn unstage_file(repo_path: &Path, file_name: &str) -> Result<()> {
 }
 
 pub fn stage_file(repo_path: &Path, file_name: &str) -> Result<()> {
-    OsCommand::new("git")
+    git_command()
         .arg("add")
         .arg(file_name)
         .current_dir(repo_path)
@@ -431,7 +431,7 @@ pub fn apply_patch(repo_path: &Path, patch: &str, reverse: bool, cached: bool) -
     args.push("--unidiff-zero");
     args.push("-");
 
-    let mut child = OsCommand::new("git")
+    let mut child = git_command()
         .args(&args)
         .current_dir(repo_path)
         .stdin(Stdio::piped())
@@ -457,7 +457,7 @@ pub fn apply_patch(repo_path: &Path, patch: &str, reverse: bool, cached: bool) -
 }
 
 pub fn checkout_file(repo_path: &Path, file_name: &str) -> Result<()> {
-    OsCommand::new("git")
+    git_command()
         .arg("checkout")
         .arg("HEAD")
         .arg("--")
@@ -468,7 +468,7 @@ pub fn checkout_file(repo_path: &Path, file_name: &str) -> Result<()> {
 }
 
 pub fn rm_file(repo_path: &Path, file_name: &str) -> Result<()> {
-    OsCommand::new("git")
+    git_command()
         .arg("rm")
         .arg("-f")
         .arg(file_name)
@@ -478,7 +478,7 @@ pub fn rm_file(repo_path: &Path, file_name: &str) -> Result<()> {
 }
 
 pub fn stage_path(repo_path: &Path, path: &str) -> Result<()> {
-    OsCommand::new("git")
+    git_command()
         .arg("add")
         .arg(path)
         .current_dir(repo_path)
@@ -487,7 +487,7 @@ pub fn stage_path(repo_path: &Path, path: &str) -> Result<()> {
 }
 
 pub fn rm_cached(repo_path: &Path, path: &str) -> Result<()> {
-    OsCommand::new("git")
+    git_command()
         .arg("rm")
         .arg("--cached")
         .arg(path)
@@ -504,7 +504,7 @@ pub fn read_file_content(repo_path: &Path, file_path: &str) -> Result<(Vec<u8>, 
 }
 
 pub fn rm_file_from_index(repo_path: &Path, path: &str) -> Result<()> {
-    OsCommand::new("git")
+    git_command()
         .arg("rm")
         .arg(path)
         .current_dir(repo_path)
@@ -516,7 +516,7 @@ pub fn is_commit_on_remote(repo_path: &Path, hash: &str) -> Result<bool> {
     if hash.is_empty() {
         return Ok(false);
     }
-    let output = OsCommand::new("git")
+    let output = git_command()
         .arg("branch")
         .arg("-r")
         .arg("--contains")
