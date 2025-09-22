@@ -217,8 +217,6 @@ pub(crate) fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, 
                 }
             }
             state.screen = Screen::Unstaged;
-            state.main_screen.line_cursor = 0;
-            state.unstaged_screen.unstaged_diff_scroll = 0;
         }
         _ => {
             if state.main_screen.file_cursor == state.files.len() + 1 {

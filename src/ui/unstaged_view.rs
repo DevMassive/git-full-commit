@@ -170,8 +170,6 @@ pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32
             }
 
             state.screen = Screen::Main;
-            state.main_screen.line_cursor = 0;
-            state.main_screen.diff_scroll = 0;
         }
         Input::Character('q') | Input::Character('Q') => {
             state.screen = Screen::Main;
