@@ -774,47 +774,56 @@ fn test_stage_all_and_undo() {
 #[test]
 fn test_tab_screen_switching_and_cursor_sync() {
     let mut state = create_state_with_files(0);
-    state.files = vec![
-        FileDiff {
-            file_name: "staged_only.txt".to_string(),
-            old_file_name: "staged_only.txt".to_string(),
-            status: FileStatus::Modified,
-            lines: vec![],
-            hunks: vec![],
-        },
-        FileDiff {
-            file_name: "common_file.txt".to_string(),
-            old_file_name: "common_file.txt".to_string(),
-            status: FileStatus::Modified,
-            lines: vec![],
-            hunks: vec![],
-        },
-    ];
-    state.unstaged_screen.unstaged_files = vec![
-        FileDiff {
-            file_name: "common_file.txt".to_string(),
-            old_file_name: "common_file.txt".to_string(),
-            status: FileStatus::Modified,
-            lines: vec![],
-            hunks: vec![],
-        },
-        FileDiff {
-            file_name: "unstaged_only.txt".to_string(),
-            old_file_name: "unstaged_only.txt".to_string(),
-            status: FileStatus::Modified,
-            lines: vec![],
-            hunks: vec![],
-        },
-    ];
+    let staged_file1 = FileDiff {
+        file_name: "staged_only.txt".to_string(),
+        old_file_name: "staged_only.txt".to_string(),
+        status: FileStatus::Modified,
+        lines: vec![],
+        hunks: vec![],
+    };
+    let staged_file2 = FileDiff {
+        file_name: "common_file.txt".to_string(),
+        old_file_name: "common_file.txt".to_string(),
+        status: FileStatus::Modified,
+        lines: vec![],
+        hunks: vec![],
+    };
+    state.files = vec![staged_file1.clone(), staged_file2.clone()];
+
+    let unstaged_file1 = FileDiff {
+        file_name: "common_file.txt".to_string(),
+        old_file_name: "common_file.txt".to_string(),
+        status: FileStatus::Modified,
+        lines: vec![],
+        hunks: vec![],
+    };
+    let unstaged_file2 = FileDiff {
+        file_name: "unstaged_only.txt".to_string(),
+        old_file_name: "unstaged_only.txt".to_string(),
+        status: FileStatus::Modified,
+        lines: vec![],
+        hunks: vec![],
+    };
+    state.unstaged_screen.unstaged_files = vec![unstaged_file1.clone(), unstaged_file2.clone()];
     state.unstaged_screen.untracked_files = vec!["untracked_file.txt".to_string()];
+    state.main_screen.has_unstaged_changes = true;
+
+    // Manually build list_items for this test
+    state.main_screen.list_items = vec![
+        crate::ui::main_screen::ListItem::StagedChangesHeader,
+        crate::ui::main_screen::ListItem::File(staged_file1.clone()),
+        crate::ui::main_screen::ListItem::File(staged_file2.clone()),
+        crate::ui::main_screen::ListItem::CommitMessageInput,
+        crate::ui::main_screen::ListItem::PreviousCommitInfo { message: String::new(), is_on_remote: false },
+    ];
 
     // --- Switch from Main to Unstaged (with file sync) ---
     state.screen = Screen::Main;
-    state.main_screen.file_cursor = 2; // "common_file.txt"
+    state.main_screen.file_cursor = 2; // "common_file.txt" (index 2 in list_items)
 
     let state = update_state(state, Some(Input::Character('\t')), 30, 80);
     assert_eq!(state.screen, Screen::Unstaged);
-    assert_eq!(state.unstaged_screen.unstaged_cursor, 1); // "common_file.txt"
+    assert_eq!(state.unstaged_screen.unstaged_cursor, 1); // "common_file.txt" (index 1 in unstaged_files)
 
     // --- Switch from Unstaged to Main (with file sync) ---
     let mut state = update_state(state, Some(Input::Character('\t')), 30, 80);
@@ -822,14 +831,17 @@ fn test_tab_screen_switching_and_cursor_sync() {
     assert_eq!(state.main_screen.file_cursor, 2); // "common_file.txt"
 
     // --- Switch from Main to Unstaged (untracked file) ---
-    state.files.push(FileDiff {
+    let untracked_file_diff = FileDiff {
         file_name: "untracked_file.txt".to_string(),
         old_file_name: "untracked_file.txt".to_string(),
         status: FileStatus::Added,
         lines: vec![],
         hunks: vec![],
-    });
-    state.main_screen.file_cursor = 3; // "untracked_file.txt"
+    };
+    state.files.push(untracked_file_diff.clone());
+    state.main_screen.list_items.push(crate::ui::main_screen::ListItem::File(untracked_file_diff.clone())); // Add to list_items
+    state.main_screen.file_cursor = 5; // "untracked_file.txt" (index 5 in list_items)
+
     let mut state = update_state(state, Some(Input::Character('\t')), 30, 80);
     assert_eq!(state.screen, Screen::Unstaged);
     // unstaged_files(2) + untracked_files(1) + headers(2) = 5 total
@@ -841,7 +853,7 @@ fn test_tab_screen_switching_and_cursor_sync() {
     state.unstaged_screen.unstaged_cursor = 2; // "unstaged_only.txt"
     let state = update_state(state, Some(Input::Character('\t')), 30, 80);
     assert_eq!(state.screen, Screen::Main);
-    assert_eq!(state.main_screen.file_cursor, 3); // Unchanged
+    assert_eq!(state.main_screen.file_cursor, 5); // Unchanged
 }
 
 #[test]
@@ -864,11 +876,21 @@ fn test_open_editor_main_view_no_line() {
 
 #[test]
 fn test_open_editor_main_view_with_line() {
-    let mut state = create_test_state(10, 1, 5, 0); // file_cursor=1, line_cursor=5
+    let mut state = create_test_state(0, 0, 5, 0); // Start with no files
     state.main_screen.is_diff_cursor_active = true;
     let mut file = create_test_file_diff();
     file.file_name = "test_file.rs".to_string();
-    state.files = vec![file];
+
+    // Manually build list_items for this test
+    state.main_screen.list_items = vec![
+        crate::ui::main_screen::ListItem::StagedChangesHeader,
+        crate::ui::main_screen::ListItem::File(file.clone()),
+        crate::ui::main_screen::ListItem::CommitMessageInput,
+        crate::ui::main_screen::ListItem::PreviousCommitInfo { message: String::new(), is_on_remote: false },
+    ];
+    state.main_screen.file_cursor = 1; // Select the file
+    state.files = vec![file]; // Keep this for current_file() to work in the test context if it's still used elsewhere.
+
     let repo_path = state.repo_path.clone();
 
     let updated_state = update_state(state, Some(Input::Character('e')), 80, 80);
