@@ -129,9 +129,20 @@ pub fn render(window: &Window, state: &AppState) {
                             window.mvaddch(line_y, x, ' ');
                         }
                     }
+                    window.attroff(COLOR_PAIR(pair));
+
                     window.mv(line_y, 0);
-                    let status = if *is_on_remote { "(remote)" } else { "(local)" };
-                    window.addstr(format!(" o {status} {message}"));
+                    let status_pair = if *is_on_remote {
+                        if is_selected { 8 } else { 4 }
+                    } else {
+                        if is_selected { 7 } else { 3 }
+                    };
+                    window.attron(COLOR_PAIR(status_pair));
+                    window.addstr(" ● ".to_string());
+                    window.attroff(COLOR_PAIR(status_pair));
+
+                    window.attron(COLOR_PAIR(pair));
+                    window.addstr(format!("{message}"));
                     window.attroff(COLOR_PAIR(pair));
                 }
             }

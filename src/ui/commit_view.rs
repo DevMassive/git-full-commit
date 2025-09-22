@@ -21,7 +21,7 @@ pub fn render(
     }
     window.mv(line_y, 0);
 
-    let prefix = " o ";
+    let prefix = " ○ ";
     let message = &state.main_screen.commit_message;
 
     window.addstr(prefix);
