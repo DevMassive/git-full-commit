@@ -25,7 +25,7 @@ fi
 echo "🔍 Release type: $BUMP_TYPE"
 
 # 3. Read the current version from Cargo.toml
-current_version_line=$(grep "$VERSION_PATTERN" "$VERSION_FILE")
+current_version_line=$(grep -E "$VERSION_PATTERN" "$VERSION_FILE")
 if [ -z "$current_version_line" ]; then
     echo "Error: Could not find version in $VERSION_FILE"
     exit 1
