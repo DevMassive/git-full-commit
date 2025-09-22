@@ -1,6 +1,6 @@
 use git_full_commit::app_state::AppState;
 use git_full_commit::git::{self, apply_patch, get_diff};
-use git_full_commit::ui::unstaged_view::handle_unstaged_view_input;
+use git_full_commit::ui::unstaged_screen::handle_input;
 use git_full_commit::ui::update::update_state;
 use pancurses::{Input, Window, endwin, initscr};
 use serial_test::serial;
@@ -814,7 +814,7 @@ fn test_stage_untracked_file() {
         state.unstaged_screen.unstaged_cursor = 2; // Unstaged header (0), Untracked header (1), file (2)
 
         // Press Enter to stage the file
-        handle_unstaged_view_input(&mut state, Input::Character('\n'), 30);
+        handle_input(&mut state, Input::Character('\n'), 30);
 
         // Check that the file is staged
         state.refresh_diff();
@@ -846,7 +846,7 @@ fn test_stage_modified_file() {
         state.unstaged_screen.unstaged_cursor = 1;
 
         // Press Enter to stage the file
-        handle_unstaged_view_input(&mut state, Input::Character('\n'), 30);
+        handle_input(&mut state, Input::Character('\n'), 30);
 
         // Check that the file is staged
         state.refresh_diff();
@@ -890,7 +890,7 @@ fn test_stage_hunk() {
         state.main_screen.line_cursor = hunk_line;
 
         // Press Enter to stage the hunk
-        handle_unstaged_view_input(&mut state, Input::Character('\n'), 30);
+        handle_input(&mut state, Input::Character('\n'), 30);
         state.refresh_diff();
 
         // Check that the hunk is staged
@@ -1029,7 +1029,7 @@ fn test_stage_line() {
         state.main_screen.line_cursor = added_line_index;
 
         // Press '1' to stage the line
-        handle_unstaged_view_input(&mut state, Input::Character('1'), 30);
+        handle_input(&mut state, Input::Character('1'), 30);
         state.refresh_diff();
 
         // Check that the line is staged

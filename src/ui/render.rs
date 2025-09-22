@@ -1,7 +1,7 @@
 use crate::app_state::{AppState, Screen};
 use crate::git::FileStatus;
 use crate::ui::diff_view::{render_diff_view, render_line};
-use crate::ui::unstaged_view::render_unstaged_view;
+use crate::ui::unstaged_screen::render_screen;
 use pancurses::{COLOR_PAIR, Window};
 use unicode_width::UnicodeWidthStr;
 
@@ -11,7 +11,7 @@ pub fn render(window: &Window, state: &AppState) {
             render_main_view(window, state);
         }
         Screen::Unstaged => {
-            render_unstaged_view(window, state);
+            render_screen(window, state);
         }
     }
 }

@@ -4,7 +4,7 @@ mod diff_view;
 mod render;
 pub mod scroll;
 pub mod main_screen;
-pub mod unstaged_view;
+pub mod unstaged_screen;
 pub mod update;
 use crate::app_state::AppState;
 use crate::external_command;

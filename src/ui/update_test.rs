@@ -875,7 +875,7 @@ fn test_open_editor_main_view_with_line() {
 }
 
 #[test]
-fn test_open_editor_unstaged_view() {
+fn test_open_editor_unstaged_screen() {
     let mut state = create_state_with_files(0);
     let mut file = create_test_file_diff();
     file.file_name = "unstaged_file.txt".to_string();

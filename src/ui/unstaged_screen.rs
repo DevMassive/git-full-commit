@@ -10,7 +10,7 @@ use crate::ui::diff_view::render_diff_view;
 use crate::ui::scroll;
 use pancurses::{COLOR_PAIR, Input, Window};
 
-pub fn render_unstaged_view(window: &Window, state: &AppState) {
+pub fn render_screen(window: &Window, state: &AppState) {
     window.erase();
     let (max_y, max_x) = window.get_max_yx();
 
@@ -142,7 +142,7 @@ fn is_binary(content: &[u8]) -> bool {
     content.contains(&0x00)
 }
 
-pub fn handle_unstaged_view_input(state: &mut AppState, input: Input, max_y: i32) {
+pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
     let (file_list_height, unstaged_items_count) = state.unstaged_header_height(max_y);
     let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
     let _untracked_file_count = state.unstaged_screen.untracked_files.len();
