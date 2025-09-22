@@ -60,6 +60,7 @@ pub struct AppState {
     pub selected_commit_files: Vec<FileDiff>,
     pub screen: Screen,
     pub editor_request: Option<EditorRequest>,
+    pub error_message: Option<String>,
 }
 impl AppState {
     pub fn new(repo_path: PathBuf, files: Vec<FileDiff>) -> Self {
@@ -88,7 +89,7 @@ impl AppState {
         unstaged_screen.list_items =
             Self::build_unstaged_screen_list_items(&unstaged_files, &untracked_files);
 
-        Self {
+        let mut s = Self {
             repo_path,
             main_screen,
             unstaged_screen,
@@ -99,7 +100,10 @@ impl AppState {
             selected_commit_files,
             screen: Screen::Main,
             editor_request: None,
-        }
+            error_message: None,
+        };
+        s.update_selected_commit_diff();
+        s
     }
 
     fn build_main_screen_list_items(

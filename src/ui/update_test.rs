@@ -659,6 +659,125 @@ fn test_discard_hunk() {
 }
 
 #[test]
+fn test_diff_view_updates_on_navigation_to_commit() {
+    let repo_path = setup_temp_repo();
+
+    // 1. Create one commit
+    std::fs::write(repo_path.join("file1.txt"), "a").unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("first commit")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    // 2. Create AppState. With my fix to AppState::new, selected_commit_files should be empty.
+    let state = AppState::new(repo_path.clone(), vec![]);
+    assert!(
+        state.selected_commit_files.is_empty(),
+        "selected_commit_files should be empty on init"
+    );
+
+    // 3. Navigate down to CommitMessageInput
+    let state_on_commit_input = update_state(state, Some(Input::KeyDown), 80, 80);
+    assert!(
+        state_on_commit_input.selected_commit_files.is_empty(),
+        "Diff should still be empty"
+    );
+
+    // 4. Navigate down to the previous commit
+    let state_after_down = update_state(state_on_commit_input, Some(Input::KeyDown), 80, 80);
+
+    // 5. Assert that the diff has been loaded
+    assert!(
+        !state_after_down.selected_commit_files.is_empty(),
+        "selected_commit_files should be populated after navigating"
+    );
+    assert_eq!(
+        state_after_down.selected_commit_files[0].file_name,
+        "file1.txt"
+    );
+
+    std::fs::remove_dir_all(&repo_path).unwrap();
+}
+
+#[test]
+fn test_navigation_in_amend_mode() {
+    let repo_path = setup_temp_repo();
+
+    // 1. Create two commits
+    std::fs::write(repo_path.join("file1.txt"), "a").unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("first commit")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    std::fs::write(repo_path.join("file2.txt"), "b").unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("second commit")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    // 2. Create AppState and find a commit to amend
+    let mut state = AppState::new(repo_path.clone(), vec![]);
+
+    let second_commit_index = state
+        .main_screen
+        .list_items
+        .iter()
+        .position(|item| {
+            if let crate::ui::main_screen::ListItem::PreviousCommitInfo { message, .. } = item {
+                message == "second commit"
+            } else {
+                false
+            }
+        })
+        .unwrap();
+
+    state.main_screen.file_cursor = second_commit_index;
+
+    // 3. Enter amend mode
+    let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
+    assert!(state.main_screen.is_amend_mode);
+    assert_eq!(state.main_screen.file_cursor, second_commit_index);
+
+    // 4. Navigate down
+    let state = update_state(state, Some(Input::KeyDown), 80, 80);
+    assert_eq!(state.main_screen.file_cursor, second_commit_index + 1, "Cursor should move down");
+
+    // 5. Navigate up
+    let state = update_state(state, Some(Input::KeyUp), 80, 80);
+    assert_eq!(state.main_screen.file_cursor, second_commit_index, "Cursor should move up");
+
+    std::fs::remove_dir_all(&repo_path).unwrap();
+}
+
+#[test]
 fn test_keydown_stops_at_last_line() {
     let state = create_state_with_files(1); // 1 file
     // Staged changes (0), file_0 (1), commit (2), prev_commit (3)
@@ -1129,6 +1248,117 @@ fn test_amend_commit_message_in_place() {
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
+
+#[test]
+fn test_amend_commit_with_staged_changes() {
+    let repo_path = setup_temp_repo();
+
+    // 1. Create two commits
+    std::fs::write(repo_path.join("file1.txt"), "a").unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("first commit")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    std::fs::write(repo_path.join("file2.txt"), "b").unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("second commit")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    // 2. Stage new changes
+    std::fs::write(repo_path.join("file2.txt"), "b-modified").unwrap();
+    std::fs::write(repo_path.join("file3.txt"), "c-new").unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg("file2.txt")
+        .arg("file3.txt")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+
+    // 3. Create AppState and find the commit to amend
+    let staged_files = crate::git::get_diff(repo_path.clone());
+    let mut state = AppState::new(repo_path.clone(), staged_files);
+
+    let commit_to_amend_index = state
+        .main_screen
+        .list_items
+        .iter()
+        .position(|item| {
+            if let crate::ui::main_screen::ListItem::PreviousCommitInfo { message, .. } = item {
+                message == "second commit"
+            } else {
+                false
+            }
+        })
+        .unwrap();
+
+    state.main_screen.file_cursor = commit_to_amend_index;
+
+    // 4. Enter amend mode
+    let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
+    assert!(state.main_screen.is_amend_mode);
+    assert_eq!(state.main_screen.commit_message, "second commit");
+
+    // 5. Change commit message
+    state.main_screen.commit_message = "amended second commit".to_string();
+
+    // 6. Execute amend
+    let state = update_state(state, Some(Input::Character('\n')), 80, 80);
+    assert!(!state.main_screen.is_amend_mode);
+    assert!(state.error_message.is_none(), "Error message should be None. Got: {:?}", state.error_message);
+
+    // 7. Verify the result
+    let log_output = OsCommand::new("git")
+        .arg("log")
+        .arg("--pretty=%s")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    let log_messages: Vec<String> = String::from_utf8_lossy(&log_output.stdout)
+        .lines()
+        .map(String::from)
+        .collect();
+
+    assert_eq!(log_messages.len(), 2);
+    assert_eq!(log_messages[0], "amended second commit");
+    assert_eq!(log_messages[1], "first commit");
+
+    let show_output = OsCommand::new("git")
+        .arg("show")
+        .arg("HEAD")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    let show_str = String::from_utf8_lossy(&show_output.stdout);
+
+    assert!(show_str.contains("file2.txt"));
+    assert!(show_str.contains("file3.txt"));
+    assert!(show_str.contains("b-modified"));
+    assert!(show_str.contains("c-new"));
+
+    std::fs::remove_dir_all(&repo_path).unwrap();
+}
+
 
 #[test]
 fn test_cancel_amend_mode() {

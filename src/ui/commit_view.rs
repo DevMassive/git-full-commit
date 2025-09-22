@@ -49,30 +49,8 @@ pub fn render(
     (carret_x, carret_y)
 }
 
-pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
+pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
     match input {
-        Input::KeyUp => {
-            state.main_screen.file_cursor = state.files.len();
-            state.main_screen.line_cursor = 0;
-            state.main_screen.diff_scroll = 0;
-
-            if state.main_screen.file_cursor < state.main_screen.file_list_scroll {
-                state.main_screen.file_list_scroll = state.main_screen.file_cursor;
-            }
-        }
-        Input::KeyDown => {
-            state.main_screen.file_cursor = state.files.len() + 2;
-            state.main_screen.line_cursor = 0;
-            state.main_screen.diff_scroll = 0;
-
-            let file_list_height = state.main_header_height(max_y).0;
-            if state.main_screen.file_cursor
-                >= state.main_screen.file_list_scroll + file_list_height
-            {
-                state.main_screen.file_list_scroll =
-                    state.main_screen.file_cursor - file_list_height + 1;
-            }
-        }
         Input::Character('\n') => {
             if state.main_screen.commit_message.is_empty() {
                 return;
@@ -80,11 +58,22 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
 
             if state.main_screen.is_amend_mode {
                 if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
-                    match git::reword_commit(
-                        &state.repo_path,
-                        &hash,
-                        &state.main_screen.commit_message,
-                    ) {
+                    let has_staged_changes = !state.files.is_empty();
+                    let result = if has_staged_changes {
+                        git::amend_commit_with_staged_changes(
+                            &state.repo_path,
+                            &hash,
+                            &state.main_screen.commit_message,
+                        )
+                    } else {
+                        git::reword_commit(
+                            &state.repo_path,
+                            &hash,
+                            &state.main_screen.commit_message,
+                        )
+                    };
+
+                    match result {
                         Ok(_) => {
                             let _ = commit_storage::delete_commit_message(&state.repo_path);
                             state.command_history.clear();
@@ -94,8 +83,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, max_y: i32) {
                             state.refresh_diff();
                         }
                         Err(e) => {
-                            // TODO: Show error to user in the UI
-                            eprintln!("Error amending commit: {}", e);
+                            state.error_message = Some(format!("Error amending commit: {}", e));
                         }
                     }
                 }

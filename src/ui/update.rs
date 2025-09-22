@@ -8,6 +8,8 @@ use pancurses::Input;
 use pancurses::curs_set;
 
 pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x: i32) -> AppState {
+    state.error_message = None;
+
     if let Some(input) = input {
         // Global commands
         match input {
@@ -63,13 +65,6 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
             state.current_main_item(),
             Some(MainScreenListItem::CommitMessageInput)
         );
-
-    #[cfg(not(test))]
-    if state.main_screen.is_commit_mode {
-        curs_set(1);
-    } else {
-        curs_set(0);
-    }
 
     state
 }
