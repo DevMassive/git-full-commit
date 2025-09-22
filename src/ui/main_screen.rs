@@ -9,7 +9,7 @@ use crate::ui::commit_view;
 use crate::ui::diff_view;
 use crate::ui::diff_view::LINE_CONTENT_OFFSET;
 use crate::ui::scroll;
-use pancurses::Input;
+use pancurses::{A_DIM, Input};
 
 use crate::git::FileStatus;
 use pancurses::{COLOR_PAIR, Window};
@@ -43,11 +43,12 @@ pub fn render(window: &Window, state: &AppState) {
                 }
             }
             window.mv(line_y, 0);
-            let mut staged_changes_text = " Staged changes".to_string();
             if state.main_screen.has_unstaged_changes {
-                staged_changes_text.push_str(" (press ENTER to view)");
+                window.attron(A_DIM);
+                window.addstr(&" Unstaged changes |".to_string());
+                window.attroff(A_DIM);
             }
-            window.addstr(&staged_changes_text);
+            window.addstr(&" Staged changes".to_string());
             window.attroff(COLOR_PAIR(pair));
         } else if item_index > 0 && item_index <= num_files {
             let file_index = item_index - 1;
@@ -370,6 +371,9 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                 .saturating_add(scroll_amount);
         }
         Input::Character('\t') => {
+            if !state.main_screen.has_unstaged_changes {
+                return;
+            }
             if let Some(current_file) = state.current_file() {
                 let file_name = current_file.file_name.clone();
                 if let Some(index) = state

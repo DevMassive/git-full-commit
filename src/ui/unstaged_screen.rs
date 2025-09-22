@@ -8,7 +8,7 @@ use crate::git::{self, FileStatus};
 use crate::git_patch;
 use crate::ui::diff_view;
 use crate::ui::scroll;
-use pancurses::{COLOR_PAIR, Input, Window};
+use pancurses::{Input, Window, A_DIM, COLOR_PAIR};
 
 pub fn render(window: &Window, state: &AppState) {
     let (max_y, max_x) = window.get_max_yx();
@@ -39,7 +39,10 @@ pub fn render(window: &Window, state: &AppState) {
         window.mv(line_y, 0);
 
         if item_index == 0 {
-            window.addstr(" Unstaged changes");
+            window.addstr(&" Unstaged changes ".to_string());
+            window.attron(A_DIM);
+            window.addstr(&"| Staged changes".to_string());
+            window.attroff(A_DIM);
         } else if item_index > 0 && item_index <= unstaged_file_count {
             let file_index = item_index - 1;
             let file = &state.unstaged_screen.unstaged_files[file_index];
