@@ -10,6 +10,7 @@ pub mod external_command;
 pub mod git;
 pub mod git_patch;
 pub mod ui;
+pub mod util;
 
 pub fn run(repo_path: PathBuf) -> Result<()> {
     if !git::is_git_repository(&repo_path) {
