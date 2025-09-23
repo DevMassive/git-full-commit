@@ -55,8 +55,9 @@ git管理しているディレクトリ内で実行。
 ## Undo/Redo
 
 漢なら使わないと思うがCommit以外の操作はUndo/Redoができる。
+（このツール以外からの操作は考慮されてないので注意）
 
-- u/r: undo/redo
+- </>: undo/redo
 
 ## Commit操作
 
