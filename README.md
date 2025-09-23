@@ -2,6 +2,8 @@
 
 これは常にフルコミットする漢の Git Commit CLI ツール。
 
+<img alt="Screenshot" src="https://github.com/user-attachments/assets/dddd9593-3f6c-41b1-9c1a-d7f1be39e732" width="480"> 
+
 ```
 % git add -A
 % git reset -p
