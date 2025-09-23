@@ -19,12 +19,10 @@
 
 ## ソースコードからビルド
 
-Cargoをいれてから、このレポジトリをcloneして`cargo install`する。
+Cargoが必要。
 
 ```
-% git clone https://github.com/DevMassive/git-full-commit.git
-% cd git-full-commit
-% cargo install --path .
+cargo install --git https://github.com/DevMassive/git-full-commit
 ```
 
 # 使い方
