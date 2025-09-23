@@ -307,7 +307,7 @@ pub fn amend_commit_with_staged_changes(
 
     let mut rebase_cmd = git_command();
     rebase_cmd.env("GIT_SEQUENCE_EDITOR", "true");
-    rebase_cmd.arg("rebase").arg("-i").arg("--autosquash");
+    rebase_cmd.arg("rebase").arg("-i").arg("--autosquash").arg("--autostash");
 
     if is_root_commit {
         rebase_cmd.arg("--root");
@@ -383,7 +383,7 @@ pub fn reword_commit(repo_path: &Path, commit_hash: &str, message: &str) -> Resu
         format!("sed -i -e 's/^pick {short_hash}/reword {short_hash}/'"),
     );
     rebase_cmd.env("GIT_EDITOR", editor_script_path.to_str().unwrap());
-    rebase_cmd.arg("rebase").arg("-i");
+    rebase_cmd.arg("rebase").arg("-i").arg("--autostash");
 
     if is_root_commit {
         rebase_cmd.arg("--root");
@@ -440,7 +440,7 @@ pub fn fixup_and_rebase_autosquash(repo_path: &Path, fixup_commit_hash: &str) ->
 
     let mut rebase_cmd = git_command();
     rebase_cmd.env("GIT_SEQUENCE_EDITOR", "true");
-    rebase_cmd.arg("rebase").arg("-i").arg("--autosquash");
+    rebase_cmd.arg("rebase").arg("-i").arg("--autosquash").arg("--autostash");
 
     if is_root_commit {
         rebase_cmd.arg("--root");
