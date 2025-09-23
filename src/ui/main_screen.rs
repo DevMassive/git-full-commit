@@ -59,10 +59,10 @@ pub fn render(window: &Window, state: &AppState) {
                 window.mv(line_y, 0);
                 if state.main_screen.has_unstaged_changes {
                     window.attron(A_DIM);
-                    window.addstr(&" Unstaged changes |".to_string());
+                    window.addstr(" Unstaged changes |");
                     window.attroff(A_DIM);
                 }
-                window.addstr(&" Staged changes".to_string());
+                window.addstr(" Staged changes");
                 window.attroff(COLOR_PAIR(pair));
             }
             ListItem::File(file) => {
@@ -99,52 +99,37 @@ pub fn render(window: &Window, state: &AppState) {
                 window.attroff(COLOR_PAIR(pair));
             }
             ListItem::CommitMessageInput => {
-                if state.main_screen.is_amend_mode {
-                    // Render a blank line, as we can't be amending a new commit.
-                } else {
-                    (carret_x, carret_y) =
-                        commit_view::render(window, state, is_selected, line_y, max_x);
-                }
+                (carret_x, carret_y) =
+                    commit_view::render(window, state, is_selected, line_y, max_x);
             }
             ListItem::PreviousCommitInfo {
                 hash,
                 message,
                 is_on_remote,
             } => {
-                let is_amending_this_commit = state.main_screen.is_amend_mode
-                    && state.main_screen.amending_commit_hash.as_deref() == Some(hash);
-
-                if is_amending_this_commit {
-                    let (new_carret_x, new_carret_y) =
-                        commit_view::render(window, state, is_selected, line_y, max_x);
-                    if is_selected {
-                        carret_x = new_carret_x;
-                        carret_y = new_carret_y;
+                let pair = if is_selected { 5 } else { 1 };
+                window.attron(COLOR_PAIR(pair));
+                if is_selected {
+                    for x in 0..max_x {
+                        window.mvaddch(line_y, x, ' ');
                     }
-                } else {
-                    let pair = if is_selected { 5 } else { 1 };
-                    window.attron(COLOR_PAIR(pair));
-                    if is_selected {
-                        for x in 0..max_x {
-                            window.mvaddch(line_y, x, ' ');
-                        }
-                    }
-                    window.attroff(COLOR_PAIR(pair));
-
-                    window.mv(line_y, 0);
-                    let status_pair = if *is_on_remote {
-                        if is_selected { 8 } else { 4 }
-                    } else {
-                        if is_selected { 7 } else { 3 }
-                    };
-                    window.attron(COLOR_PAIR(status_pair));
-                    window.addstr(" ● ".to_string());
-                    window.attroff(COLOR_PAIR(status_pair));
-
-                    window.attron(COLOR_PAIR(pair));
-                    window.addstr(format!("{message}"));
-                    window.attroff(COLOR_PAIR(pair));
                 }
+                window.attroff(COLOR_PAIR(pair));
+
+                window.mv(line_y, 0);
+                let status_pair = if *is_on_remote {
+                    if is_selected { 8 } else { 4 }
+                } else if is_selected { 7 } else { 3 };
+                window.attron(COLOR_PAIR(status_pair));
+                window.addstr(" ● ");
+                window.attroff(COLOR_PAIR(status_pair));
+
+                window.attron(COLOR_PAIR(pair));
+                if state.main_screen.amending_commit_hash.as_deref() == Some(hash.as_str()) {
+                    window.addstr("[amend] ");
+                }
+                window.addstr(message);
+                window.attroff(COLOR_PAIR(pair));
             }
         }
     }
@@ -217,22 +202,6 @@ pub fn render(window: &Window, state: &AppState) {
 }
 
 pub fn handle_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
-    if state.main_screen.is_amend_mode
-        && matches!(input, Input::Character('\n'))
-        && matches!(
-            state.current_main_item(),
-            Some(ListItem::CommitMessageInput)
-        )
-    {
-        state.main_screen.is_amend_mode = false;
-        state.main_screen.amending_commit_hash = None;
-        let original_message =
-            commit_storage::load_commit_message(&state.repo_path).unwrap_or_else(|_| String::new());
-        state.main_screen.commit_message = original_message;
-        state.main_screen.commit_cursor = 0;
-        return;
-    }
-
     if state.main_screen.is_commit_mode || state.main_screen.is_amend_mode {
         match input {
             Input::KeyUp
@@ -359,13 +328,23 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                     is_on_remote,
                 }) => {
                     if !is_on_remote {
-                        state.main_screen.is_amend_mode = true;
                         if state.main_screen.amending_commit_hash.as_deref() != Some(hash.as_str())
                         {
-                            state.main_screen.commit_message = message;
+                            state.main_screen.amending_commit_hash = Some(hash);
+                            state.main_screen.amend_message = Some(message);
                         }
-                        state.main_screen.amending_commit_hash = Some(hash);
-                        state.main_screen.commit_cursor = state.main_screen.commit_message.len();
+                        state.main_screen.is_amend_mode = true;
+                        if let Some(index) = state
+                            .main_screen
+                            .list_items
+                            .iter()
+                            .position(|item| matches!(item, ListItem::CommitMessageInput))
+                        {
+                            state.main_screen.file_cursor = index;
+                        }
+                        if let Some(msg) = &state.main_screen.amend_message {
+                            state.main_screen.commit_cursor = msg.chars().count();
+                        }
                     }
                 }
                 _ => {}

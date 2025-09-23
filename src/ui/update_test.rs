@@ -663,17 +663,33 @@ fn test_discard_hunk() {
 fn test_amend_draft_is_preserved_after_navigation() {
     let repo_path = setup_temp_repo();
     std::fs::write(repo_path.join("file1.txt"), "a").unwrap();
-    OsCommand::new("git").arg("add").arg(".").current_dir(&repo_path).output().unwrap();
-    OsCommand::new("git").arg("commit").arg("-m").arg("first commit").current_dir(&repo_path).output().unwrap();
+    OsCommand::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    OsCommand::new("git")
+        .arg("commit")
+        .arg("-m")
+        .arg("first commit")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
 
     let mut state = AppState::new(repo_path.clone(), vec![]);
-    let first_commit_index = state.main_screen.list_items.iter().position(|item| {
-        if let crate::ui::main_screen::ListItem::PreviousCommitInfo { message, .. } = item {
-            message == "first commit"
-        } else {
-            false
-        }
-    }).unwrap();
+    let first_commit_index = state
+        .main_screen
+        .list_items
+        .iter()
+        .position(|item| {
+            if let crate::ui::main_screen::ListItem::PreviousCommitInfo { message, .. } = item {
+                message == "first commit"
+            } else {
+                false
+            }
+        })
+        .unwrap();
     state.main_screen.file_cursor = first_commit_index;
 
     // Enter amend mode
@@ -681,17 +697,25 @@ fn test_amend_draft_is_preserved_after_navigation() {
     assert!(state.main_screen.is_amend_mode);
 
     // Edit the message
-    state.main_screen.commit_message = "draft message".to_string();
+    state.main_screen.amend_message = Some("draft message".to_string());
 
     // Navigate away
     let state = update_state(state, Some(Input::KeyDown), 80, 80);
     assert!(!state.main_screen.is_amend_mode);
-    assert_eq!(state.main_screen.commit_message, "draft message", "Draft should be kept after navigating away");
+    assert_eq!(
+        state.main_screen.amend_message.as_deref(),
+        Some("draft message"),
+        "Draft should be kept after navigating away"
+    );
 
     // Re-enter amend mode on the same commit
     let state = update_state(state, Some(Input::Character('\n')), 80, 80);
     assert!(state.main_screen.is_amend_mode);
-    assert_eq!(state.main_screen.commit_message, "draft message", "Draft should be preserved when re-entering amend mode");
+    assert_eq!(
+        state.main_screen.amend_message.as_deref(),
+        Some("draft message"),
+        "Draft should be preserved when re-entering amend mode"
+    );
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
@@ -800,18 +824,40 @@ fn test_navigation_in_amend_mode() {
     state.main_screen.file_cursor = second_commit_index;
 
     // 3. Enter amend mode
-    let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
+    let state = update_state(state, Some(Input::Character('\n')), 80, 80);
     assert!(state.main_screen.is_amend_mode);
-    assert_eq!(state.main_screen.file_cursor, second_commit_index);
+    let commit_message_input_index = state
+        .main_screen
+        .list_items
+        .iter()
+        .position(|item| matches!(item, ListItem::CommitMessageInput))
+        .unwrap();
+    assert_eq!(state.main_screen.file_cursor, commit_message_input_index);
 
     // 4. Navigate down
     let state_after_down = update_state(state, Some(Input::KeyDown), 80, 80);
-    assert_eq!(state_after_down.main_screen.file_cursor, second_commit_index + 1, "Cursor should move down");
-    assert!(!state_after_down.main_screen.is_amend_mode, "Should exit amend mode after navigating down");
+    let commit_message_input_index = state_after_down
+        .main_screen
+        .list_items
+        .iter()
+        .position(|item| matches!(item, ListItem::CommitMessageInput))
+        .unwrap();
+    assert_eq!(
+        state_after_down.main_screen.file_cursor,
+        commit_message_input_index + 1,
+        "Cursor should move down"
+    );
+    assert!(
+        !state_after_down.main_screen.is_amend_mode,
+        "Should exit amend mode after navigating down"
+    );
 
     // 5. Navigate up
     let state_after_up = update_state(state_after_down, Some(Input::KeyUp), 80, 80);
-    assert_eq!(state_after_up.main_screen.file_cursor, second_commit_index, "Cursor should move up");
+    assert_eq!(
+        state_after_up.main_screen.file_cursor, commit_message_input_index,
+        "Cursor should move up"
+    );
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
@@ -830,7 +876,10 @@ fn test_keydown_stops_at_last_line() {
     // KeyDown to commit line
     let state = update_state(state, Some(Input::KeyDown), max_y, max_x);
     assert_eq!(state.main_screen.file_cursor, 2);
-    assert!(matches!(state.current_main_item(), Some(ListItem::CommitMessageInput)));
+    assert!(matches!(
+        state.current_main_item(),
+        Some(ListItem::CommitMessageInput)
+    ));
 
     // KeyDown again, should not move
     let state = update_state(state, Some(Input::KeyDown), max_y, max_x);
@@ -1252,17 +1301,15 @@ fn test_amend_commit_message_in_place() {
 
     let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
     assert!(state.main_screen.is_amend_mode);
-    assert_eq!(state.main_screen.commit_message, "second commit");
+    assert_eq!(
+        state.main_screen.amend_message.as_deref(),
+        Some("second commit")
+    );
 
-    state = update_state(state, Some(Input::Character(' ')), 80, 80);
-    state = update_state(state, Some(Input::Character('r')), 80, 80);
-    state = update_state(state, Some(Input::Character('e')), 80, 80);
-    state = update_state(state, Some(Input::Character('w')), 80, 80);
-    state = update_state(state, Some(Input::Character('o')), 80, 80);
-    state = update_state(state, Some(Input::Character('r')), 80, 80);
-    state = update_state(state, Some(Input::Character('d')), 80, 80);
-    state = update_state(state, Some(Input::Character('e')), 80, 80);
-    state = update_state(state, Some(Input::Character('d')), 80, 80);
+    let new_text = " reworded";
+    for char_to_add in new_text.chars() {
+        state = update_state(state, Some(Input::Character(char_to_add)), 80, 80);
+    }
 
     let state = update_state(state, Some(Input::Character('\n')), 80, 80);
     assert!(!state.main_screen.is_amend_mode);
@@ -1352,15 +1399,22 @@ fn test_amend_commit_with_staged_changes() {
     // 4. Enter amend mode
     let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
     assert!(state.main_screen.is_amend_mode);
-    assert_eq!(state.main_screen.commit_message, "second commit");
+    assert_eq!(
+        state.main_screen.amend_message.as_deref(),
+        Some("second commit")
+    );
 
     // 5. Change commit message
-    state.main_screen.commit_message = "amended second commit".to_string();
+    state.main_screen.amend_message = Some("amended second commit".to_string());
 
     // 6. Execute amend
     let state = update_state(state, Some(Input::Character('\n')), 80, 80);
     assert!(!state.main_screen.is_amend_mode);
-    assert!(state.error_message.is_none(), "Error message should be None. Got: {:?}", state.error_message);
+    assert!(
+        state.error_message.is_none(),
+        "Error message should be None. Got: {:?}",
+        state.error_message
+    );
 
     // 7. Verify the result
     let log_output = OsCommand::new("git")
@@ -1390,70 +1444,6 @@ fn test_amend_commit_with_staged_changes() {
     assert!(show_str.contains("file3.txt"));
     assert!(show_str.contains("b-modified"));
     assert!(show_str.contains("c-new"));
-
-    std::fs::remove_dir_all(&repo_path).unwrap();
-}
-
-
-#[test]
-fn test_cancel_amend_mode() {
-    let repo_path = setup_temp_repo();
-    std::fs::write(repo_path.join("file.txt"), "a").unwrap();
-    OsCommand::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(&repo_path)
-        .output()
-        .unwrap();
-    OsCommand::new("git")
-        .arg("commit")
-        .arg("-m")
-        .arg("initial commit")
-        .current_dir(&repo_path)
-        .output()
-        .unwrap();
-
-    let mut state = AppState::new(repo_path.clone(), vec![]);
-    state.main_screen.commit_message = "new commit message".to_string();
-    crate::commit_storage::save_commit_message(&repo_path, &state.main_screen.commit_message)
-        .unwrap();
-
-    // Find the commit to amend
-    let commit_to_amend_index = state
-        .main_screen
-        .list_items
-        .iter()
-        .position(|item| {
-            if let crate::ui::main_screen::ListItem::PreviousCommitInfo { message, .. } = item {
-                message == "initial commit"
-            } else {
-                false
-            }
-        })
-        .unwrap();
-
-    state.main_screen.file_cursor = commit_to_amend_index;
-
-    // Press Enter to start amending
-    let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
-    assert!(state.main_screen.is_amend_mode);
-    assert_eq!(state.main_screen.commit_message, "initial commit");
-
-    // Move to the "New Commit" line
-    let new_commit_index = state
-        .main_screen
-        .list_items
-        .iter()
-        .position(|item| matches!(item, crate::ui::main_screen::ListItem::CommitMessageInput))
-        .unwrap();
-    state.main_screen.file_cursor = new_commit_index;
-
-    // Press Enter to cancel amend
-    let state = update_state(state, Some(Input::Character('\n')), 80, 80);
-    assert!(!state.main_screen.is_amend_mode);
-    assert!(state.main_screen.amending_commit_hash.is_none());
-    assert!(state.main_screen.is_commit_mode);
-    assert_eq!(state.main_screen.commit_message, "new commit message");
 
     std::fs::remove_dir_all(&repo_path).unwrap();
 }

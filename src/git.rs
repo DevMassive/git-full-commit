@@ -267,7 +267,11 @@ pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn amend_commit_with_staged_changes(repo_path: &Path, target_hash: &str, message: &str) -> Result<()> {
+pub fn amend_commit_with_staged_changes(
+    repo_path: &Path,
+    target_hash: &str,
+    message: &str,
+) -> Result<()> {
     // 1. Get the original message to check if it needs to be changed later
     let original_message_output = git_command()
         .arg("log")
@@ -296,7 +300,7 @@ pub fn amend_commit_with_staged_changes(repo_path: &Path, target_hash: &str, mes
     // 3. Rebase with autosquash
     let parent_hash_output = git_command()
         .arg("rev-parse")
-        .arg(format!("{}^", target_hash))
+        .arg(format!("{target_hash}^"))
         .current_dir(repo_path)
         .output()?;
     let is_root_commit = !parent_hash_output.status.success();
@@ -308,14 +312,20 @@ pub fn amend_commit_with_staged_changes(repo_path: &Path, target_hash: &str, mes
     if is_root_commit {
         rebase_cmd.arg("--root");
     } else {
-        let parent_hash = String::from_utf8_lossy(&parent_hash_output.stdout).trim().to_string();
+        let parent_hash = String::from_utf8_lossy(&parent_hash_output.stdout)
+            .trim()
+            .to_string();
         rebase_cmd.arg(&parent_hash);
     }
 
     let rebase_output = rebase_cmd.current_dir(repo_path).output()?;
 
     if !rebase_output.status.success() {
-        git_command().arg("rebase").arg("--abort").current_dir(repo_path).output()?;
+        git_command()
+            .arg("rebase")
+            .arg("--abort")
+            .current_dir(repo_path)
+            .output()?;
         anyhow::bail!("git rebase for fixup failed. Aborting.");
     }
 
@@ -358,7 +368,7 @@ pub fn reword_commit(repo_path: &Path, commit_hash: &str, message: &str) -> Resu
 
     let parent_hash_output = git_command()
         .arg("rev-parse")
-        .arg(format!("{}^", commit_hash))
+        .arg(format!("{commit_hash}^"))
         .current_dir(repo_path)
         .output()?;
     let is_root_commit = !parent_hash_output.status.success();
@@ -370,10 +380,7 @@ pub fn reword_commit(repo_path: &Path, commit_hash: &str, message: &str) -> Resu
     let short_hash = &commit_hash[0..7.min(commit_hash.len())];
     rebase_cmd.env(
         "GIT_SEQUENCE_EDITOR",
-        format!(
-            "sed -i -e 's/^pick {}/reword {}/'",
-            short_hash, short_hash
-        ),
+        format!("sed -i -e 's/^pick {short_hash}/reword {short_hash}/'"),
     );
     rebase_cmd.env("GIT_EDITOR", editor_script_path.to_str().unwrap());
     rebase_cmd.arg("rebase").arg("-i");
@@ -426,7 +433,7 @@ pub fn fixup_and_rebase_autosquash(repo_path: &Path, fixup_commit_hash: &str) ->
     // 2. Execute git rebase -i --autosquash
     let parent_hash_output = git_command()
         .arg("rev-parse")
-        .arg(format!("{}^", fixup_commit_hash))
+        .arg(format!("{fixup_commit_hash}^"))
         .current_dir(repo_path)
         .output()?;
     let is_root_commit = !parent_hash_output.status.success();
@@ -444,7 +451,11 @@ pub fn fixup_and_rebase_autosquash(repo_path: &Path, fixup_commit_hash: &str) ->
     let rebase_output = rebase_cmd.current_dir(repo_path).output()?;
 
     if !rebase_output.status.success() {
-        git_command().arg("rebase").arg("--abort").current_dir(repo_path).output()?;
+        git_command()
+            .arg("rebase")
+            .arg("--abort")
+            .current_dir(repo_path)
+            .output()?;
         anyhow::bail!("git rebase for fixup failed. Aborting.");
     }
 

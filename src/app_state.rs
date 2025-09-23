@@ -31,6 +31,7 @@ pub struct MainScreenState {
     pub is_commit_mode: bool,
     pub commit_cursor: usize,
     pub is_amend_mode: bool,
+    pub amend_message: Option<String>,
     pub amending_commit_hash: Option<String>,
     pub is_diff_cursor_active: bool,
     pub has_unstaged_changes: bool,
@@ -79,8 +80,7 @@ impl AppState {
         let mut main_screen = MainScreenState::default();
         main_screen.commit_message = commit_message;
         main_screen.has_unstaged_changes = has_unstaged_changes;
-        main_screen.list_items =
-            Self::build_main_screen_list_items(&files, &previous_commits);
+        main_screen.list_items = Self::build_main_screen_list_items(&files, &previous_commits);
         main_screen.file_cursor = if !files.is_empty() { 1 } else { 0 };
 
         let mut unstaged_screen = UnstagedScreenState::default();
