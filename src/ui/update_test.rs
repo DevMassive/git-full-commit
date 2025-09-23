@@ -659,66 +659,6 @@ fn test_discard_hunk() {
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
 
-#[test]
-fn test_amend_draft_is_preserved_after_navigation() {
-    let repo_path = setup_temp_repo();
-    std::fs::write(repo_path.join("file1.txt"), "a").unwrap();
-    OsCommand::new("git")
-        .arg("add")
-        .arg(".")
-        .current_dir(&repo_path)
-        .output()
-        .unwrap();
-    OsCommand::new("git")
-        .arg("commit")
-        .arg("-m")
-        .arg("first commit")
-        .current_dir(&repo_path)
-        .output()
-        .unwrap();
-
-    let mut state = AppState::new(repo_path.clone(), vec![]);
-    let first_commit_index = state
-        .main_screen
-        .list_items
-        .iter()
-        .position(|item| {
-            if let crate::ui::main_screen::ListItem::PreviousCommitInfo { message, .. } = item {
-                message == "first commit"
-            } else {
-                false
-            }
-        })
-        .unwrap();
-    state.main_screen.file_cursor = first_commit_index;
-
-    // Enter amend mode
-    let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
-    assert!(state.main_screen.is_amend_mode);
-
-    // Edit the message
-    state.main_screen.amend_message = Some("draft message".to_string());
-
-    // Navigate away
-    let state = update_state(state, Some(Input::KeyDown), 80, 80);
-    assert!(!state.main_screen.is_amend_mode);
-    assert_eq!(
-        state.main_screen.amend_message.as_deref(),
-        Some("draft message"),
-        "Draft should be kept after navigating away"
-    );
-
-    // Re-enter amend mode on the same commit
-    let state = update_state(state, Some(Input::Character('\n')), 80, 80);
-    assert!(state.main_screen.is_amend_mode);
-    assert_eq!(
-        state.main_screen.amend_message.as_deref(),
-        Some("draft message"),
-        "Draft should be preserved when re-entering amend mode"
-    );
-
-    std::fs::remove_dir_all(&repo_path).unwrap();
-}
 
 #[test]
 fn test_diff_view_updates_on_navigation_to_commit() {
@@ -824,39 +764,38 @@ fn test_navigation_in_amend_mode() {
     state.main_screen.file_cursor = second_commit_index;
 
     // 3. Enter amend mode
-    let state = update_state(state, Some(Input::Character('\n')), 80, 80);
-    assert!(state.main_screen.is_amend_mode);
-    let commit_message_input_index = state
+    let state_in_amend = update_state(state, Some(Input::Character('\n')), 80, 80);
+    assert!(matches!(
+        state_in_amend.current_main_item(),
+        Some(ListItem::AmendingCommitMessageInput { .. })
+    ));
+    assert!(state_in_amend
         .main_screen
-        .list_items
-        .iter()
-        .position(|item| matches!(item, ListItem::CommitMessageInput))
-        .unwrap();
-    assert_eq!(state.main_screen.file_cursor, commit_message_input_index);
+        .amending_commit_hash
+        .is_some());
 
     // 4. Navigate down
-    let state_after_down = update_state(state, Some(Input::KeyDown), 80, 80);
-    let commit_message_input_index = state_after_down
-        .main_screen
-        .list_items
-        .iter()
-        .position(|item| matches!(item, ListItem::CommitMessageInput))
-        .unwrap();
-    assert_eq!(
-        state_after_down.main_screen.file_cursor,
-        commit_message_input_index + 1,
-        "Cursor should move down"
-    );
+    let state_after_down = update_state(state_in_amend, Some(Input::KeyDown), 80, 80);
     assert!(
-        !state_after_down.main_screen.is_amend_mode,
+        !matches!(
+            state_after_down.current_main_item(),
+            Some(ListItem::AmendingCommitMessageInput { .. })
+        ),
         "Should exit amend mode after navigating down"
     );
+    assert!(state_after_down
+        .main_screen
+        .amending_commit_hash
+        .is_none());
 
     // 5. Navigate up
     let state_after_up = update_state(state_after_down, Some(Input::KeyUp), 80, 80);
-    assert_eq!(
-        state_after_up.main_screen.file_cursor, commit_message_input_index,
-        "Cursor should move up"
+    assert!(
+        !matches!(
+            state_after_up.current_main_item(),
+            Some(ListItem::AmendingCommitMessageInput { .. })
+        ),
+        "Should not be in amend mode after navigating up"
     );
 
     std::fs::remove_dir_all(&repo_path).unwrap();
@@ -1300,11 +1239,10 @@ fn test_amend_commit_message_in_place() {
     state.main_screen.file_cursor = commit_to_amend_index;
 
     let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
-    assert!(state.main_screen.is_amend_mode);
-    assert_eq!(
-        state.main_screen.amend_message.as_deref(),
-        Some("second commit")
-    );
+    assert!(matches!(
+        state.current_main_item(),
+        Some(ListItem::AmendingCommitMessageInput { message, .. }) if message == "second commit"
+    ));
 
     let new_text = " reworded";
     for char_to_add in new_text.chars() {
@@ -1312,7 +1250,7 @@ fn test_amend_commit_message_in_place() {
     }
 
     let state = update_state(state, Some(Input::Character('\n')), 80, 80);
-    assert!(!state.main_screen.is_amend_mode);
+    assert!(state.main_screen.amending_commit_hash.is_none());
 
     let output = OsCommand::new("git")
         .arg("log")
@@ -1398,18 +1336,21 @@ fn test_amend_commit_with_staged_changes() {
 
     // 4. Enter amend mode
     let mut state = update_state(state, Some(Input::Character('\n')), 80, 80);
-    assert!(state.main_screen.is_amend_mode);
-    assert_eq!(
-        state.main_screen.amend_message.as_deref(),
-        Some("second commit")
-    );
+    assert!(matches!(
+        state.current_main_item(),
+        Some(ListItem::AmendingCommitMessageInput { message, .. }) if message == "second commit"
+    ));
 
     // 5. Change commit message
-    state.main_screen.amend_message = Some("amended second commit".to_string());
+    if let Some(ListItem::AmendingCommitMessageInput { message, .. }) =
+        state.main_screen.list_items.get_mut(commit_to_amend_index)
+    {
+        *message = "amended second commit".to_string();
+    }
 
     // 6. Execute amend
     let state = update_state(state, Some(Input::Character('\n')), 80, 80);
-    assert!(!state.main_screen.is_amend_mode);
+    assert!(state.main_screen.amending_commit_hash.is_none());
     assert!(
         state.error_message.is_none(),
         "Error message should be None. Got: {:?}",

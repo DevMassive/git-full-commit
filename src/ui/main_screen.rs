@@ -26,6 +26,10 @@ pub enum ListItem {
         message: String,
         is_on_remote: bool,
     },
+    AmendingCommitMessageInput {
+        hash: String,
+        message: String,
+    },
 }
 
 pub fn render(window: &Window, state: &AppState) {
@@ -99,8 +103,19 @@ pub fn render(window: &Window, state: &AppState) {
                 window.attroff(COLOR_PAIR(pair));
             }
             ListItem::CommitMessageInput => {
-                (carret_x, carret_y) =
-                    commit_view::render(window, state, is_selected, line_y, max_x);
+                if state.main_screen.amending_commit_hash.is_none() {
+                    (carret_x, carret_y) =
+                        commit_view::render(window, state, is_selected, line_y, max_x);
+                } else {
+                    if is_selected {
+                        let pair = 5;
+                        window.attron(COLOR_PAIR(pair));
+                        for x in 0..max_x {
+                            window.mvaddch(line_y, x, ' ');
+                        }
+                        window.attroff(COLOR_PAIR(pair));
+                    }
+                }
             }
             ListItem::PreviousCommitInfo {
                 hash,
@@ -125,11 +140,12 @@ pub fn render(window: &Window, state: &AppState) {
                 window.attroff(COLOR_PAIR(status_pair));
 
                 window.attron(COLOR_PAIR(pair));
-                if state.main_screen.amending_commit_hash.as_deref() == Some(hash.as_str()) {
-                    window.addstr("[amend] ");
-                }
                 window.addstr(message);
                 window.attroff(COLOR_PAIR(pair));
+            }
+            ListItem::AmendingCommitMessageInput { .. } => {
+                (carret_x, carret_y) =
+                    commit_view::render(window, state, is_selected, line_y, max_x);
             }
         }
     }
@@ -179,7 +195,11 @@ pub fn render(window: &Window, state: &AppState) {
         _ => {}
     }
 
-    let is_editing_commit = state.main_screen.is_commit_mode || state.main_screen.is_amend_mode;
+    let is_editing_commit = state.main_screen.is_commit_mode
+        || matches!(
+            current_item,
+            Some(ListItem::AmendingCommitMessageInput { .. })
+        );
 
     window.mv(carret_y, carret_x);
     if is_editing_commit {
@@ -202,7 +222,10 @@ pub fn render(window: &Window, state: &AppState) {
 }
 
 pub fn handle_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
-    if state.main_screen.is_commit_mode || state.main_screen.is_amend_mode {
+    let is_editing_amend_commit =
+        matches!(state.current_main_item(), Some(ListItem::AmendingCommitMessageInput { .. }));
+
+    if state.main_screen.is_commit_mode || is_editing_amend_commit {
         match input {
             Input::KeyUp
             | Input::Character('\u{10}')
@@ -328,23 +351,33 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                     is_on_remote,
                 }) => {
                     if !is_on_remote {
-                        if state.main_screen.amending_commit_hash.as_deref() != Some(hash.as_str())
-                        {
-                            state.main_screen.amending_commit_hash = Some(hash);
-                            state.main_screen.amend_message = Some(message);
+                        state.main_screen.amending_commit_hash = Some(hash.clone());
+
+                        let current_index = state.main_screen.file_cursor;
+                        if let Some(item) = state.main_screen.list_items.get_mut(current_index) {
+                            *item = ListItem::AmendingCommitMessageInput {
+                                hash: hash.clone(),
+                                message: message.clone(),
+                            };
                         }
-                        state.main_screen.is_amend_mode = true;
-                        if let Some(index) = state
+
+                        if let Some(commit_input_index) = state
                             .main_screen
                             .list_items
                             .iter()
                             .position(|item| matches!(item, ListItem::CommitMessageInput))
                         {
-                            state.main_screen.file_cursor = index;
+                            if let Some(item) = state
+                                .main_screen
+                                .list_items
+                                .get_mut(commit_input_index)
+                            {
+                                if let ListItem::CommitMessageInput = item {
+                                    state.main_screen.commit_message.clear();
+                                }
+                            }
                         }
-                        if let Some(msg) = &state.main_screen.amend_message {
-                            state.main_screen.commit_cursor = msg.chars().count();
-                        }
+                        state.main_screen.commit_cursor = message.chars().count();
                     }
                 }
                 _ => {}
@@ -377,9 +410,24 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
 }
 
 fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
-    if state.main_screen.is_commit_mode || state.main_screen.is_amend_mode {
-        state.main_screen.is_commit_mode = false;
-        state.main_screen.is_amend_mode = false;
+    state.main_screen.is_commit_mode = false;
+
+    if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
+        if let Some(index) = state
+            .main_screen
+            .list_items
+            .iter()
+            .position(|item| matches!(item, ListItem::AmendingCommitMessageInput { .. }))
+        {
+            if let Some(commit) = state.previous_commits.iter().find(|c| c.hash == hash) {
+                state.main_screen.list_items[index] = ListItem::PreviousCommitInfo {
+                    hash: commit.hash.clone(),
+                    message: commit.message.clone(),
+                    is_on_remote: commit.is_on_remote,
+                };
+            }
+        }
+        state.main_screen.amending_commit_hash = None;
     }
 
     match input {

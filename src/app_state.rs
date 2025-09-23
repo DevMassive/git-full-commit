@@ -30,8 +30,6 @@ pub struct MainScreenState {
     pub commit_message: String,
     pub is_commit_mode: bool,
     pub commit_cursor: usize,
-    pub is_amend_mode: bool,
-    pub amend_message: Option<String>,
     pub amending_commit_hash: Option<String>,
     pub is_diff_cursor_active: bool,
     pub has_unstaged_changes: bool,

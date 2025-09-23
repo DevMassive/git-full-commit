@@ -22,17 +22,18 @@ pub fn render(
     window.mv(line_y, 0);
 
     let prefix = " ○ ";
-    let (message, placeholder) = if state.main_screen.is_amend_mode {
-        (
-            state.main_screen.amend_message.as_deref().unwrap_or(""),
-            "Enter amend message...",
-        )
-    } else {
-        (
-            state.main_screen.commit_message.as_str(),
-            "Enter commit message...",
-        )
-    };
+    let (message, placeholder) =
+        if let Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput {
+            message, ..
+        }) = state.current_main_item()
+        {
+            (message.as_str(), "Enter amend message...")
+        } else {
+            (
+                state.main_screen.commit_message.as_str(),
+                "Enter commit message...",
+            )
+        };
 
     window.addstr(prefix);
     if message.is_empty() {
@@ -60,10 +61,22 @@ pub fn render(
 }
 
 pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
-    let is_amend = state.main_screen.is_amend_mode;
+    let is_amend = matches!(
+        state.current_main_item(),
+        Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput { .. })
+    );
 
     let message_to_edit = if is_amend {
-        state.main_screen.amend_message.as_mut()
+        if let Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput { message, .. }) =
+            state
+                .main_screen
+                .list_items
+                .get_mut(state.main_screen.file_cursor)
+        {
+            Some(message)
+        } else {
+            None
+        }
     } else {
         Some(&mut state.main_screen.commit_message)
     };
@@ -90,9 +103,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
                     match result {
                         Ok(_) => {
                             state.command_history.clear();
-                            state.main_screen.is_amend_mode = false;
                             state.main_screen.amending_commit_hash = None;
-                            state.main_screen.amend_message = None;
                             state.refresh_diff();
                         }
                         Err(e) => {
