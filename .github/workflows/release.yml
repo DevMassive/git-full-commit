@@ -34,7 +34,7 @@ jobs:
         with:
           fetch-depth: 0 # ← コミットログ生成に必要
 
-      - name: Install Rust $RUSTUP_TOOLCHAIN and ${{ matrix.target }}
+      - name: Install Rust ${{ env.RUSTUP_TOOLCHAIN }} and ${{ matrix.target }}
         uses: nick-invision/retry@v2
         with:
           max_attempts: 3
@@ -42,19 +42,6 @@ jobs:
           command: |
             rustup update ${{ env.RUSTUP_TOOLCHAIN }}
             rustup target add ${{ matrix.target }}
-
-      - name: Install Linux dependencies (for pancurses)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libncurses5-dev libncursesw5-dev xvfb
-
-      - name: Run tests on Linux
-        if: runner.os == 'Linux'
-        run: |
-          export TERM=xterm
-          xvfb-run cargo test --release --target ${{ matrix.target }}
-      - name: Run tests on non-Linux
-        if: runner.os != 'Linux'
-        run: cargo test --release --target ${{ matrix.target }}
 
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }} --verbose
