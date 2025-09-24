@@ -34,6 +34,15 @@ jobs:
         with:
           fetch-depth: 0 # ← コミットログ生成に必要
 
+      - name: Install Rust $RUSTUP_TOOLCHAIN and ${{ matrix.target }}
+        uses: nick-invision/retry@v2
+        with:
+          max_attempts: 3
+          timeout_minutes: 10
+          command: |
+            rustup update ${{ env.RUSTUP_TOOLCHAIN }}
+            rustup target add ${{ matrix.target }}
+
       - name: Install Linux dependencies (for pancurses)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libncurses5-dev libncursesw5-dev xvfb
