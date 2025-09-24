@@ -663,7 +663,6 @@ pub fn apply_patch(repo_path: &Path, patch: &str, reverse: bool, cached: bool) -
 pub fn checkout_file(repo_path: &Path, file_name: &str) -> Result<()> {
     git_command()
         .arg("checkout")
-        .arg("HEAD")
         .arg("--")
         .arg(file_name)
         .current_dir(repo_path)
