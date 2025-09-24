@@ -351,6 +351,7 @@ pub fn amend_commit_with_staged_changes(
 }
 
 pub fn reword_commit(repo_path: &Path, commit_hash: &str, message: &str) -> Result<()> {
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
     // Write the new message to a temporary file
@@ -364,6 +365,7 @@ pub fn reword_commit(repo_path: &Path, commit_hash: &str, message: &str) -> Resu
         temp_message_path.to_str().unwrap()
     );
     std::fs::write(&editor_script_path, &script_content)?;
+    #[cfg(unix)]
     std::fs::set_permissions(&editor_script_path, std::fs::Permissions::from_mode(0o755))?;
 
     let parent_hash_output = git_command()
