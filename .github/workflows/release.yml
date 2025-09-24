@@ -34,51 +34,14 @@ jobs:
         with:
           fetch-depth: 0 # ← コミットログ生成に必要
 
-      # --- Cache Cargo / Rustup ---
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-git-
-
-      - name: Cache rustup
-        uses: actions/cache@v4
-        with:
-          path: ~/.rustup
-          key: ${{ runner.os }}-rustup-${{ env.RUSTUP_TOOLCHAIN }}
-
-      # --- Setup Rust toolchain ---
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
-          targets: ${{ matrix.target }}
-
-      - name: Ensure rustup update succeeds
+      - name: Install Rust ${{ env.RUSTUP_TOOLCHAIN }} and ${{ matrix.target }}
         uses: nick-invision/retry@v2
         with:
           max_attempts: 3
           timeout_minutes: 10
-          command: rustup update ${{ env.RUSTUP_TOOLCHAIN }} --target ${{ matrix.target }}
-
-      - name: Install Linux dependencies (for pancurses)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libncurses5-dev libncursesw5-dev
-
-      - name: Run tests
-        run: cargo test --release --target ${{ matrix.target }}
+          command: |
+            rustup update ${{ env.RUSTUP_TOOLCHAIN }}
+            rustup target add ${{ matrix.target }}
 
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }} --verbose
@@ -157,25 +120,25 @@ jobs:
           OTHERS=$(git log $RANGE --pretty=format:"* %s" | grep -vE "^* (feat|fix|docs|chore)" || true)
 
           if [ -n "$FEAT" ]; then
-            echo "## ✨ Features" >> CHANGELOG.md
+            echo "## Features" >> CHANGELOG.md
             echo "$FEAT" >> CHANGELOG.md
             echo "" >> CHANGELOG.md
           fi
 
           if [ -n "$FIX" ]; then
-            echo "## 🐛 Fixes" >> CHANGELOG.md
+            echo "## Fixes" >> CHANGELOG.md
             echo "$FIX" >> CHANGELOG.md
             echo "" >> CHANGELOG.md
           fi
 
           if [ -n "$DOCS" ]; then
-            echo "## 📖 Docs" >> CHANGELOG.md
+            echo "## Docs" >> CHANGELOG.md
             echo "$DOCS" >> CHANGELOG.md
             echo "" >> CHANGELOG.md
           fi
 
           if [ -n "$CHORE" ]; then
-            echo "## 🔧 Chore" >> CHANGELOG.md
+            echo "## Chore" >> CHANGELOG.md
             echo "$CHORE" >> CHANGELOG.md
             echo "" >> CHANGELOG.md
           fi
