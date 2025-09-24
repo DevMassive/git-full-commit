@@ -4,52 +4,66 @@ use std::env;
 use std::process::Command;
 
 #[cfg(not(test))]
+fn is_command_available(command: &str) -> bool {
+    Command::new(command)
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_or(false, |status| status.success())
+}
+
+#[cfg(not(test))]
 pub fn open_editor(file_path: &str, line_number: Option<usize>) -> std::io::Result<()> {
-    let editor_cmd = env::var("EDITOR");
+    let mut cmd;
 
-    let mut cmd = match editor_cmd {
-        Ok(editor) if !editor.is_empty() => {
-            // User has $EDITOR set
-
-            if editor.contains("code") {
-                // Handle VS Code and its variants
-                let mut cmd = Command::new(&editor);
-                if let Some(line) = line_number {
-                    cmd.arg("-g").arg(format!("{file_path}:{line}"));
-                } else {
-                    cmd.arg(file_path);
-                }
-                cmd
-            } else {
-                // Handle other editors like vi, vim, nvim, nano
-                let mut cmd = Command::new(&editor);
-                if let Some(line) = line_number {
-                    // This syntax works for vim/nvim, but might not for others.
-                    // It's a reasonable default.
-                    cmd.arg(format!("+{line}"));
-                }
-                cmd.arg(file_path);
-                cmd
-            }
+    if is_command_available("code") {
+        cmd = Command::new("code");
+        if let Some(line) = line_number {
+            cmd.arg("-g").arg(format!("{file_path}:{line}"));
+        } else {
+            cmd.arg(file_path);
         }
-        _ => {
-            // $EDITOR is not set or is empty, use platform defaults
-            if cfg!(target_os = "macos") {
-                let mut command = Command::new("open");
-                command.arg(file_path);
-                command
-            } else {
-                // Default to `code` on other systems (e.g., Linux)
-                let mut command = Command::new("code");
-                if let Some(line) = line_number {
-                    command.arg("-g").arg(format!("{file_path}:{line}"));
+    } else {
+        let editor_cmd = env::var("EDITOR");
+        cmd = match editor_cmd {
+            Ok(editor) if !editor.is_empty() => {
+                // User has $EDITOR set. We already know `code` is not available as a command.
+                // But user might have `EDITOR=/path/to/code`
+                let mut inner_cmd = Command::new(&editor);
+                if editor.contains("code") {
+                    if let Some(line) = line_number {
+                        inner_cmd.arg("-g").arg(format!("{file_path}:{line}"));
+                    } else {
+                        inner_cmd.arg(file_path);
+                    }
                 } else {
+                    // Handle other editors like vi, vim, nvim, nano
+                    if let Some(line) = line_number {
+                        inner_cmd.arg(format!("+{line}"));
+                    }
+                    inner_cmd.arg(file_path);
+                }
+                inner_cmd
+            }
+            _ => {
+                // $EDITOR is not set or is empty, use platform defaults
+                if cfg!(target_os = "macos") {
+                    let mut command = Command::new("open");
                     command.arg(file_path);
+                    command
+                } else {
+                    // Default to `vi` on other systems if `code` is not found
+                    let mut command = Command::new("vi");
+                    if let Some(line) = line_number {
+                        command.arg(format!("+{line}"));
+                    }
+                    command.arg(file_path);
+                    command
                 }
-                command
             }
-        }
-    };
+        };
+    }
 
     cmd.status().map(|_| ()).map_err(|e| {
         // If the command fails (e.g. `code` not found), we can add a fallback here in the future.

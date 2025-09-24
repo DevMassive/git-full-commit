@@ -118,7 +118,7 @@ pub fn render(window: &Window, state: &AppState) {
                 }
             }
             ListItem::PreviousCommitInfo {
-                hash,
+                hash: _,
                 message,
                 is_on_remote,
             } => {
