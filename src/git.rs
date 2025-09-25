@@ -253,9 +253,6 @@ pub fn has_unstaged_changes(repo_path: &Path) -> Result<bool> {
     Ok(false)
 }
 
-pub fn is_git_repository(path: &Path) -> bool {
-    path.join(".git").is_dir()
-}
 
 pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
     git_command()

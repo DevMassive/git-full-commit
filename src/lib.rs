@@ -1,6 +1,5 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use std::path::PathBuf;
-use std::process::Command as OsCommand;
 
 pub mod app_state;
 pub mod command;
@@ -13,15 +12,7 @@ pub mod ui;
 pub mod util;
 
 pub fn run(repo_path: PathBuf) -> Result<()> {
-    if !git::is_git_repository(&repo_path) {
-        bail!("fatal: not a git repository (or any of the parent directories): .git");
-    }
-
-    let staged_diff_output = OsCommand::new("git")
-        .arg("diff")
-        .arg("--staged")
-        .current_dir(&repo_path)
-        .output()?;
+    let staged_diff_output = git::get_staged_diff_output(&repo_path)?;
 
     if staged_diff_output.stdout.is_empty() {
         git::add_all(&repo_path)?;
