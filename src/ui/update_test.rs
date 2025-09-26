@@ -659,7 +659,6 @@ fn test_discard_hunk() {
     std::fs::remove_dir_all(&repo_path).unwrap();
 }
 
-
 #[test]
 fn test_diff_view_updates_on_navigation_to_commit() {
     let repo_path = setup_temp_repo();
@@ -769,10 +768,7 @@ fn test_navigation_in_amend_mode() {
         state_in_amend.current_main_item(),
         Some(ListItem::AmendingCommitMessageInput { .. })
     ));
-    assert!(state_in_amend
-        .main_screen
-        .amending_commit_hash
-        .is_some());
+    assert!(state_in_amend.main_screen.amending_commit_hash.is_some());
 
     // 4. Navigate down
     let state_after_down = update_state(state_in_amend, Some(Input::KeyDown), 80, 80);
@@ -783,10 +779,7 @@ fn test_navigation_in_amend_mode() {
         ),
         "Should exit amend mode after navigating down"
     );
-    assert!(state_after_down
-        .main_screen
-        .amending_commit_hash
-        .is_none());
+    assert!(state_after_down.main_screen.amending_commit_hash.is_none());
 
     // 5. Navigate up
     let state_after_up = update_state(state_after_down, Some(Input::KeyUp), 80, 80);

@@ -1,7 +1,6 @@
 use crate::app_state::{AppState, EditorRequest, Screen};
 use crate::command::{
-    ApplyPatchCommand, CheckoutFileCommand, Command, DiscardHunkCommand, IgnoreFileCommand,
-    RemoveFileCommand, StageAllCommand, UnstageAllCommand, UnstageFileCommand,
+    ApplyPatchCommand, CheckoutFileCommand, Command, DiscardHunkCommand, IgnoreFileCommand, StageAllCommand, UnstageAllCommand, UnstageFileCommand,
 };
 use crate::commit_storage;
 use crate::git;
@@ -106,15 +105,13 @@ pub fn render(window: &Window, state: &AppState) {
                 if state.main_screen.amending_commit_hash.is_none() {
                     (carret_x, carret_y) =
                         commit_view::render(window, state, is_selected, line_y, max_x);
-                } else {
-                    if is_selected {
-                        let pair = 5;
-                        window.attron(COLOR_PAIR(pair));
-                        for x in 0..max_x {
-                            window.mvaddch(line_y, x, ' ');
-                        }
-                        window.attroff(COLOR_PAIR(pair));
+                } else if is_selected {
+                    let pair = 5;
+                    window.attron(COLOR_PAIR(pair));
+                    for x in 0..max_x {
+                        window.mvaddch(line_y, x, ' ');
                     }
+                    window.attroff(COLOR_PAIR(pair));
                 }
             }
             ListItem::PreviousCommitInfo {
@@ -134,7 +131,11 @@ pub fn render(window: &Window, state: &AppState) {
                 window.mv(line_y, 0);
                 let status_pair = if *is_on_remote {
                     if is_selected { 8 } else { 4 }
-                } else if is_selected { 7 } else { 3 };
+                } else if is_selected {
+                    7
+                } else {
+                    3
+                };
                 window.attron(COLOR_PAIR(status_pair));
                 window.addstr(" ● ");
                 window.attroff(COLOR_PAIR(status_pair));
@@ -222,8 +223,10 @@ pub fn render(window: &Window, state: &AppState) {
 }
 
 pub fn handle_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
-    let is_editing_amend_commit =
-        matches!(state.current_main_item(), Some(ListItem::AmendingCommitMessageInput { .. }));
+    let is_editing_amend_commit = matches!(
+        state.current_main_item(),
+        Some(ListItem::AmendingCommitMessageInput { .. })
+    );
 
     if state.main_screen.is_commit_mode || is_editing_amend_commit {
         match input {
@@ -307,9 +310,11 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                     .iter()
                     .find(|f| f.file_name == staged_file.file_name)
                 {
-                    let patch =
-                        git::get_unstaged_file_diff_patch(&state.repo_path, &unstaged_file.file_name)
-                            .expect("Failed to get unstaged diff for file.");
+                    let patch = git::get_unstaged_file_diff_patch(
+                        &state.repo_path,
+                        &unstaged_file.file_name,
+                    )
+                    .expect("Failed to get unstaged diff for file.");
 
                     let command: Box<dyn Command> = Box::new(CheckoutFileCommand::new(
                         state.repo_path.clone(),
@@ -368,10 +373,8 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                             .iter()
                             .position(|item| matches!(item, ListItem::CommitMessageInput))
                         {
-                            if let Some(item) = state
-                                .main_screen
-                                .list_items
-                                .get_mut(commit_input_index)
+                            if let Some(item) =
+                                state.main_screen.list_items.get_mut(commit_input_index)
                             {
                                 if let ListItem::CommitMessageInput = item {
                                     state.main_screen.commit_message.clear();

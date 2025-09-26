@@ -67,11 +67,12 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
     );
 
     let message_to_edit = if is_amend {
-        if let Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput { message, .. }) =
-            state
-                .main_screen
-                .list_items
-                .get_mut(state.main_screen.file_cursor)
+        if let Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput {
+            message, ..
+        }) = state
+            .main_screen
+            .list_items
+            .get_mut(state.main_screen.file_cursor)
         {
             Some(message)
         } else {

@@ -10,7 +10,7 @@ fn is_command_available(command: &str) -> bool {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
-        .map_or(false, |status| status.success())
+        .is_ok_and(|status| status.success())
 }
 
 #[cfg(not(test))]

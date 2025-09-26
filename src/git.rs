@@ -253,7 +253,6 @@ pub fn has_unstaged_changes(repo_path: &Path) -> Result<bool> {
     Ok(false)
 }
 
-
 pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
     git_command()
         .arg("commit")
@@ -304,7 +303,11 @@ pub fn amend_commit_with_staged_changes(
 
     let mut rebase_cmd = git_command();
     rebase_cmd.env("GIT_SEQUENCE_EDITOR", "true");
-    rebase_cmd.arg("rebase").arg("-i").arg("--autosquash").arg("--autostash");
+    rebase_cmd
+        .arg("rebase")
+        .arg("-i")
+        .arg("--autosquash")
+        .arg("--autostash");
 
     if is_root_commit {
         rebase_cmd.arg("--root");
@@ -439,7 +442,11 @@ pub fn fixup_and_rebase_autosquash(repo_path: &Path, fixup_commit_hash: &str) ->
 
     let mut rebase_cmd = git_command();
     rebase_cmd.env("GIT_SEQUENCE_EDITOR", "true");
-    rebase_cmd.arg("rebase").arg("-i").arg("--autosquash").arg("--autostash");
+    rebase_cmd
+        .arg("rebase")
+        .arg("-i")
+        .arg("--autosquash")
+        .arg("--autostash");
 
     if is_root_commit {
         rebase_cmd.arg("--root");
