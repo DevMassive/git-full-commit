@@ -300,23 +300,24 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                         state.execute_and_refresh(command);
                     }
                 }
-            } else if let Some(file) = state.current_main_file().cloned() {
-                let patch = git::get_file_diff_patch(&state.repo_path, &file.file_name)
-                    .expect("Failed to get diff for file.");
-                let command: Box<dyn Command> = if file.status == git::FileStatus::Added {
-                    Box::new(RemoveFileCommand::new(
+            } else if let Some(staged_file) = state.current_main_file().cloned() {
+                if let Some(unstaged_file) = state
+                    .unstaged_screen
+                    .unstaged_files
+                    .iter()
+                    .find(|f| f.file_name == staged_file.file_name)
+                {
+                    let patch =
+                        git::get_unstaged_file_diff_patch(&state.repo_path, &unstaged_file.file_name)
+                            .expect("Failed to get unstaged diff for file.");
+
+                    let command: Box<dyn Command> = Box::new(CheckoutFileCommand::new(
                         state.repo_path.clone(),
-                        file.file_name.clone(),
+                        unstaged_file.file_name.clone(),
                         patch,
-                    ))
-                } else {
-                    Box::new(CheckoutFileCommand::new(
-                        state.repo_path.clone(),
-                        file.file_name.clone(),
-                        patch,
-                    ))
-                };
-                state.execute_and_refresh(command);
+                    ));
+                    state.execute_and_refresh(command);
+                }
             }
         }
         Input::Character('\n') | Input::Character('u') => {
