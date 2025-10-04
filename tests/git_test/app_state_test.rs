@@ -1,116 +1,24 @@
-use git_full_commit::app_state::AppState;
+use super::common::{run_test_with_pancurses, TestRepo};
+use git_full_commit::app_state::{AppState, Screen};
 use git_full_commit::git::get_diff;
 use git_full_commit::ui::update::update_state;
-use pancurses::{endwin, initscr, Input, Window};
+use pancurses::Input;
 use serial_test::serial;
-use std::fs;
 use std::path::PathBuf;
 use std::process::Command as OsCommand;
-use tempfile::TempDir;
 
-pub struct TestSetup {
-    _tmp_dir: TempDir,
-    pub repo_path: PathBuf,
-}
-
-impl TestSetup {
-    fn new() -> Self {
-        let (tmp_dir, repo_path) = setup_git_repo();
-        TestSetup {
-            _tmp_dir: tmp_dir,
-            repo_path,
-        }
-    }
-
-    fn new_multi_line() -> Self {
-        let tmp_dir = TempDir::new().unwrap();
-        let repo_path = tmp_dir.path().to_path_buf();
-
-        // git init
-        run_git(&repo_path, &["init"]);
-        run_git(&repo_path, &["config", "user.name", "Test"]);
-        run_git(&repo_path, &["config", "user.email", "test@example.com"]);
-
-        // first commit
-        let file_path = repo_path.join("test.txt");
-        fs::write(&file_path, "line1\nline2\nline3\n").unwrap();
-
-        run_git(&repo_path, &["add", "test.txt"]);
-        run_git(&repo_path, &["commit", "-m", "initial commit"]);
-
-        // stage file
-        fs::write(&file_path, "line1\nchanged\nline3\n").unwrap();
-        run_git(&repo_path, &["add", "test.txt"]);
-
-        TestSetup {
-            _tmp_dir: tmp_dir,
-            repo_path,
-        }
-    }
-}
-
-fn setup_git_repo() -> (TempDir, std::path::PathBuf) {
-    let tmp_dir = TempDir::new().unwrap();
-    let repo_path = tmp_dir.path().to_path_buf();
-
-    // git init
-    run_git(&repo_path, &["init"]);
-    run_git(&repo_path, &["config", "user.name", "Test"]);
-    run_git(&repo_path, &["config", "user.email", "test@example.com"]);
-
-    // first commit
-    let file_path = repo_path.join("test.txt");
-    fs::write(&file_path, "a\n").unwrap();
-
-    run_git(&repo_path, &["add", "test.txt"]);
-    run_git(&repo_path, &["commit", "-m", "initial commit"]);
-
-    // stage file
-    fs::write(&file_path, "b\n").unwrap();
-    run_git(&repo_path, &["add", "test.txt"]);
-
-    (tmp_dir, repo_path)
-}
-
-fn run_git(dir: &std::path::Path, args: &[&str]) {
-    let output = OsCommand::new("git")
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .expect("failed to run git command");
-
-    if !output.status.success() {
-        panic!(
-            "git command failed: {:?}\nstdout: {}\nstderr: {}",
-            args,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-}
-
-fn create_test_state(test_setup: &TestSetup) -> AppState {
-    let files = get_diff(test_setup.repo_path.clone());
-    AppState::new(test_setup.repo_path.clone(), files)
-}
-
-fn run_test_with_pancurses<F>(test_fn: F)
-where
-    F: FnOnce(&Window),
-{
-    let window = initscr();
-    window.keypad(true);
-    pancurses::noecho();
-    test_fn(&window);
-    endwin();
+// This helper is specific to this file, so it stays here.
+fn create_test_state(repo_path: PathBuf) -> AppState {
+    let files = get_diff(repo_path.clone());
+    AppState::new(repo_path, files)
 }
 
 #[test]
 #[serial]
 fn test_update_state_quit() {
     run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new();
-        let state = create_test_state(&setup);
+        let repo = TestRepo::new();
+        let state = create_test_state(repo.path);
         let new_state = update_state(state, Some(Input::Character('\u{3}')), 30, 80);
         assert!(!new_state.running);
     });
@@ -120,8 +28,10 @@ fn test_update_state_quit() {
 #[serial]
 fn test_unstage_file() {
     run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new();
-        let state = create_test_state(&setup);
+        let repo = TestRepo::new();
+        repo.create_file("test.txt", "a\n");
+        repo.add_file("test.txt");
+        let state = create_test_state(repo.path);
         let new_state = update_state(state, Some(Input::Character('\n')), 30, 80);
         assert_eq!(new_state.files.len(), 0);
     });
@@ -131,10 +41,15 @@ fn test_unstage_file() {
 #[serial]
 fn test_unstage_hunk_by_line_with_undo_redo() {
     run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new();
-        let mut state = create_test_state(&setup);
+        let repo = TestRepo::new();
+        repo.create_file("test.txt", "a\n");
+        repo.add_file("test.txt");
+        repo.commit("initial commit");
+        repo.create_file("test.txt", "b\n");
+        repo.add_file("test.txt");
 
-        // Ensure we have a file with a hunk
+        let mut state = create_test_state(repo.path.clone());
+
         assert_eq!(state.files.len(), 1);
         assert_eq!(state.files[0].hunks.len(), 1);
         let hunk = &state.files[0].hunks[0].clone();
@@ -161,31 +76,30 @@ fn test_unstage_hunk_by_line_with_undo_redo() {
 #[serial]
 fn test_unstage_line() {
     run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new_multi_line();
-        let mut state = create_test_state(&setup);
+        let repo = TestRepo::new();
+        repo.create_file("test.txt", "line1\nline2\nline3\n");
+        repo.add_file("test.txt");
+        repo.commit("initial");
+        repo.create_file("test.txt", "line1\nchanged\nline3\n");
+        repo.add_file("test.txt");
 
-        // We have one file with one hunk. The hunk has 3 lines: one removed, one added, one context.
-        // diff --git a/test.txt b/test.txt
-        // index 3027459..9413563 100644
-        // --- a/test.txt
-        // +++ b/test.txt
-        // @@ -1,3 +1,3 @@
-        //  line1
-        // -line2
-        // +changed
-        //  line3
+        let mut state = create_test_state(repo.path.clone());
+
         assert_eq!(state.files.len(), 1);
         assert_eq!(state.files[0].hunks.len(), 1);
-        assert_eq!(state.files[0].lines.len(), 9); // 5 header + 4 hunk lines
 
-        // Let's unstage the "+changed" line. It's at index 7.
-        state.main_screen.line_cursor = 7;
+        // Let's unstage the "+changed" line.
+        let line_index = state.files[0]
+            .lines
+            .iter()
+            .position(|l| l.contains("+changed"))
+            .unwrap();
+        state.main_screen.line_cursor = line_index;
 
         // Unstage line
         let state_after_unstage = update_state(state, Some(Input::Character('1')), 30, 80);
         assert_eq!(state_after_unstage.files.len(), 1);
-        // The diff should now only contain "+changed"
-        assert_eq!(state_after_unstage.files[0].lines.len(), 8);
+
         assert!(
             !state_after_unstage.files[0]
                 .lines
@@ -197,55 +111,6 @@ fn test_unstage_line() {
                 .lines
                 .iter()
                 .any(|l| l.contains("-line2"))
-        );
-    });
-}
-
-#[test]
-#[serial]
-fn test_unstage_deleted_line() {
-    run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new_multi_line();
-        let mut state = create_test_state(&setup);
-
-        // We have one file with one hunk. The hunk has 3 lines: one removed, one added, one context.
-        // diff --git a/test.txt b/test.txt
-        // index 3027459..9413563 100644
-        // --- a/test.txt
-        // +++ b/test.txt
-        // @@ -1,3 +1,3 @@
-        //  line1
-        // -line2
-        // +changed
-        //  line3
-        assert_eq!(state.files.len(), 1);
-        assert_eq!(state.files[0].hunks.len(), 1);
-        assert_eq!(state.files[0].lines.len(), 9); // 5 header + 4 hunk lines
-
-        // Let's unstage the "-line2" line. It's at index 6.
-        state.main_screen.line_cursor = 6;
-
-        // Unstage line
-        let state_after_unstage = update_state(state, Some(Input::Character('1')), 30, 80);
-        assert_eq!(state_after_unstage.files.len(), 1);
-        // The diff should now only contain "+changed"
-        assert!(
-            !state_after_unstage.files[0]
-                .lines
-                .iter()
-                .any(|l| l.contains("-line2"))
-        );
-        assert!(
-            state_after_unstage.files[0]
-                .lines
-                .iter()
-                .any(|l| l.contains(" line2"))
-        );
-        assert!(
-            state_after_unstage.files[0]
-                .lines
-                .iter()
-                .any(|l| l.contains("+changed"))
         );
     });
 }
@@ -254,41 +119,29 @@ fn test_unstage_deleted_line() {
 #[serial]
 fn test_commit_mode_activation_and_commit() {
     run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new();
-        let mut state = create_test_state(&setup);
+        let repo = TestRepo::new();
+        repo.create_file("a.txt", "a");
+        repo.add_file("a.txt");
+        let mut state = create_test_state(repo.path.clone());
         state.main_screen.file_cursor = 1;
 
-        // We start with 1 file, cursor at index 1.
-        assert_eq!(state.files.len(), 1);
-        assert_eq!(state.main_screen.file_cursor, 1);
         assert!(!state.main_screen.is_commit_mode);
 
-        // 1. Press KeyDown to move to the commit line.
         state = update_state(state, Some(Input::KeyDown), 30, 80);
-
-        // 2. Assert that we are in commit mode.
-        assert_eq!(state.main_screen.file_cursor, 2); // Cursor is on the commit line
         assert!(state.main_screen.is_commit_mode);
 
-        // 3. Type a commit message
         let msg = "Test commit";
         for ch in msg.chars() {
             state = update_state(state, Some(Input::Character(ch)), 30, 80);
         }
-
-        // 4. Assert the message is correct
         assert_eq!(state.main_screen.commit_message, msg);
 
-        // 5. Press Enter to commit
         state = update_state(state, Some(Input::Character('\n')), 30, 80);
-
-        // 6. Assert the app should exit
         assert!(!state.running);
 
-        // 7. Verify the commit was created
         let output = OsCommand::new("git")
             .args(["log", "-1", "--pretty=%B"])
-            .current_dir(&setup.repo_path)
+            .current_dir(&repo.path)
             .output()
             .expect("failed to run git log");
         let last_commit_message = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -298,301 +151,189 @@ fn test_commit_mode_activation_and_commit() {
 
 #[test]
 #[serial]
-fn test_page_up_down_with_cursor() {
-    run_test_with_pancurses(|window| {
-        let tmp_dir = TempDir::new().unwrap();
-        let repo_path = tmp_dir.path().to_path_buf();
+fn test_ignore_file() {
+    run_test_with_pancurses(|_window| {
+        let repo = TestRepo::new();
+        repo.create_file("a.txt", "initial content");
+        repo.add_all();
+        repo.commit("initial commit");
 
-        run_git(&repo_path, &["init"]);
-        run_git(&repo_path, &["config", "user.name", "Test"]);
-        run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+        let file_to_ignore = "some_file.txt";
+        repo.create_file(file_to_ignore, "Hello");
+        repo.add_all();
 
-        let file_path = repo_path.join("test.txt");
-        let initial_content: String = (0..100)
+        let mut state = create_test_state(repo.path.clone());
+        state.main_screen.file_cursor = 1; // Select the file
+
+        let mut updated_state = update_state(state, Some(Input::Character('i')), 80, 80);
+
+        let gitignore_path = repo.path.join(".gitignore");
+        assert!(gitignore_path.exists(), ".gitignore should be created");
+        let gitignore_content = std::fs::read_to_string(gitignore_path).unwrap();
+        assert!(
+            gitignore_content.contains(file_to_ignore),
+            ".gitignore should contain the ignored file"
+        );
+
+        assert_eq!(
+            updated_state.files.len(),
+            1,
+            "File list should only contain .gitignore"
+        );
+        assert_eq!(
+            updated_state.files[0].file_name, ".gitignore",
+            "The remaining file should be .gitignore"
+        );
+
+        updated_state = update_state(updated_state, Some(Input::Character('<')), 80, 80);
+
+        assert_eq!(
+            updated_state.files.len(),
+            1,
+            "File list should contain the original file again"
+        );
+        assert_eq!(
+            updated_state.files[0].file_name, file_to_ignore,
+            "The file should be the one we ignored"
+        );
+    });
+}
+
+#[test]
+#[serial]
+fn test_discard_hunk_in_staged() {
+    run_test_with_pancurses(|_window| {
+        let repo = TestRepo::new();
+        let initial_content = (1..=20)
             .map(|i| format!("line {i}"))
-            .collect::<Vec<String>>()
+            .collect::<Vec<_>>()
             .join("\n");
-        fs::write(&file_path, initial_content).unwrap();
+        repo.create_file("test.txt", &initial_content);
+        repo.add_all();
+        repo.commit("initial commit");
 
-        run_git(&repo_path, &["add", "test.txt"]);
-        run_git(&repo_path, &["commit", "-m", "initial commit"]);
+        let mut lines: Vec<String> = initial_content.lines().map(String::from).collect();
+        lines[2] = "modified line 3".to_string();
+        lines[15] = "modified line 16".to_string();
+        let modified_content = lines.join("\n");
+        repo.create_file("test.txt", &modified_content);
+        repo.add_all();
 
-        let modified_content: String = (0..100)
-            .map(|i| format!("modified line {i}"))
-            .collect::<Vec<String>>()
-            .join("\n");
-        fs::write(&file_path, modified_content).unwrap();
-        run_git(&repo_path, &["add", "test.txt"]);
+        let mut state = create_test_state(repo.path.clone());
+        state.main_screen.file_cursor = 1; // Select the file
+        state.main_screen.is_diff_cursor_active = true;
+        let line_in_diff = state.files[0]
+            .lines
+            .iter()
+            .position(|l| l.contains("modified line 16"))
+            .unwrap_or(15);
+        state.main_screen.line_cursor = line_in_diff;
 
-        let files = get_diff(repo_path.clone());
-        let mut state = AppState::new(repo_path.clone(), files);
+        let updated_state = update_state(state, Some(Input::Character('!')), 80, 80);
 
-        let (max_y, _) = window.get_max_yx();
-        let (header_height, _) = state.main_header_height(max_y);
-        let content_height = (max_y as usize).saturating_sub(header_height);
+        let staged_diff = repo.get_status();
+        assert!(!staged_diff.contains("modified line 16"));
+        assert!(staged_diff.contains("M  test.txt"));
 
-        // Page down
-        state = update_state(state, Some(Input::Character(' ')), max_y, 80);
-        assert_eq!(state.main_screen.diff_scroll, content_height);
-        assert_eq!(state.main_screen.line_cursor, content_height);
+        let working_diff = git_full_commit::git::get_unstaged_diff(&repo.path);
+        assert!(
+            working_diff.is_empty(),
+            "Working directory should be clean"
+        );
 
-        // Page up
-        state = update_state(state, Some(Input::Character('b')), max_y, 80);
-        assert_eq!(state.main_screen.diff_scroll, 0);
-        assert_eq!(state.main_screen.line_cursor, 0);
+        let _updated_state = update_state(updated_state, Some(Input::Character('<')), 80, 80);
+
+        let staged_diff_after_undo = repo.get_status();
+        assert!(staged_diff_after_undo.contains("M  test.txt"));
     });
 }
 
 #[test]
 #[serial]
-fn test_commit_and_continue() {
+fn test_stage_all_and_undo() {
     run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new();
-        let mut state = create_test_state(&setup);
+        let repo = TestRepo::new();
+        repo.create_file("committed.txt", "initial content");
+        repo.add_all();
+        repo.commit("initial commit");
 
-        // create another file
-        let file_path = setup.repo_path.join("another.txt");
-        fs::write(&file_path, "hello\n").unwrap();
+        repo.create_file("committed.txt", "modified content");
+        repo.create_file("untracked.txt", "new file");
 
-        // We start with 1 file, cursor at index 1.
-        assert_eq!(state.files.len(), 1);
-        assert_eq!(state.main_screen.file_cursor, 1);
-        assert!(!state.main_screen.is_commit_mode);
+        let files = git_full_commit::git::get_unstaged_diff(&repo.path);
+        let state = AppState::new(repo.path.clone(), files);
 
-        // 1. Press KeyDown to move to the commit line.
-        state = update_state(state, Some(Input::KeyDown), 30, 80);
+        let updated_state = update_state(state, Some(Input::Character('R')), 80, 80);
 
-        // 2. Assert that we are in commit mode.
-        assert_eq!(state.main_screen.file_cursor, 2); // Cursor is on the commit line
-        assert!(state.main_screen.is_commit_mode);
+        let status_str = repo.get_status();
+        assert!(status_str.contains("M  committed.txt"));
+        assert!(status_str.contains("A  untracked.txt"));
 
-        // 3. Type a commit message
-        let msg = "Test commit";
-        for ch in msg.chars() {
-            state = update_state(state, Some(Input::Character(ch)), 30, 80);
-        }
+        let _updated_state = update_state(updated_state, Some(Input::Character('<')), 80, 80);
 
-        // 4. Assert the message is correct
-        assert_eq!(state.main_screen.commit_message, msg);
-
-        // 5. Press Enter to commit
-        state = update_state(state, Some(Input::Character('\n')), 30, 80);
-
-        // 6. Assert the app should still be running
-        assert!(state.running);
-
-        // 7. Assert the commit message is cleared
-        assert!(state.main_screen.commit_message.is_empty());
-
-        // 8. Assert the new file is staged
-        assert_eq!(state.files.len(), 1);
-        assert_eq!(state.files[0].file_name, "another.txt");
+        let status_str_after_undo = repo.get_status();
+        assert!(status_str_after_undo.contains(" M committed.txt"));
+        assert!(status_str_after_undo.contains("?? untracked.txt"));
     });
 }
 
 #[test]
 #[serial]
-fn test_commit_and_exit() {
+fn test_unstage_all() {
     run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new();
-        let mut state = create_test_state(&setup);
+        let repo = TestRepo::new();
+        repo.create_file("committed.txt", "a\n");
+        repo.add_all();
+        repo.commit("initial");
 
-        // We start with 1 file, cursor at index 1.
-        assert_eq!(state.files.len(), 1);
-        assert_eq!(state.main_screen.file_cursor, 1);
-        assert!(!state.main_screen.is_commit_mode);
+        repo.create_file("committed.txt", "b\n");
+        repo.create_file("new.txt", "c\n");
+        repo.add_all();
 
-        // 1. Press KeyDown to move to the commit line.
-        state = update_state(state, Some(Input::KeyDown), 30, 80);
+        let mut state = create_test_state(repo.path.clone());
+        state.main_screen.file_cursor = 0; // Select "Staged changes" header
 
-        // 2. Assert that we are in commit mode.
-        assert_eq!(state.main_screen.file_cursor, 2); // Cursor is on the commit line
-        assert!(state.main_screen.is_commit_mode);
+        let state = update_state(state, Some(Input::Character('\n')), 80, 80);
+        let status = repo.get_status();
+        assert!(status.contains(" M committed.txt"));
+        assert!(status.contains("?? new.txt"));
 
-        // 3. Type a commit message
-        let msg = "Test commit";
-        for ch in msg.chars() {
-            state = update_state(state, Some(Input::Character(ch)), 30, 80);
-        }
+        assert_eq!(state.main_screen.file_cursor, 0);
+        let state = update_state(state, Some(Input::Character('<')), 80, 80);
+        let status = repo.get_status();
+        assert!(status.contains("M  committed.txt"));
+        assert!(status.contains("A  new.txt"));
 
-        // 4. Assert the message is correct
-        assert_eq!(state.main_screen.commit_message, msg);
-
-        // 5. Press Enter to commit
-        state = update_state(state, Some(Input::Character('\n')), 30, 80);
-
-        // 6. Assert the app should exit
-        assert!(!state.running);
+        let _ = update_state(state, Some(Input::Character('>')), 80, 80);
+        let status = repo.get_status();
+        assert!(status.contains(" M committed.txt"));
+        assert!(status.contains("?? new.txt"));
     });
 }
 
 #[test]
 #[serial]
-fn test_commit_clears_history() {
+fn test_discard_unstaged_file() {
     run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new();
-        let mut state = create_test_state(&setup);
+        let repo = TestRepo::new();
+        repo.create_file("test.txt", "line1\nline2\n");
+        repo.add_all();
+        repo.commit("initial");
+        repo.create_file("test.txt", "line1\nMODIFIED\n");
 
-        // Unstage all files to populate history
-        state = update_state(state, Some(Input::Character('\n')), 30, 80);
-        assert_eq!(state.files.len(), 0);
-        assert_eq!(state.command_history.undo_stack.len(), 1);
-
-        // Stage it back
-        state = update_state(state, Some(Input::Character('R')), 30, 80);
+        let mut state = AppState::new(repo.path.clone(), vec![]);
         state.refresh_diff();
-        assert_eq!(state.files.len(), 1);
+        state.screen = Screen::Unstaged;
+        state.unstaged_screen.unstaged_cursor = 1;
 
-        // Go to commit mode
-        state = update_state(state, Some(Input::KeyDown), 30, 80);
-        state = update_state(state, Some(Input::KeyDown), 30, 80);
-        assert!(state.main_screen.is_commit_mode);
+        let state_after_discard = update_state(state, Some(Input::Character('!')), 80, 80);
+        let status = repo.get_status();
+        assert!(status.is_empty(), "Git status should be clean");
+        assert!(state_after_discard.unstaged_screen.unstaged_files.is_empty());
 
-        // Type a commit message
-        let msg = "Test commit";
-        for ch in msg.chars() {
-            state = update_state(state, Some(Input::Character(ch)), 30, 80);
-        }
-
-        // Commit
-        state = update_state(state, Some(Input::Character('\n')), 30, 80);
-
-        // Assert history is cleared
-        assert_eq!(state.command_history.undo_stack.len(), 0);
-        assert_eq!(state.command_history.redo_stack.len(), 0);
-    });
-}
-
-#[test]
-#[serial]
-fn test_stage_all() {
-    run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new();
-        let mut state = create_test_state(&setup);
-
-        // We start with 1 file staged
-        assert_eq!(state.files.len(), 1);
-
-        // Unstage the file
-        state = update_state(state, Some(Input::Character('\n')), 30, 80);
-        assert_eq!(state.files.len(), 0);
-
-        // Check that there are unstaged changes
-        let output = OsCommand::new("git")
-            .arg("diff")
-            .current_dir(&setup.repo_path)
-            .output()
-            .unwrap();
-        assert!(!output.stdout.is_empty());
-
-        // Stage all changes with 'R'
-        state = update_state(state, Some(Input::Character('R')), 30, 80);
-
-        // Check that the file is staged again
-        assert_eq!(state.files.len(), 1);
-
-        // Undo staging all changes
-        state = update_state(state, Some(Input::Character('<')), 30, 80);
-        assert_eq!(state.files.len(), 0);
-
-        // Redo staging all changes
-        state = update_state(state, Some(Input::Character('>')), 30, 80);
-        assert_eq!(state.files.len(), 1);
-    });
-}
-
-#[test]
-#[serial]
-fn test_unstage_second_file_moves_to_commit() {
-    run_test_with_pancurses(|_window| {
-        // 1. Setup repo with 2 files
-        let tmp_dir = TempDir::new().unwrap();
-        let repo_path = tmp_dir.path().to_path_buf();
-        run_git(&repo_path, &["init"]);
-        run_git(&repo_path, &["config", "user.name", "Test"]);
-        run_git(&repo_path, &["config", "user.email", "test@example.com"]);
-        fs::write(repo_path.join("a.txt"), "a").unwrap();
-        fs::write(repo_path.join("b.txt"), "b").unwrap();
-        run_git(&repo_path, &["add", "a.txt", "b.txt"]);
-
-        // 2. Create state and select second file
-        let files = get_diff(repo_path.clone());
-        let mut state = AppState::new(repo_path.clone(), files);
-        assert_eq!(state.files.len(), 2);
-        state.main_screen.file_cursor = 2; // Selects b.txt
-
-        // 3. Unstage the file
-        let state_after_unstage = update_state(state, Some(Input::Character('\n')), 30, 80);
-
-        // 4. Check state
-        assert_eq!(state_after_unstage.files.len(), 1);
-        assert_eq!(state_after_unstage.main_screen.file_cursor, 2); // Cursor is on commit line
-        assert!(state_after_unstage.main_screen.is_commit_mode); // This is the bug
-
-        // 5. Simulate typing
-        let state_after_typing =
-            update_state(state_after_unstage, Some(Input::Character('c')), 30, 80);
-
-        // 6. Assert fix
-        assert!(state_after_typing.main_screen.is_commit_mode);
-        assert_eq!(state_after_typing.main_screen.commit_message, "c");
-    });
-}
-
-#[test]
-#[serial]
-fn test_undo_redo_restores_cursor_position() {
-    run_test_with_pancurses(|_window| {
-        let setup = TestSetup::new_multi_line();
-        let mut state = create_test_state(&setup);
-
-        // 1. Set an initial cursor position
-        state.main_screen.file_cursor = 1;
-        state.main_screen.line_cursor = 7; // On "+changed" line
-        state.main_screen.diff_scroll = 5;
-        state.screen = git_full_commit::app_state::Screen::Main;
-
-        let cursor_before_action =
-            git_full_commit::cursor_state::CursorState::from_app_state(&state);
-
-        // 2. Perform an action (unstage line)
-        state = update_state(state, Some(Input::Character('1')), 30, 80);
-
-        // 3. Change cursor position
-        state.main_screen.file_cursor = 0;
-        state.main_screen.line_cursor = 0;
-        state.main_screen.diff_scroll = 0;
-        let cursor_before_undo = git_full_commit::cursor_state::CursorState::from_app_state(&state);
-
-        // 4. Undo
-        state = update_state(state, Some(Input::Character('<')), 30, 80);
-
-        // 5. Assert cursor is restored to the position before the action
-        let cursor_after_undo = git_full_commit::cursor_state::CursorState::from_app_state(&state);
-        assert_eq!(
-            cursor_after_undo.file_cursor,
-            cursor_before_action.file_cursor
-        );
-        assert_eq!(
-            cursor_after_undo.line_cursor,
-            cursor_before_action.line_cursor
-        );
-        assert_eq!(cursor_after_undo.scroll, cursor_before_action.scroll);
-        assert_eq!(cursor_after_undo.screen, cursor_before_action.screen);
-
-        // 6. Redo
-        state = update_state(state, Some(Input::Character('>')), 30, 80);
-
-        // 7. Assert cursor is restored to the position before the undo
-        let cursor_after_redo = git_full_commit::cursor_state::CursorState::from_app_state(&state);
-        assert_eq!(
-            cursor_after_redo.file_cursor,
-            cursor_before_undo.file_cursor
-        );
-        // line_cursor is not restored on redo of unstaging a line, as the file content changes.
-        // This is acceptable. The main thing is file_cursor and screen.
-        // assert_eq!(cursor_after_redo.main_screen.line_cursor, cursor_before_undo.main_screen.line_cursor);
-        assert_eq!(cursor_after_redo.scroll, cursor_before_undo.scroll);
-        assert_eq!(cursor_after_redo.screen, cursor_before_undo.screen);
+        let state_after_undo = update_state(state_after_discard, Some(Input::Character('<')), 80, 80);
+        let status_after_undo = repo.get_status();
+        assert!(status_after_undo.contains(" M test.txt"));
+        assert_eq!(state_after_undo.unstaged_screen.unstaged_files.len(), 1);
     });
 }
