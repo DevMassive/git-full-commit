@@ -538,6 +538,20 @@ pub fn get_unstaged_diff(repo_path: &Path) -> Vec<FileDiff> {
     parse_diff(&diff_str)
 }
 
+pub fn has_unstaged_changes_in_file(repo_path: &Path, file_path: &str) -> Result<bool> {
+    let output = git_command()
+        .arg("diff")
+        .arg("--quiet")
+        .arg("--")
+        .arg(file_path)
+        .current_dir(repo_path)
+        .status()?;
+
+    // status() returns the exit status. For `git diff --quiet`,
+    // it's 0 if no changes, 1 if there are changes.
+    Ok(output.code() == Some(1))
+}
+
 pub fn get_unstaged_files(repo_path: &Path) -> Result<Vec<String>> {
     let output = git_command()
         .arg("diff")

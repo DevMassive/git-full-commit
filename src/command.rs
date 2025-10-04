@@ -6,7 +6,7 @@ use crate::cursor_state::CursorState;
 use crate::git;
 
 pub trait Command {
-    fn execute(&mut self);
+    fn execute(&mut self) -> bool;
     fn undo(&mut self);
     fn set_cursor_before_execute(&mut self, cursor: CursorState);
     fn set_cursor_before_undo(&mut self, cursor: CursorState);
@@ -53,8 +53,9 @@ impl UnstageFileCommand {
 }
 
 impl Command for UnstageFileCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         git::unstage_file(&self.repo_path, &self.file_name).expect("Failed to unstage file.");
+        true
     }
 
     fn undo(&mut self) {
@@ -83,7 +84,7 @@ impl IgnoreUnstagedTrackedFileCommand {
 }
 
 impl Command for IgnoreUnstagedTrackedFileCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         let gitignore_path = self.repo_path.join(".gitignore");
         let mut gitignore = fs::OpenOptions::new()
             .create(true)
@@ -94,6 +95,7 @@ impl Command for IgnoreUnstagedTrackedFileCommand {
 
         git::stage_path(&self.repo_path, ".gitignore").expect("Failed to stage .gitignore");
         git::rm_cached(&self.repo_path, &self.file_name).expect("Failed to unstage file");
+        true
     }
 
     fn undo(&mut self) {
@@ -147,8 +149,9 @@ impl DeleteUntrackedFileCommand {
 }
 
 impl Command for DeleteUntrackedFileCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         fs::remove_file(self.repo_path.join(&self.file_name)).expect("Failed to delete file");
+        true
     }
 
     fn undo(&mut self) {
@@ -185,7 +188,7 @@ impl IgnoreUntrackedFileCommand {
 }
 
 impl Command for IgnoreUntrackedFileCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         let gitignore_path = self.repo_path.join(".gitignore");
         let mut gitignore = fs::OpenOptions::new()
             .create(true)
@@ -195,6 +198,7 @@ impl Command for IgnoreUntrackedFileCommand {
         writeln!(gitignore, "{}", self.file_name).expect("Failed to write to .gitignore");
 
         git::stage_path(&self.repo_path, ".gitignore").expect("Failed to stage .gitignore");
+        true
     }
 
     fn undo(&mut self) {
@@ -244,9 +248,10 @@ impl DiscardUnstagedHunkCommand {
 }
 
 impl Command for DiscardUnstagedHunkCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         git::apply_patch(&self.repo_path, &self.patch, true, false)
             .expect("Failed to discard hunk from working tree.");
+        true
     }
 
     fn undo(&mut self) {
@@ -277,8 +282,9 @@ impl UnstageAllCommand {
 }
 
 impl Command for UnstageAllCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         git::unstage_all(&self.repo_path).expect("Failed to unstage all files.");
+        true
     }
 
     fn undo(&mut self) {
@@ -311,10 +317,11 @@ impl StageUnstagedCommand {
 }
 
 impl Command for StageUnstagedCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         for file in &self.files_to_stage {
             git::stage_file(&self.repo_path, file).expect("Failed to stage file.");
         }
+        true
     }
 
     fn undo(&mut self) {
@@ -346,10 +353,11 @@ impl StageUntrackedCommand {
 }
 
 impl Command for StageUntrackedCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         for file in &self.untracked_files {
             git::stage_file(&self.repo_path, file).expect("Failed to stage untracked file.");
         }
+        true
     }
 
     fn undo(&mut self) {
@@ -380,8 +388,9 @@ impl StageFileCommand {
 }
 
 impl Command for StageFileCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         git::stage_file(&self.repo_path, &self.file_name).expect("Failed to stage file.");
+        true
     }
 
     fn undo(&mut self) {
@@ -410,9 +419,10 @@ impl ApplyPatchCommand {
 }
 
 impl Command for ApplyPatchCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         git::apply_patch(&self.repo_path, &self.patch, true, true)
             .expect("Failed to apply patch in reverse.");
+        true
     }
 
     fn undo(&mut self) {
@@ -421,6 +431,18 @@ impl Command for ApplyPatchCommand {
     }
 
     command_impl!();
+}
+
+fn get_file_name_from_patch(patch: &str) -> Option<String> {
+    lazy_static::lazy_static! {
+        static ref RE: regex::Regex = regex::Regex::new(r#"^diff --git a/("[^"]+"|\S+)"#).unwrap();
+    }
+    patch.lines().next().and_then(|line| {
+        RE.captures(line).and_then(|caps| {
+            caps.get(1)
+                .map(|m| m.as_str().trim_matches('"').to_string())
+        })
+    })
 }
 
 pub struct StagePatchCommand {
@@ -442,14 +464,74 @@ impl StagePatchCommand {
 }
 
 impl Command for StagePatchCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         git::apply_patch(&self.repo_path, &self.patch, false, true)
             .expect("Failed to apply patch.");
+        true
     }
 
     fn undo(&mut self) {
         git::apply_patch(&self.repo_path, &self.patch, true, true)
             .expect("Failed to apply patch in reverse.");
+    }
+
+    command_impl!();
+}
+
+pub struct DiscardFileCommand {
+    pub repo_path: PathBuf,
+    pub file_name: String,
+    staged_patch: String,
+    is_new_file: bool,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl DiscardFileCommand {
+    pub fn new(repo_path: PathBuf, file_name: String, is_new_file: bool) -> Self {
+        let staged_patch = git::get_file_diff_patch(&repo_path, &file_name).unwrap_or_default();
+        Self {
+            repo_path,
+            file_name,
+            staged_patch,
+            is_new_file,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for DiscardFileCommand {
+    fn execute(&mut self) -> bool {
+        if git::has_unstaged_changes_in_file(&self.repo_path, &self.file_name).unwrap_or(true) {
+            // Don't discard if there are unstaged changes
+            return false;
+        }
+
+        if self.is_new_file {
+            git::rm_cached(&self.repo_path, &self.file_name)
+                .expect("Failed to remove file from index");
+            fs::remove_file(self.repo_path.join(&self.file_name))
+                .expect("Failed to delete new file");
+        } else {
+            git::unstage_file(&self.repo_path, &self.file_name).expect("Failed to unstage file.");
+            git::checkout_file(&self.repo_path, &self.file_name).expect("Failed to checkout file.");
+        }
+        true
+    }
+
+    fn undo(&mut self) {
+        if self.is_new_file {
+            git::apply_patch(&self.repo_path, &self.staged_patch, false, true)
+                .expect("Failed to re-apply patch for new file.");
+            git::checkout_file(&self.repo_path, &self.file_name)
+                .expect("Failed to checkout file after undoing discard.");
+        } else {
+            git::apply_patch(&self.repo_path, &self.staged_patch, false, false)
+                .expect("Failed to re-apply patch to working tree for undo.");
+            git::apply_patch(&self.repo_path, &self.staged_patch, false, true)
+                .expect("Failed to re-apply patch to index for undo.");
+        }
     }
 
     command_impl!();
@@ -474,13 +556,21 @@ impl DiscardHunkCommand {
 }
 
 impl Command for DiscardHunkCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
+        if let Some(file_name) = get_file_name_from_patch(&self.patch) {
+            if git::has_unstaged_changes_in_file(&self.repo_path, &file_name).unwrap_or(true) {
+                // Don't discard if there are unstaged changes
+                return false;
+            }
+        }
+
         // Unstage
         git::apply_patch(&self.repo_path, &self.patch, true, true)
             .expect("Failed to unstage hunk.");
         // Discard from working tree
         git::apply_patch(&self.repo_path, &self.patch, true, false)
             .expect("Failed to discard hunk from working tree.");
+        true
     }
 
     fn undo(&mut self) {
@@ -515,8 +605,9 @@ impl CheckoutFileCommand {
 }
 
 impl Command for CheckoutFileCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         git::checkout_file(&self.repo_path, &self.file_name).expect("Failed to checkout file.");
+        true
     }
 
     fn undo(&mut self) {
@@ -546,7 +637,7 @@ impl IgnoreFileCommand {
 }
 
 impl Command for IgnoreFileCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         let gitignore_path = self.repo_path.join(".gitignore");
         let mut gitignore = fs::OpenOptions::new()
             .create(true)
@@ -559,6 +650,7 @@ impl Command for IgnoreFileCommand {
 
         // For staged files, we need to unstage them.
         git::rm_cached(&self.repo_path, &self.file_name).expect("Failed to unstage file");
+        true
     }
 
     fn undo(&mut self) {
@@ -609,8 +701,9 @@ impl RemoveFileCommand {
 }
 
 impl Command for RemoveFileCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         git::rm_file(&self.repo_path, &self.file_name).expect("Failed to remove file.");
+        true
     }
 
     fn undo(&mut self) {
@@ -646,8 +739,9 @@ impl StageAllCommand {
 }
 
 impl Command for StageAllCommand {
-    fn execute(&mut self) {
+    fn execute(&mut self) -> bool {
         git::add_all(&self.repo_path).expect("Failed to stage all files.");
+        true
     }
 
     fn undo(&mut self) {
@@ -692,9 +786,10 @@ impl CommandHistory {
 
     pub fn execute(&mut self, mut command: Box<dyn Command>, cursor_state: CursorState) {
         command.set_cursor_before_execute(cursor_state);
-        command.execute();
-        self.undo_stack.push(command);
-        self.redo_stack.clear();
+        if command.execute() {
+            self.undo_stack.push(command);
+            self.redo_stack.clear();
+        }
     }
 
     pub fn undo(&mut self, cursor_state: CursorState) -> Option<CursorState> {
