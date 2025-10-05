@@ -35,3 +35,10 @@ The application maintains a history of state-changing commands. The undo and red
 - **End of History:**
   - Once all actions in the history have been undone, further presses of `<` will have no effect.
   - Once all undone actions have been redone, further presses of `>` will have no effect.
+
+## 5. Clearing the History
+
+The undo/redo history is cleared, and all previous actions can no longer be undone or redone, after certain irreversible operations are performed. This occurs after:
+
+- **Executing a commit:** After a new commit is successfully created.
+- **Amending a commit:** After a commit is successfully amended or reworded.
