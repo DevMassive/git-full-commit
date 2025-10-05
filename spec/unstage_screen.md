@@ -46,12 +46,25 @@ Navigation and command execution on this screen are governed by a "Diff Cursor S
   - **The Diff Cursor state is set to ACTIVE.** This means any subsequent commands (like staging or discarding) will target the specific line or hunk currently selected by the cursor within the Diff View (bottom panel).
   - The cursor moves line-by-line within the Diff View.
 
-### 3.3. Command Execution Example (Staging)
+### 3.3. Command Logic: File vs. Hunk
 
-- **When Diff Cursor is INACTIVE:** Pressing `u` (stage) on a selected file will stage the *entire file*.
-- **When Diff Cursor is ACTIVE:** Pressing `u` (stage) will stage only the *hunk* currently under the cursor in the Diff View.
+The target of commands like staging (`u`) or discarding (`!`) depends entirely on the Diff Cursor State.
 
-## 4. Initial State
+- **When Diff Cursor is INACTIVE:** The command applies to the **entire file** selected in the list.
+- **When Diff Cursor is ACTIVE:** The command applies to the **hunk** currently selected by the cursor in the Diff View.
 
-- When navigating to the Unstaged Screen, the cursor is placed on the "Unstaged changes" header.
-- The Diff Cursor state is initially INACTIVE.
+## 4. Screen Switching and Cursor Position
+
+- **Switching to Unstaged Screen:** When the user presses `Tab` on the Main Screen, the application switches to the Unstaged Screen.
+- **Cursor Behavior:** The application attempts to maintain context:
+  - If the cursor on the Main Screen was on a file that also has unstaged changes, the cursor on the Unstaged Screen will be positioned on that same file.
+  - Otherwise, the cursor defaults to the first item in the list.
+- **Initial State:** The Diff Cursor state is initially INACTIVE upon switching to this screen.
+
+## 5. Operations
+
+The following operations can be performed from the Unstaged Screen:
+
+- **Staging:** See `spec/stage_operations.md`
+- **Discarding:** See `spec/discard_operations.md`
+- **Ignoring:** See `spec/ignore_operations.md`

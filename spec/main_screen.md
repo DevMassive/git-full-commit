@@ -49,13 +49,23 @@ Navigation and command execution are governed by a "Diff Cursor State," which de
   - **The Diff Cursor state is set to ACTIVE.** Any subsequent commands (like unstaging) will target the specific line or hunk currently selected by the cursor within the Diff View.
   - The cursor moves line-by-line within the Diff View.
 
-### 3.3. Command Execution Example (Unstaging)
+### 3.3. Command Logic: File vs. Hunk
 
-- **When Diff Cursor is INACTIVE:** Pressing `u` (unstage) on a selected file will unstage the *entire file*.
-- **When Diff Cursor is ACTIVE:** Pressing `u` (unstage) will unstage only the *hunk* currently under the cursor in the Diff View.
+The target of commands like unstaging (`u`) or discarding (`!`) depends entirely on the Diff Cursor State.
+
+- **When Diff Cursor is INACTIVE:** The command applies to the **entire file** selected in the list.
+- **When Diff Cursor is ACTIVE:** The command applies to the **hunk** currently selected by the cursor in the Diff View.
 
 ## 4. Initial State
 
 - When the application starts, the Main Screen is displayed.
-- The cursor is positioned at the top of the list in the Top Panel.
+- The cursor is positioned on the first item in the list. If staged files exist, this will be the first file.
 - The Diff Cursor state is initially INACTIVE.
+
+## 5. Operations
+
+The following operations can be performed from the Main Screen:
+
+- **Unstaging:** See `spec/unstage_operations.md`
+- **Discarding:** See `spec/discard_operations.md`
+- **Ignoring:** See `spec/ignore_operations.md`

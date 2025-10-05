@@ -38,13 +38,10 @@ The application supports staging at four levels of granularity.
 
 ### 2.3. Stage an Entire File
 
-This applies to both unstaged and untracked files.
-
+- **Condition:** The diff cursor is **inactive**.
 - **User Action:**
-  1. Navigate to the **Unstaged Screen**.
-  2. Select a specific file from either the "Unstaged changes" or "Untracked files" list.
-  3. Ensure cursor focus is on the file list (not the diff view).
-  4. Press the `u` key or the `Enter` key.
+  1. Select a file from the "Unstaged changes" or "Untracked files" list.
+  2. Press the `u` key or the `Enter` key.
 - **Expected Outcome:**
   - The selected file is staged and removed from its list.
 - **Cursor Movement:**
@@ -52,11 +49,11 @@ This applies to both unstaged and untracked files.
 
 ### 2.4. Stage a Hunk
 
+- **Condition:** The diff cursor is **active**.
 - **User Action:**
-  1. Navigate to the **Unstaged Screen** and select a file.
-  2. Move focus to the diff panel below by pressing `j` (down) or `k` (up).
-  3. Navigate to any line within the hunk to be staged.
-  4. Press the `u` key or the `Enter` key.
+  1. Select a file and activate the diff cursor (`j` or `k`).
+  2. Navigate to any line within the hunk to be staged.
+  3. Press the `u` key or the `Enter` key.
 - **Expected Outcome:**
   - The selected hunk is staged.
   - The diff view updates to show the hunk is no longer unstaged.
