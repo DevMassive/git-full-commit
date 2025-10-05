@@ -28,27 +28,24 @@ The application supports four levels of granularity for unstaging changes.
 
 ### 2.2. Unstage an Entire File
 
+- **Condition:** The diff cursor is **inactive**.
 - **User Action:**
-  1. Navigate to the **Main Screen**.
-  2. Select a specific file from the "Staged changes" list (e.g., `M  modified_file.txt`).
-  3. Ensure the cursor focus is on the file list (not the diff view below).
-  4. Press the `u` key or the `Enter` key.
+  1. Select a specific file from the "Staged changes" list.
+  2. Press the `u` key or the `Enter` key.
 - **Expected Outcome:**
   - All staged changes for the selected file are unstaged.
   - The file is removed from the "Staged changes" list.
 - **Cursor Movement:**
   - The cursor moves to the next item in the list.
-  - If the unstaged file was the last one in the list, the cursor moves to the "Commit Message" input field below the list.
+  - If the unstaged file was the last one in the list, the cursor moves to the "Commit Message" input field below it.
 
 ### 2.3. Unstage a Hunk
 
-A "hunk" is a contiguous block of changes within a file, as determined by Git.
-
+- **Condition:** The diff cursor is **active**.
 - **User Action:**
-  1. Navigate to the **Main Screen** and select a file with changes.
-  2. Move the cursor focus into the diff panel below by pressing `j` (down) or `k` (up).
-  3. Navigate the cursor to any line within the hunk you wish to unstage.
-  4. Press the `u` key or the `Enter` key.
+  1. Select a file and activate the diff cursor (`j` or `k`).
+  2. Navigate the cursor to any line within the hunk you wish to unstage.
+  3. Press the `u` key or the `Enter` key.
 - **Expected Outcome:**
   - Only the selected hunk of changes is removed from the index and moved to the working directory.
   - The file remains in the "Staged changes" list, but the diff view updates to show that the selected hunk is no longer staged.

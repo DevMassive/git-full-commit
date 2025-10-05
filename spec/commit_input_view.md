@@ -22,28 +22,35 @@ The following keybindings are active when the Commit Message Input view is selec
 | Any printable character               | Inserts the character at the cursor position.     |
 | `Enter`                               | Finalizes the commit.                             |
 |                                       | - If the message is empty, the action is ignored. |
-|                                       | - For a normal commit, `git commit` is executed.  |
-|                                       | - For an amend, `git commit --amend` is executed. |
-| `Backspace`, `Ctrl-H`, (`\x08`, `\x7f`) | Deletes the character immediately before the cursor. |
-| `Delete` (`Del`)                      | Deletes the character at the cursor position.     |
-| `Left Arrow`                          | Moves the cursor one character to the left.       |
-| `Right Arrow`                         | Moves the cursor one character to the right.      |
-| `Ctrl-A`                              | Moves the cursor to the beginning of the line.    |
-| `Ctrl-E`                              | Moves the cursor to the end of the line.          |
-| `Ctrl-K`                              | Deletes all text from the cursor to the end of the line. |
+| `KeyBackspace`, `\x7f`, `\x08`        | Deletes the character immediately before the cursor. |
+| `KeyDC` (`Delete`)                    | Deletes the character at the cursor position.     |
+| `KeyLeft`                             | Moves the cursor one character to the left.       |
+| `KeyRight`                            | Moves the cursor one character to the right.      |
+| `Ctrl-A` (`\u{1}`)                     | Moves the cursor to the beginning of the line.    |
+| `Ctrl-E` (`\u{5}`)                     | Moves the cursor to the end of the line.          |
+| `Ctrl-K` (`\u{b}`)                     | Deletes all text from the cursor to the end of the line. |
 | `Up Arrow`, `Down Arrow`              | Moves selection out of the input field, deactivating the text cursor and committing the user to list navigation mode. |
 
-## 3. State Management
+## 3. State and Workflow
 
-### 3.1. Normal Commit
+### 3.1. Draft Message Persistence
 
-- The text entered into the commit message field is persisted to a file within the `.git` directory (`.git/COMMIT_EDITMSG.bk`) upon every modification.
-- This ensures that a draft commit message is not lost if the application is closed unexpectedly.
-- After a successful commit, this backup file is deleted.
+- **Storage Location:** For normal (non-amend) commits, the draft message is automatically saved on every modification. It is stored in a central application directory (`~/.git-reset-pp/`), with a unique filename generated from a hash of the repository's path. This prevents losing work if the application closes unexpectedly.
+- **Cleanup:** This saved draft is deleted after a successful commit.
+- **Amend Mode:** When amending, the message is held in memory but is **not** persisted to the file system until the operation is finalized.
 
-### 3.2. Amending a Commit
+### 3.2. Finalizing a Commit
 
-- When amending a commit (see `commit_log_view.md`), the input field is pre-populated with the message from the commit being amended.
-- The placeholder text changes to "Enter amend message...".
-- Unlike a normal commit, the message is **not** persisted to a backup file during editing. It is only used when the `Enter` key is pressed to finalize the amend operation.
-- Finalizing the amend can result in either a `git reword` (if no files are staged) or a `git commit --amend` (if files are staged).
+- **Normal Commit:** Pressing `Enter` with a non-empty message executes `git commit`.
+- **Amending a Commit:** The behavior depends on whether there are staged changes:
+  - **No Staged Changes:** `git reword` is used to change only the commit message.
+  - **With Staged Changes:** `git commit --amend` is used to include the staged changes in the amended commit.
+
+### 3.3. Post-Commit Workflow
+
+- After any successful commit (normal or amend), the following actions occur automatically:
+  1. The application's undo/redo history is cleared.
+  2. The application executes `git add -A` to stage all remaining unstaged changes.
+  3. The application checks the repository status:
+     - If there are no more staged changes, the application exits.
+     - If staged changes remain, the screen is refreshed to show the new state, with the cursor moved to the top of the list.

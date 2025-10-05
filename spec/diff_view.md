@@ -37,11 +37,12 @@ The diff view can be scrolled vertically and horizontally to inspect all changes
 
 ### 3.2. Horizontal Scrolling
 
-- **User Action (Scroll Right):** Press the `Right` arrow key.
-- **Expected Outcome:** The horizontal scroll offset is increased by 10, shifting the content to the left.
+The scroll amount for horizontal movement depends on the current screen.
 
-- **User Action (Scroll Left):** Press the `Left` arrow key.
-- **Expected Outcome:** The horizontal scroll offset is decreased by 10 (to a minimum of 0), shifting the content to the right.
+- **User Action:** Press the `Left` or `Right` arrow key.
+- **Expected Outcome:**
+  - **On the Main Screen:** The view scrolls horizontally by a dynamic amount calculated based on the terminal width (specifically, `terminal_width - 10` characters). This allows for rapid movement across wide lines.
+  - **On the Unstaged Screen:** The view scrolls horizontally by a fixed amount of 10 characters per key press.
 
 ### 3.3. Page Scrolling (Vertical)
 
