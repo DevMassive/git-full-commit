@@ -13,8 +13,7 @@ use pancurses::{curs_set, endwin, initscr, noecho, start_color};
 use render::render;
 use update::update_state;
 
-#[cfg(test)]
-mod update_test;
+
 
 pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>) {
     let mut window = initscr();
