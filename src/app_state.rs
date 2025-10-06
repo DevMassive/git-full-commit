@@ -27,7 +27,6 @@ pub struct MainScreenState {
     pub file_cursor: usize,
     pub line_cursor: usize,
     pub commit_message: String,
-    pub is_commit_mode: bool,
     pub commit_cursor: usize,
     pub amending_commit_hash: Option<String>,
     pub is_diff_cursor_active: bool,
@@ -279,5 +278,13 @@ impl AppState {
         let file_list_total_items = self.unstaged_pane.list_items.len();
         let height = (max_y as usize / 3).max(3).min(file_list_total_items);
         (height, file_list_total_items)
+    }
+
+    pub fn is_in_input_mode(&self) -> bool {
+        matches!(
+            self.current_main_item(),
+            Some(MainScreenListItem::CommitMessageInput)
+                | Some(MainScreenListItem::AmendingCommitMessageInput { .. })
+        )
     }
 }

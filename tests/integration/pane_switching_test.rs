@@ -33,7 +33,7 @@ fn test_screen_switching_is_blocked_in_commit_mode() {
     // Enter commit mode
     app_state.main_screen.file_cursor = 2;
     app_state = update_state(app_state, Some(Input::Character('\n')), 80, 80);
-    assert!(app_state.main_screen.is_commit_mode);
+    assert!(app_state.is_in_input_mode());
 
     // Try to switch screen
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);

@@ -75,6 +75,9 @@ When the Bottom Pane is focused, the user can perform the following operations:
 ### 3.4. Global Operations
 
 - **Quitting:**
+  - **User Action:** Press `Q` (Shift + q) or `Ctrl-C`.
+  - **Expected Outcome:**
+    - The application will quit, unless an input field is active (e.g., commit message input).
   - **User Action:** Press `q`.
   - **Expected Outcome:**
     - If the Diff Cursor is **INACTIVE**, the application will quit.

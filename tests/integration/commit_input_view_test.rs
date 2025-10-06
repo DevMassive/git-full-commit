@@ -19,7 +19,7 @@ fn test_commit_message_input_and_commit() {
     // list is [Header, File, Input], so cursor should be at 2
     app_state.main_screen.file_cursor = 2;
     app_state = update_state(app_state, Some(Input::Character('\n')), 80, 80); // Press enter to activate
-    assert!(app_state.main_screen.is_commit_mode);
+    assert!(app_state.is_in_input_mode());
 
     // Type a commit message
     let commit_message = "Test commit";

@@ -69,12 +69,7 @@ pub fn render(window: &Window, state: &AppState) {
 
     render_diff_view(window, state, max_y, diff_view_top);
 
-    let is_editing_commit = state.main_screen.is_commit_mode
-        ||
-        matches!(
-            state.current_main_item(),
-            Some(ListItem::AmendingCommitMessageInput { .. })
-        );
+    let is_editing_commit = state.is_in_input_mode();
 
     let (carret_y, carret_x) = if state.focused_pane == FocusedPane::Main {
         (main_pane_carret_y, main_pane_carret_x)
@@ -706,12 +701,9 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
 }
 
 fn handle_main_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
-    let is_editing_amend_commit = matches!(
-        state.current_main_item(),
-        Some(ListItem::AmendingCommitMessageInput { .. })
-    );
 
-    if state.main_screen.is_commit_mode || is_editing_amend_commit {
+
+    if state.is_in_input_mode() {
         match input {
             Input::KeyUp
             | Input::Character('\u{10}')
@@ -885,7 +877,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
 }
 
 fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
-    state.main_screen.is_commit_mode = false;
+
 
     if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
         if let Some(index) = state
