@@ -175,7 +175,7 @@ fn is_binary(content: &[u8]) -> bool {
     content.contains(&0x00)
 }
 
-pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
+pub fn handle_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
     let (file_list_height, unstaged_items_count) = state.unstaged_header_height(max_y);
 
     match input {
@@ -271,16 +271,18 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32) {
             }
         }
         Input::KeyLeft => {
+            let scroll_amount = (max_x as usize).saturating_sub(diff_view::LINE_CONTENT_OFFSET);
             state.unstaged_screen.unstaged_horizontal_scroll = state
                 .unstaged_screen
                 .unstaged_horizontal_scroll
-                .saturating_sub(10);
+                .saturating_sub(scroll_amount);
         }
         Input::KeyRight => {
+            let scroll_amount = (max_x as usize).saturating_sub(diff_view::LINE_CONTENT_OFFSET);
             state.unstaged_screen.unstaged_horizontal_scroll = state
                 .unstaged_screen
                 .unstaged_horizontal_scroll
-                .saturating_add(10);
+                .saturating_add(scroll_amount);
         }
         Input::Character('\n') | Input::Character('u') => {
             match state
