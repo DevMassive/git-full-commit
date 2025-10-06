@@ -1,8 +1,7 @@
-use crate::app_state::{AppState, Screen};
+use crate::app_state::{AppState, FocusedPane};
 use crate::commit_storage;
 use crate::cursor_state::CursorState;
 use crate::ui::main_screen::{self, ListItem as MainScreenListItem};
-use crate::ui::unstaged_screen;
 use pancurses::Input;
 
 pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x: i32) -> AppState {
@@ -11,6 +10,46 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
     if let Some(input) = input {
         // Global commands
         match input {
+            Input::Character('\t') => {
+                if !state.main_screen.is_commit_mode {
+                    let current_file_path = match state.focused_pane {
+                        FocusedPane::Main => state.current_main_file().map(|f| f.file_name.clone()),
+                        FocusedPane::Unstaged => state.get_unstaged_file().map(|f| f.file_name.clone()),
+                    };
+
+                    state.focused_pane = match state.focused_pane {
+                        FocusedPane::Main => FocusedPane::Unstaged,
+                        FocusedPane::Unstaged => FocusedPane::Main,
+                    };
+
+                    if let Some(path) = current_file_path {
+                        match state.focused_pane {
+                            FocusedPane::Main => {
+                                if let Some(index) = state.main_screen.list_items.iter().position(|item| {
+                                    if let MainScreenListItem::File(f) = item {
+                                        f.file_name == path
+                                    } else {
+                                        false
+                                    }
+                                }) {
+                                    state.main_screen.file_cursor = index;
+                                }
+                            }
+                            FocusedPane::Unstaged => {
+                                if let Some(index) = state.unstaged_pane.list_items.iter().position(|item| {
+                                    if let crate::ui::main_screen::UnstagedListItem::File(f) = item {
+                                        f.file_name == path
+                                    } else {
+                                        false
+                                    }
+                                }) {
+                                    state.unstaged_pane.cursor = index;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Input::Character('\u{3}') | Input::Character('Q') => {
                 let _ = commit_storage::save_commit_message(
                     &state.repo_path,
@@ -28,7 +67,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                     } else {
                         state.refresh_diff();
                     }
-                    state.main_screen.is_commit_mode = state.screen == Screen::Main
+                    state.main_screen.is_commit_mode = state.focused_pane == FocusedPane::Main
                         && state.main_screen.file_cursor == state.files.len() + 1;
                     return state;
                 }
@@ -39,30 +78,29 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                     if let Some(cursor) = state.command_history.redo(cursor_state) {
                         state.refresh_diff();
                         cursor.apply_to_app_state(&mut state);
+                    } else {
+                        state.refresh_diff();
                     }
-                    state.main_screen.is_commit_mode = state.screen == Screen::Main
+                    state.main_screen.is_commit_mode = state.focused_pane == FocusedPane::Main
                         && state.main_screen.file_cursor == state.files.len() + 1;
                     return state;
                 }
             }
-            _ => (),
-        }
-
-        match state.screen {
-            Screen::Main => {
+            _ => {
                 main_screen::handle_input(&mut state, input, max_y, max_x);
-            }
-            Screen::Unstaged => {
-                unstaged_screen::handle_input(&mut state, input, max_y, max_x);
             }
         }
     }
 
-    state.main_screen.is_commit_mode = state.screen == Screen::Main
+    state.main_screen.is_commit_mode = state.focused_pane == FocusedPane::Main
         && matches!(
             state.current_main_item(),
             Some(MainScreenListItem::CommitMessageInput)
         );
+
+    if state.main_screen.has_unstaged_changes == false && state.focused_pane == FocusedPane::Unstaged {
+        state.focused_pane = FocusedPane::Main;
+    }
 
     state
 }

@@ -50,7 +50,7 @@ git管理しているディレクトリ内で実行。
 - i: ファイルを.gitignoreに追加
 - R: 改めてすべての変更をStageする
 - Ctrl+cとかqとか: 終了
-- TAB: Unstagedな変更の画面に切り替える(あるときだけ)
+- TAB: Unstagedな変更のペインに切り替える(あるときだけ)
 
 ## Undo/Redo
 

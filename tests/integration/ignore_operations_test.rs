@@ -1,5 +1,5 @@
 use crate::git_test::common::TestRepo;
-use git_full_commit::app_state::{AppState, Screen};
+use git_full_commit::app_state::{AppState, FocusedPane};
 use git_full_commit::git;
 use git_full_commit::ui::update::update_state;
 use pancurses::Input;
@@ -40,12 +40,12 @@ fn test_ignore_untracked_file() {
 
     let files = git::get_diff(repo.path.clone());
     let mut app_state = AppState::new(repo.path.clone(), files);
-    assert_eq!(app_state.unstaged_screen.untracked_files.len(), 1);
+    assert_eq!(app_state.unstaged_pane.untracked_files.len(), 1);
 
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
-    assert_eq!(app_state.screen, Screen::Unstaged);
+    assert_eq!(app_state.focused_pane, FocusedPane::Unstaged);
 
-    app_state.unstaged_screen.unstaged_cursor = 2;
+    app_state.unstaged_pane.cursor = 2;
 
     app_state = update_state(app_state, Some(Input::Character('i')), 80, 80);
 
@@ -56,5 +56,5 @@ fn test_ignore_untracked_file() {
     assert_eq!(app_state.files.len(), 1);
     assert_eq!(app_state.files[0].file_name, ".gitignore");
 
-    assert!(app_state.unstaged_screen.untracked_files.is_empty());
+    assert!(app_state.unstaged_pane.untracked_files.is_empty());
 }

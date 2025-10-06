@@ -1,5 +1,5 @@
 use crate::git_test::common::TestRepo;
-use git_full_commit::app_state::{AppState, Screen};
+use git_full_commit::app_state::{AppState, FocusedPane};
 use git_full_commit::git;
 use git_full_commit::ui::update::update_state;
 use pancurses::Input;
@@ -19,16 +19,13 @@ fn test_stage_entire_file_from_unstaged_screen() {
 
     // Switch to unstaged screen
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
-    assert_eq!(app_state.screen, Screen::Unstaged);
-
-    // In the unstaged screen, list is [Header, File], so cursor on file is 1
-    app_state.unstaged_screen.unstaged_cursor = 1;
+    app_state.unstaged_pane.cursor = 1;
 
     // Press 'u' to stage the file
     app_state = update_state(app_state, Some(Input::Character('u')), 80, 80);
 
     // The file should be removed from the unstaged list
-    assert!(app_state.unstaged_screen.unstaged_files.is_empty());
+    assert!(app_state.unstaged_pane.unstaged_files.is_empty());
 
     // The file should now be in the staged list
     assert_eq!(app_state.files.len(), 1);
@@ -43,19 +40,19 @@ fn test_stage_untracked_file_from_unstaged_screen() {
     let files = git::get_diff(repo.path.clone());
     let mut app_state = AppState::new(repo.path.clone(), files);
     assert!(app_state.files.is_empty());
-    assert_eq!(app_state.unstaged_screen.untracked_files.len(), 1);
+    assert_eq!(app_state.unstaged_pane.untracked_files.len(), 1);
 
     // Switch to unstaged screen
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
-    assert_eq!(app_state.screen, Screen::Unstaged);
+    assert_eq!(app_state.focused_pane, FocusedPane::Unstaged);
 
     // list is [Unstaged H, Untracked H, File], so cursor on file is 2
-    app_state.unstaged_screen.unstaged_cursor = 2;
+    app_state.unstaged_pane.cursor = 2;
 
     // Press 'u' to stage the file
     app_state = update_state(app_state, Some(Input::Character('u')), 80, 80);
 
-    assert!(app_state.unstaged_screen.untracked_files.is_empty());
+    assert!(app_state.unstaged_pane.untracked_files.is_empty());
     assert_eq!(app_state.files.len(), 1);
     assert_eq!(app_state.files[0].file_name, "a.txt");
 }
@@ -75,32 +72,62 @@ fn test_stage_hunk_from_unstaged_screen() {
 
     let files = git::get_diff(repo.path.clone());
     let mut app_state = AppState::new(repo.path.clone(), files);
-    assert_eq!(app_state.unstaged_screen.unstaged_files.len(), 1);
-    assert_eq!(app_state.unstaged_screen.unstaged_files[0].hunks.len(), 2);
+    assert_eq!(app_state.unstaged_pane.unstaged_files.len(), 1);
+    assert_eq!(app_state.unstaged_pane.unstaged_files[0].hunks.len(), 2);
 
     // Switch to unstaged screen and select file
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
-    app_state.unstaged_screen.unstaged_cursor = 1;
+    app_state.unstaged_pane.cursor = 1;
 
     // Activate diff cursor and move to the second hunk
-    let line_in_second_hunk = app_state.unstaged_screen.unstaged_files[0]
+    let line_in_second_hunk = app_state.unstaged_pane.unstaged_files[0]
         .lines
         .iter()
         .position(|l| l.contains("+changed10"))
         .unwrap();
     
-    app_state.unstaged_screen.is_unstaged_diff_cursor_active = true;
+    app_state.unstaged_pane.is_diff_cursor_active = true;
     // This is tricky, the line cursor is shared. We need to set it on main_screen.
     app_state.main_screen.line_cursor = line_in_second_hunk;
 
     // Press 'u' to stage the hunk
     app_state = update_state(app_state, Some(Input::Character('u')), 80, 80);
 
-    assert_eq!(app_state.unstaged_screen.unstaged_files.len(), 1);
-    assert_eq!(app_state.unstaged_screen.unstaged_files[0].hunks.len(), 1);
-    assert!(!app_state.unstaged_screen.unstaged_files[0].lines.iter().any(|l| l.contains("changed10")));
+    assert_eq!(app_state.unstaged_pane.unstaged_files.len(), 1);
+    assert_eq!(app_state.unstaged_pane.unstaged_files[0].hunks.len(), 1);
+    assert!(!app_state.unstaged_pane.unstaged_files[0].lines.iter().any(|l| l.contains("changed10")));
 
     assert_eq!(app_state.files.len(), 1);
     assert_eq!(app_state.files[0].hunks.len(), 1);
     assert!(app_state.files[0].lines.iter().any(|l| l.contains("changed10")));
+}
+
+#[test]
+fn test_auto_switch_to_main_pane_when_unstaged_empty() {
+    let repo = TestRepo::new();
+    repo.create_file("a.txt", "hello");
+    repo.add_all();
+    repo.commit("initial");
+    repo.create_file("b.txt", "world");
+
+    let files = git::get_diff(repo.path.clone());
+    let mut app_state = AppState::new(repo.path.clone(), files);
+
+    // Initial focus should be Main Pane
+    assert_eq!(app_state.focused_pane, FocusedPane::Main);
+
+    // Switch to Unstaged Pane
+    app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
+    assert_eq!(app_state.focused_pane, FocusedPane::Unstaged);
+
+    // Select the unstaged file
+    app_state.unstaged_pane.cursor = 1;
+
+    // Stage the file (this should make unstaged pane empty and trigger auto-switch)
+    app_state = update_state(app_state, Some(Input::Character('u')), 80, 80);
+
+    // Assert focus is back on Main Pane
+    assert_eq!(app_state.focused_pane, FocusedPane::Main);
+    assert!(app_state.unstaged_pane.unstaged_files.is_empty());
+    assert!(app_state.unstaged_pane.untracked_files.is_empty());
 }

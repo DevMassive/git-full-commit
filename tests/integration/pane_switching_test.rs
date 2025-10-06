@@ -1,8 +1,8 @@
 use crate::git_test::common::TestRepo;
-use git_full_commit::app_state::{AppState, Screen};
+use git_full_commit::app_state::{AppState, FocusedPane};
 use git_full_commit::git;
 use git_full_commit::ui::update::update_state;
-use git_full_commit::ui::unstaged_screen::ListItem as UnstagedScreenListItem;
+use git_full_commit::ui::main_screen::UnstagedListItem;
 use pancurses::Input;
 
 #[test]
@@ -12,13 +12,13 @@ fn test_tab_toggles_screen() {
 
     let files = git::get_diff(repo.path.clone());
     let mut app_state = AppState::new(repo.path.clone(), files);
-    assert_eq!(app_state.screen, Screen::Main);
+    assert_eq!(app_state.focused_pane, FocusedPane::Main);
 
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
-    assert_eq!(app_state.screen, Screen::Unstaged);
+    assert_eq!(app_state.focused_pane, FocusedPane::Unstaged);
 
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
-    assert_eq!(app_state.screen, Screen::Main);
+    assert_eq!(app_state.focused_pane, FocusedPane::Main);
 }
 
 #[test]
@@ -37,7 +37,7 @@ fn test_screen_switching_is_blocked_in_commit_mode() {
 
     // Try to switch screen
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
-    assert_eq!(app_state.screen, Screen::Main, "Should not switch screen in commit mode");
+    assert_eq!(app_state.focused_pane, FocusedPane::Main, "Should not switch screen in commit mode");
 }
 
 #[test]
@@ -64,9 +64,9 @@ fn test_cursor_restoration_on_switch() {
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
     
     // The cursor should be on a.txt on the unstaged screen
-    let selected_unstaged_file = &app_state.unstaged_screen.list_items[app_state.unstaged_screen.unstaged_cursor];
+    let selected_unstaged_file = &app_state.unstaged_pane.list_items[app_state.unstaged_pane.cursor];
     match selected_unstaged_file {
-        UnstagedScreenListItem::File(f) => {
+        UnstagedListItem::File(f) => {
             assert_eq!(f.file_name, "a.txt");
         }
         _ => panic!("Expected a file to be selected"),

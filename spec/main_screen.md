@@ -75,5 +75,5 @@ When the Bottom Pane is focused, the user can perform the following operations:
 ## 4. Initial State
 
 - When the application starts, the Main Screen is displayed.
-- Focus is initially on the Top Pane (Unstaged/Untracked). If it is empty, focus starts on the Bottom Pane.
-- The cursor is positioned on the first item in the focused pane.
+- Focus is initially on the **Bottom Pane** (Staged/Commit), regardless of whether the Top Pane is visible.
+- The cursor is positioned on the first item in the Bottom Pane.

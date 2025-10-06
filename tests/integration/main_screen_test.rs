@@ -1,5 +1,5 @@
 use crate::git_test::common::TestRepo;
-use git_full_commit::app_state::{AppState, Screen};
+use git_full_commit::app_state::{AppState, FocusedPane};
 use git_full_commit::git;
 use git_full_commit::ui::update::update_state;
 use pancurses::Input;
@@ -11,7 +11,7 @@ fn test_initial_screen_layout_and_state() {
     let app_state = AppState::new(repo.path, files);
 
     // Spec: Main Screen is the initial view.
-    assert_eq!(app_state.screen, Screen::Main);
+    assert_eq!(app_state.focused_pane, FocusedPane::Main);
 
     // Spec: The cursor is positioned on the first item in the list.
     assert_eq!(app_state.main_screen.file_cursor, 0);

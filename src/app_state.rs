@@ -5,12 +5,11 @@ use crate::git::{
     self, CommitInfo, FileDiff, get_commit_diff, get_diff, get_local_commits, get_unstaged_diff,
     get_untracked_files,
 };
-use crate::ui::main_screen::ListItem as MainScreenListItem;
-use crate::ui::unstaged_screen::ListItem as UnstagedScreenListItem;
+use crate::ui::main_screen::{ListItem as MainScreenListItem, UnstagedListItem};
 use std::path::PathBuf;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Screen {
+pub enum FocusedPane {
     Main,
     Unstaged,
 }
@@ -37,27 +36,27 @@ pub struct MainScreenState {
 }
 
 #[derive(Default)]
-pub struct UnstagedScreenState {
+pub struct UnstagedPaneState {
     pub unstaged_files: Vec<FileDiff>,
     pub untracked_files: Vec<String>,
-    pub unstaged_cursor: usize,
-    pub unstaged_scroll: usize,
-    pub unstaged_diff_scroll: usize,
-    pub unstaged_horizontal_scroll: usize,
-    pub is_unstaged_diff_cursor_active: bool,
-    pub list_items: Vec<UnstagedScreenListItem>,
+    pub cursor: usize,
+    pub scroll: usize,
+    pub diff_scroll: usize,
+    pub horizontal_scroll: usize,
+    pub is_diff_cursor_active: bool,
+    pub list_items: Vec<UnstagedListItem>,
 }
 
 pub struct AppState {
     pub repo_path: PathBuf,
     pub main_screen: MainScreenState,
-    pub unstaged_screen: UnstagedScreenState,
+    pub unstaged_pane: UnstagedPaneState,
     pub running: bool,
     pub files: Vec<FileDiff>,
     pub command_history: CommandHistory,
     pub previous_commits: Vec<CommitInfo>,
     pub selected_commit_files: Vec<FileDiff>,
-    pub screen: Screen,
+    pub focused_pane: FocusedPane,
     pub editor_request: Option<EditorRequest>,
     pub error_message: Option<String>,
 }
@@ -71,9 +70,9 @@ impl AppState {
             .map(|c| get_commit_diff(&repo_path, &c.hash).unwrap_or_default())
             .unwrap_or_default();
 
-        let has_unstaged_changes = git::has_unstaged_changes(&repo_path).unwrap_or(false);
         let unstaged_files = get_unstaged_diff(&repo_path);
         let untracked_files = get_untracked_files(&repo_path).unwrap_or_default();
+        let has_unstaged_changes = !unstaged_files.is_empty() || !untracked_files.is_empty();
 
         let mut main_screen = MainScreenState::default();
         main_screen.commit_message = commit_message;
@@ -81,22 +80,24 @@ impl AppState {
         main_screen.list_items = Self::build_main_screen_list_items(&files, &previous_commits);
         main_screen.file_cursor = if !files.is_empty() { 1 } else { 0 };
 
-        let mut unstaged_screen = UnstagedScreenState::default();
-        unstaged_screen.unstaged_files = unstaged_files.clone();
-        unstaged_screen.untracked_files = untracked_files.clone();
-        unstaged_screen.list_items =
+        let mut unstaged_pane = UnstagedPaneState::default();
+        unstaged_pane.unstaged_files = unstaged_files.clone();
+        unstaged_pane.untracked_files = untracked_files.clone();
+        unstaged_pane.list_items =
             Self::build_unstaged_screen_list_items(&unstaged_files, &untracked_files);
+
+        let focused_pane = FocusedPane::Main;
 
         let mut s = Self {
             repo_path,
             main_screen,
-            unstaged_screen,
+            unstaged_pane,
             running: true,
             files,
             command_history: CommandHistory::new(),
             previous_commits,
             selected_commit_files,
-            screen: Screen::Main,
+            focused_pane,
             editor_request: None,
             error_message: None,
         };
@@ -127,15 +128,15 @@ impl AppState {
     pub fn build_unstaged_screen_list_items(
         unstaged_files: &[FileDiff],
         untracked_files: &[String],
-    ) -> Vec<UnstagedScreenListItem> {
+    ) -> Vec<UnstagedListItem> {
         let mut items = Vec::new();
-        items.push(UnstagedScreenListItem::UnstagedChangesHeader);
+        items.push(UnstagedListItem::UnstagedChangesHeader);
         for file in unstaged_files {
-            items.push(UnstagedScreenListItem::File(file.clone()));
+            items.push(UnstagedListItem::File(file.clone()));
         }
-        items.push(UnstagedScreenListItem::UntrackedFilesHeader);
+        items.push(UnstagedListItem::UntrackedFilesHeader);
         for file_name in untracked_files {
-            items.push(UnstagedScreenListItem::UntrackedFile(file_name.clone()));
+            items.push(UnstagedListItem::UntrackedFile(file_name.clone()));
         }
         items
     }
@@ -146,10 +147,11 @@ impl AppState {
             .list_items
             .get(self.main_screen.file_cursor)
         {
-            if let MainScreenListItem::File(_) = item {
-                self.main_screen.line_cursor
-            } else {
-                0
+            match item {
+                MainScreenListItem::File(_) | MainScreenListItem::PreviousCommitInfo { .. } => {
+                    self.main_screen.line_cursor
+                }
+                _ => 0,
             }
         } else {
             0
@@ -161,24 +163,23 @@ impl AppState {
         let old_line_cursor = self.main_screen.line_cursor;
         let old_scroll = self.main_screen.diff_scroll;
         let old_file_list_scroll = self.main_screen.file_list_scroll;
-        let old_unstaged_cursor = self.unstaged_screen.unstaged_cursor;
-        let old_unstaged_scroll = self.unstaged_screen.unstaged_scroll;
-        let old_unstaged_diff_scroll = self.unstaged_screen.unstaged_diff_scroll;
+        let old_unstaged_cursor = self.unstaged_pane.cursor;
+        let old_unstaged_scroll = self.unstaged_pane.scroll;
+        let old_unstaged_diff_scroll = self.unstaged_pane.diff_scroll;
 
         self.files = get_diff(self.repo_path.clone());
         self.previous_commits = get_local_commits(&self.repo_path).unwrap_or_default();
 
-        self.main_screen.has_unstaged_changes =
-            git::has_unstaged_changes(&self.repo_path).unwrap_or(false);
         let unstaged_files = get_unstaged_diff(&self.repo_path);
         let untracked_files = get_untracked_files(&self.repo_path).unwrap_or_default();
+        self.main_screen.has_unstaged_changes = !unstaged_files.is_empty() || !untracked_files.is_empty();
 
         self.main_screen.list_items =
             Self::build_main_screen_list_items(&self.files, &self.previous_commits);
-        self.unstaged_screen.list_items =
+        self.unstaged_pane.list_items =
             Self::build_unstaged_screen_list_items(&unstaged_files, &untracked_files);
-        self.unstaged_screen.unstaged_files = unstaged_files;
-        self.unstaged_screen.untracked_files = untracked_files;
+        self.unstaged_pane.unstaged_files = unstaged_files;
+        self.unstaged_pane.untracked_files = untracked_files;
 
         self.update_selected_commit_diff();
 
@@ -209,10 +210,10 @@ impl AppState {
         }
         self.main_screen.file_list_scroll = old_file_list_scroll;
 
-        let max_unstaged_cursor = self.unstaged_screen.list_items.len().saturating_sub(1);
-        self.unstaged_screen.unstaged_cursor = old_unstaged_cursor.min(max_unstaged_cursor);
-        self.unstaged_screen.unstaged_scroll = old_unstaged_scroll;
-        self.unstaged_screen.unstaged_diff_scroll = old_unstaged_diff_scroll;
+        let max_unstaged_cursor = self.unstaged_pane.list_items.len().saturating_sub(1);
+        self.unstaged_pane.cursor = old_unstaged_cursor.min(max_unstaged_cursor);
+        self.unstaged_pane.scroll = old_unstaged_scroll;
+        self.unstaged_pane.diff_scroll = old_unstaged_diff_scroll;
     }
 
     pub fn execute_and_refresh(&mut self, command: Box<dyn Command>) {
@@ -254,11 +255,11 @@ impl AppState {
 
     pub fn get_unstaged_file(&self) -> Option<&FileDiff> {
         if let Some(item) = self
-            .unstaged_screen
+            .unstaged_pane
             .list_items
-            .get(self.unstaged_screen.unstaged_cursor)
+            .get(self.unstaged_pane.cursor)
         {
-            if let UnstagedScreenListItem::File(file_diff) = item {
+            if let UnstagedListItem::File(file_diff) = item {
                 Some(file_diff)
             } else {
                 None
@@ -275,7 +276,7 @@ impl AppState {
     }
 
     pub fn unstaged_header_height(&self, max_y: i32) -> (usize, usize) {
-        let file_list_total_items = self.unstaged_screen.list_items.len();
+        let file_list_total_items = self.unstaged_pane.list_items.len();
         let height = (max_y as usize / 3).max(3).min(file_list_total_items);
         (height, file_list_total_items)
     }

@@ -1,4 +1,4 @@
-use crate::app_state::{AppState, Screen};
+use crate::app_state::{AppState, FocusedPane};
 use crate::git;
 use pancurses::Input;
 
@@ -89,18 +89,18 @@ fn scroll_unstaged_diff_view(
     amount: ScrollAmount,
     max_y: i32,
 ) {
-    let unstaged_file_count = state.unstaged_screen.unstaged_files.len();
-    let untracked_file_count = state.unstaged_screen.untracked_files.len();
+    let unstaged_file_count = state.unstaged_pane.unstaged_files.len();
+    let untracked_file_count = state.unstaged_pane.untracked_files.len();
 
-    let lines_count = if state.unstaged_screen.unstaged_cursor > 0
-        && state.unstaged_screen.unstaged_cursor <= unstaged_file_count
+    let lines_count = if state.unstaged_pane.cursor > 0
+        && state.unstaged_pane.cursor <= unstaged_file_count
     {
         state.get_unstaged_file().map_or(0, |f| f.lines.len())
-    } else if state.unstaged_screen.unstaged_cursor > unstaged_file_count + 1
-        && state.unstaged_screen.unstaged_cursor <= unstaged_file_count + 1 + untracked_file_count
+    } else if state.unstaged_pane.cursor > unstaged_file_count + 1
+        && state.unstaged_pane.cursor <= unstaged_file_count + 1 + untracked_file_count
     {
-        let file_index = state.unstaged_screen.unstaged_cursor - unstaged_file_count - 2;
-        if let Some(file_path) = state.unstaged_screen.untracked_files.get(file_index) {
+        let file_index = state.unstaged_pane.cursor - unstaged_file_count - 2;
+        if let Some(file_path) = state.unstaged_pane.untracked_files.get(file_index) {
             if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_path) {
                 if content.contains(&0x00) {
                     1
@@ -124,14 +124,14 @@ fn scroll_unstaged_diff_view(
 
         let (new_line_cursor, new_scroll) = scroll_content(
             state.main_screen.line_cursor,
-            state.unstaged_screen.unstaged_diff_scroll,
+            state.unstaged_pane.diff_scroll,
             content_height,
             lines_count,
             direction,
             amount,
         );
         state.main_screen.line_cursor = new_line_cursor;
-        state.unstaged_screen.unstaged_diff_scroll = new_scroll;
+        state.unstaged_pane.diff_scroll = new_scroll;
     }
 }
 
@@ -148,8 +148,8 @@ pub fn handle_scroll(state: &mut AppState, input: Input, max_y: i32) {
         _ => return,
     };
 
-    match state.screen {
-        Screen::Main => scroll_view(state, direction, amount, max_y),
-        Screen::Unstaged => scroll_unstaged_diff_view(state, direction, amount, max_y),
+    match state.focused_pane {
+        FocusedPane::Main => scroll_view(state, direction, amount, max_y),
+        FocusedPane::Unstaged => scroll_unstaged_diff_view(state, direction, amount, max_y),
     }
 }
