@@ -4,19 +4,18 @@ This document describes the application's functionality for staging changes, mov
 
 ## 1. General Context
 
-All staging operations are initiated from the **Unstaged Screen**, which displays "Unstaged changes" and "Untracked files." The user navigates these lists using the `Up` and `Down` arrow keys. The selected item is highlighted.
+All staging operations are initiated from the **Top Pane of the Main Screen**, which displays "Unstaged changes" and "Untracked files." The user navigates these lists using the `Up` and `Down` arrow keys when the pane is focused.
 
-A user can switch back to the **Main Screen** by pressing `Tab`.
+A user can switch focus to the **Bottom Pane** by pressing `Tab`. See `spec/pane_switching.md`.
 
-## 2. Staging from the Unstaged Screen
+## 2. Staging from the Top Pane
 
 The application supports staging at four levels of granularity.
 
 ### 2.1. Stage All Unstaged Changes
 
 - **User Action:**
-  1. Navigate to the **Unstaged Screen**.
-  2. Select the **"Unstaged changes"** header.
+  1. Select the **"Unstaged changes"** header in the Top Pane.
   3. Press the `u` key or the `Enter` key.
 - **Expected Outcome:**
   - All modified files in the "Unstaged changes" list are staged.
@@ -27,8 +26,7 @@ The application supports staging at four levels of granularity.
 ### 2.2. Stage All Untracked Files
 
 - **User Action:**
-  1. Navigate to the **Unstaged Screen**.
-  2. Select the **"Untracked files"** header.
+  1. Select the **"Untracked files"** header in the Top Pane.
   3. Press the `u` key or the `Enter` key.
 - **Expected Outcome:**
   - All files in the "Untracked files" list are staged.
@@ -40,7 +38,7 @@ The application supports staging at four levels of granularity.
 
 - **Condition:** The diff cursor is **inactive**.
 - **User Action:**
-  1. Select a file from the "Unstaged changes" or "Untracked files" list.
+  1. Select a file from the "Unstaged changes" or "Untracked files" list in the Top Pane.
   2. Press the `u` key or the `Enter` key.
 - **Expected Outcome:**
   - The selected file is staged and removed from its list.
@@ -65,7 +63,7 @@ The application supports staging at four levels of granularity.
 ### 2.5. Stage a Single Line
 
 - **User Action:**
-  1. Navigate to the **Unstaged Screen** and select a file.
+  1. In the Top Pane, select a file.
   2. Move focus to the diff panel.
   3. Navigate to the specific line to be staged.
   4. Press the `1` key.

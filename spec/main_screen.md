@@ -1,71 +1,79 @@
 # Application Specification: Main Screen
 
-This document specifies the layout, content, and behavior of the application's Main Screen, based on a direct analysis of the source code.
+This document specifies the layout, content, and behavior of the application's Main Screen.
 
 ## 1. General Context
 
-The Main Screen is the initial view when the application starts. It provides a summary of the repository's status, allows for new commits to be made, and displays diffs for both staged changes and previous commits.
+The Main Screen is the initial and primary view of the application. It is a composite screen divided into multiple panes, providing a comprehensive overview of the repository's status and enabling core Git operations.
 
 ## 2. Screen Layout and Content
 
-The Main Screen is composed of two primary panels separated by a horizontal line:
+The Main Screen is composed of three primary sections, arranged vertically:
 
-### 2.1. Top Panel: List View
+1.  **Top Pane: Unstaged & Untracked Files**
+2.  **Bottom Pane: Staged Files, Commit Input & Log**
+3.  **Diff View**
 
-The top panel contains a single, continuous list of navigable items.
+### 2.1. Top Pane: Unstaged & Untracked Files
+
+This pane displays files with changes in the working directory that have not yet been staged.
+
+- **Visibility:**
+  - This pane is only displayed if there is at least one unstaged change or one untracked file. Otherwise, it is hidden entirely.
 
 - **Layout and Sizing:**
-  - The panel's height is dynamic, calculated as one-third of the terminal's height (min 3 lines).
-  - If the content exceeds this calculated height, the panel becomes vertically scrollable.
+  - The pane's height is dynamic, with a maximum size of one-third of the terminal's height.
+  - If the content exceeds this height, the pane becomes vertically scrollable.
+- **Content:**
+  - It contains two sections, each with a header:
+    1.  **Unstaged changes:** A list of modified files.
+    2.  **Untracked files:** A list of new files not yet tracked by Git.
+
+### 2.2. Bottom Pane: Staged Files, Commit Input & Log
+
+This pane displays staged changes and the commit history.
 
 - **Content Order:**
   1.  **Staged Changes:** A header followed by a list of staged files.
   2.  **Commit Message Input:** A text input field. (*Details in `spec/commit_input_view.md`*)
   3.  **Commit Log:** A list of commits. (*Details in `spec/commit_log_view.md`*)
 
-### 2.2. Bottom Panel: Diff View
+### 2.3. Diff View
 
-- The content of this view is dynamic, showing the diff for the selected staged file or commit.
+- This view always occupies the bottom-most portion of the screen, below the other panes.
+- Its content is dynamic, showing the diff for the item selected in the currently active pane (either Top or Bottom).
 - *Note: All interactions within the Diff View are detailed in `spec/diff_view.md`.*
 
 ## 3. Navigation and Command Model
 
-Navigation and command execution are governed by a "Diff Cursor State," which determines whether actions apply to a selected file as a whole or to a specific part of its diff. This state is only relevant when a staged file is selected.
+Navigation is split between the two main panes (Top and Bottom). The `Tab` key switches focus between them.
 
-### 3.1. List Navigation (Diff Cursor Inactive)
+- **Pane Switching:** See `spec/pane_switching.md`.
+- **Cursor:** The `Up` and `Down` arrow keys move the cursor within the currently focused pane. The cursor is hidden in the inactive pane.
 
-- **User Action:**
-  - Press the `Up` or `Down` arrow key.
-- **Expected Outcome:**
-  - The cursor moves between items in the List View (top panel).
-  - **The Diff Cursor state is set to INACTIVE.** Any subsequent commands will target the entire selected file or commit.
-  - **The Diff View is reset.** When the file selection is changed via the arrow keys, the Diff View's scroll position and line cursor are reset to 0.
+### 3.1. Operations in the Top Pane (Unstaged/Untracked)
 
-### 3.2. Diff View Navigation (Diff Cursor Active)
+When the Top Pane is focused, the user can perform the following operations:
 
-- **User Action:**
-  - When a staged file is selected, press the `j` or `k` key.
-- **Expected Outcome:**
-  - **The Diff Cursor state is set to ACTIVE.** Any subsequent commands (like unstaging) will target the specific line or hunk currently selected by the cursor within the Diff View.
-  - The cursor moves line-by-line within the Diff View.
+- **Staging:** See `spec/stage_operations.md`
+- **Discarding:** See `spec/discard_operations.md`
+- **Ignoring:** See `spec/ignore_operations.md`
 
-### 3.3. Command Logic: File vs. Hunk
+### 3.2. Operations in the Bottom Pane (Staged/Commit)
 
-The target of commands like unstaging (`u`) or discarding (`!`) depends entirely on the Diff Cursor State.
+When the Bottom Pane is focused, the user can perform the following operations:
 
-- **When Diff Cursor is INACTIVE:** The command applies to the **entire file** selected in the list.
-- **When Diff Cursor is ACTIVE:** The command applies to the **hunk** currently selected by the cursor in the Diff View.
+- **Unstaging:** See `spec/unstage_operations.md`
+- **Discarding:** See `spec/discard_operations.md`
+- **Committing:** See `spec/commit_input_view.md` and `spec/commit_log_view.md`
+
+### 3.3. Diff Interaction
+
+- The `j` and `k` keys are used to activate and move the cursor within the Diff View, regardless of which pane is focused. This allows for hunk-level operations.
+- The target of commands like staging (`u`) or discarding (`!`) depends on whether the diff cursor is active.
 
 ## 4. Initial State
 
 - When the application starts, the Main Screen is displayed.
-- The cursor is positioned on the first item in the list. If staged files exist, this will be the first file.
-- The Diff Cursor state is initially INACTIVE.
-
-## 5. Operations
-
-The following operations can be performed from the Main Screen:
-
-- **Unstaging:** See `spec/unstage_operations.md`
-- **Discarding:** See `spec/discard_operations.md`
-- **Ignoring:** See `spec/ignore_operations.md`
+- Focus is initially on the Top Pane (Unstaged/Untracked). If it is empty, focus starts on the Bottom Pane.
+- The cursor is positioned on the first item in the focused pane.

@@ -4,9 +4,9 @@ This document describes the application's functionality for unstaging changes fr
 
 ## 1. General Context
 
-All unstage operations are initiated from the **Main Screen**, which displays the "Staged changes" list. The user navigates this list using the `Up` and `Down` arrow keys. The selected item is highlighted.
+All unstage operations are initiated from the **Bottom Pane of the Main Screen**, which displays the "Staged changes" list. The user navigates this list using the `Up` and `Down` arrow keys when the pane is focused.
 
-A user can switch to the "Unstaged changes" screen by pressing `Tab` at any time, provided there is at least one unstaged change or one untracked file.
+A user can switch focus to the **Top Pane** by pressing `Tab`. See `spec/pane_switching.md`.
 
 ## 2. Unstage Granularities
 
@@ -15,8 +15,7 @@ The application supports four levels of granularity for unstaging changes.
 ### 2.1. Unstage All Changes
 
 - **User Action:**
-  1. Navigate to the **Main Screen**.
-  2. Select the **"Staged changes"** header at the top of the list.
+  1. In the Bottom Pane, select the **"Staged changes"** header.
   3. Press the `u` key or the `Enter` key.
 - **Expected Outcome:**
   - All files and changes currently in the staging area are unstaged.
@@ -56,7 +55,7 @@ The application supports four levels of granularity for unstaging changes.
 ### 2.4. Unstage a Single Line
 
 - **User Action:**
-  1. Navigate to the **Main Screen** and select a file with changes.
+  1. In the Bottom Pane, select a file with changes.
   2. Move the cursor focus into the diff panel below by pressing `j` (down) or `k` (up).
   3. Navigate the cursor to the specific line (an addition or modification) you wish to unstage.
   4. Press the `1` key.

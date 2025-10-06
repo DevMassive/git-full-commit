@@ -4,9 +4,9 @@ This document describes the application's functionality for discarding changes. 
 
 ## 1. General Context
 
-Discard operations can be initiated from both the **Main Screen** (for staged items) and the **Unstaged Screen** (for unstaged or untracked items).
+Discard operations can be initiated from either the **Top Pane** (for unstaged or untracked items) or the **Bottom Pane** (for staged items) of the Main Screen.
 
-## 2. Discarding from the Main Screen (Staged Changes)
+## 2. Discarding from the Bottom Pane (Staged Changes)
 
 These operations discard changes that have been staged.
 
@@ -38,7 +38,7 @@ These operations discard changes that have been staged.
   - The file selection cursor remains on the same file.
   - The line cursor in the diff view attempts to stay at a similar position.
 
-## 3. Discarding from the Unstaged Screen
+## 3. Discarding from the Top Pane (Unstaged/Untracked)
 
 These operations discard changes from the working directory.
 
