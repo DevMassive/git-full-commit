@@ -1,2 +1,9 @@
+pub mod commit_input_view_test;
+pub mod diff_view_test;
+pub mod discard_operations_test;
+pub mod ignore_operations_test;
 pub mod main_screen_test;
+pub mod screen_switching_test;
+pub mod stage_operations_test;
+pub mod undo_redo_test;
 pub mod unstage_operations_test;
