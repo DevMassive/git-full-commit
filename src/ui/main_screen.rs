@@ -15,7 +15,7 @@ use crate::ui::scroll;
 use pancurses::Input;
 
 use crate::git_patch;
-use pancurses::{A_DIM, COLOR_PAIR, Window};
+use pancurses::{COLOR_PAIR, Window};
 
 fn is_binary(content: &[u8]) -> bool {
     content.contains(&0x00)
@@ -47,11 +47,10 @@ pub enum ListItem {
 
 pub fn render(window: &Window, state: &AppState) {
     let (max_y, max_x) = window.get_max_yx();
-    let mut unstaged_pane_height = 0;
     let mut main_pane_offset = 0;
 
     if state.main_screen.has_unstaged_changes {
-        unstaged_pane_height = render_unstaged_pane(window, state, max_y, max_x);
+        let unstaged_pane_height = render_unstaged_pane(window, state, max_y, max_x);
         main_pane_offset = unstaged_pane_height + 1;
 
         // Render separator
@@ -424,10 +423,16 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
     let (file_list_height, unstaged_items_count) = state.unstaged_header_height(max_y);
 
     match input {
-        Input::Character('q') | Input::Character('Q') => {
-            state.focused_pane = FocusedPane::Main;
-            state.main_screen.line_cursor = 0;
-            state.main_screen.diff_scroll = 0;
+        Input::Character('q') => {
+            if state.unstaged_pane.is_diff_cursor_active {
+                state.unstaged_pane.is_diff_cursor_active = false;
+            } else {
+                let _ = commit_storage::save_commit_message(
+                    &state.repo_path,
+                    &state.main_screen.commit_message,
+                );
+                state.running = false;
+            }
         }
         Input::KeyUp => {
             state.unstaged_pane.cursor = state.unstaged_pane.cursor.saturating_sub(1);

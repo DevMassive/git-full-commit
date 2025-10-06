@@ -74,6 +74,12 @@ When the Bottom Pane is focused, the user can perform the following operations:
 
 ### 3.4. Global Operations
 
+- **Quitting:**
+  - **User Action:** Press `q`.
+  - **Expected Outcome:**
+    - If the Diff Cursor is **INACTIVE**, the application will quit.
+    - If the Diff Cursor is **ACTIVE**, the Diff Cursor will be deactivated.
+
 - **Stage All:**
   - **User Action:** Press `R`.
   - **Expected Outcome:** All unstaged and untracked files are staged. See `spec/stage_operations.md` for details.

@@ -2,7 +2,7 @@ use crate::command::{Command, CommandHistory};
 use crate::commit_storage;
 use crate::cursor_state::CursorState;
 use crate::git::{
-    self, CommitInfo, FileDiff, get_commit_diff, get_diff, get_local_commits, get_unstaged_diff,
+    CommitInfo, FileDiff, get_commit_diff, get_diff, get_local_commits, get_unstaged_diff,
     get_untracked_files,
 };
 use crate::ui::main_screen::{ListItem as MainScreenListItem, UnstagedListItem};
