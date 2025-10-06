@@ -6,6 +6,7 @@ This document specifies the behavior of the Commit Log View, which is part of th
 
 - Each commit in the log is displayed as a single-line entry.
 - The entry consists of a status indicator followed by the commit message.
+- If the commit message is too long to fit within the window width, it will be truncated, not wrapped.
 
 ### 1.1. Status Indicator
 

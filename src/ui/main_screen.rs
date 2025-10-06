@@ -142,7 +142,20 @@ pub fn render(window: &Window, state: &AppState) {
                 window.attroff(COLOR_PAIR(status_pair));
 
                 window.attron(COLOR_PAIR(pair));
-                window.addstr(message);
+                use unicode_width::UnicodeWidthStr;
+                let prefix_width = " ● ".width();
+                let available_width = (max_x as usize).saturating_sub(prefix_width);
+                let mut truncated_message = String::new();
+                let mut current_width = 0;
+                for ch in message.chars() {
+                    let char_width = ch.to_string().width();
+                    if current_width + char_width > available_width {
+                        break;
+                    }
+                    truncated_message.push(ch);
+                    current_width += char_width;
+                }
+                window.addstr(&truncated_message);
                 window.attroff(COLOR_PAIR(pair));
             }
             ListItem::AmendingCommitMessageInput { .. } => {
