@@ -75,15 +75,15 @@ The application supports staging at four levels of granularity.
   - The file selection cursor remains on the same file.
   - The line cursor in the diff view will attempt to stay at the same line index.
 
-## 3. Staging All from Main Screen
+## 3. Staging All (Stage All)
 
-As a shortcut, it is also possible to stage all unstaged and untracked files directly from the main screen.
+As a shortcut, it is possible to stage all unstaged and untracked files at once.
 
 - **User Action:**
-  1. Navigate to the **Main Screen**.
-  2. Press the `R` key.
+  - While on the **Main Screen** (either the Top or Bottom pane is focused), press the `R` key.
 - **Expected Outcome:**
   - All unstaged and untracked files are staged.
-  - The corresponding items appear in the "Staged changes" list.
+  - The "Unstaged changes" and "Untracked files" lists become empty.
+  - The staged files appear in the "Staged changes" list in the Bottom Pane.
 - **Cursor Movement:**
-  - The cursor position on the Main Screen is not explicitly changed. The list of staged files is updated, which may cause the item under the cursor to change.
+  - The cursor position does not change, but the lists will update.

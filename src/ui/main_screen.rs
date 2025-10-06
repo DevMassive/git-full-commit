@@ -590,6 +590,10 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
                 }
             }
         }
+        Input::Character('R') => {
+            let command = Box::new(StageAllCommand::new(state.repo_path.clone()));
+            state.execute_and_refresh(command);
+        }
         Input::Character('e') => {
             match state.unstaged_pane.list_items.get(state.unstaged_pane.cursor) {
                 Some(UnstagedListItem::File(file)) => {

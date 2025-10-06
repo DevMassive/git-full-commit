@@ -72,6 +72,12 @@ When the Bottom Pane is focused, the user can perform the following operations:
 - The `j` and `k` keys are used to activate and move the cursor within the Diff View, regardless of which pane is focused. This allows for hunk-level operations.
 - The target of commands like staging (`u`) or discarding (`!`) depends on whether the diff cursor is active.
 
+### 3.4. Global Operations
+
+- **Stage All:**
+  - **User Action:** Press `R`.
+  - **Expected Outcome:** All unstaged and untracked files are staged. See `spec/stage_operations.md` for details.
+
 ## 4. Initial State
 
 - When the application starts, the Main Screen is displayed.
