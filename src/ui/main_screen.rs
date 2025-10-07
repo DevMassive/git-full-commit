@@ -51,14 +51,7 @@ pub fn render(window: &Window, state: &AppState) {
 
     if state.main_screen.has_unstaged_changes {
         let unstaged_pane_height = render_unstaged_pane(window, state, max_y, max_x);
-        main_pane_offset = unstaged_pane_height + 1;
-
-        // Render separator
-        let separator_y = unstaged_pane_height as i32;
-        window.mv(separator_y, 0);
-        window.attron(COLOR_PAIR(9));
-        window.hline(pancurses::ACS_HLINE(), max_x);
-        window.attroff(COLOR_PAIR(9));
+        main_pane_offset = unstaged_pane_height;
     }
 
     let (main_pane_carret_y, main_pane_carret_x) =
@@ -429,7 +422,7 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
                 state.running = false;
             }
         }
-        Input::KeyUp => {
+        Input::KeyUp | Input::Character('\u{10}') => {
             state.unstaged_pane.cursor = state.unstaged_pane.cursor.saturating_sub(1);
             state.unstaged_pane.diff_scroll = 0;
             state.main_screen.line_cursor = 0;
@@ -438,15 +431,27 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
                 state.unstaged_pane.scroll = state.unstaged_pane.cursor;
             }
         }
-        Input::KeyDown => {
-            state.unstaged_pane.cursor =
-                state.unstaged_pane.cursor.saturating_add(1).min(unstaged_items_count.saturating_sub(1));
+        Input::KeyDown | Input::Character('\u{e}') => {
+            if unstaged_items_count > 0
+                && state.unstaged_pane.cursor == unstaged_items_count - 1
+                && state.main_screen.list_items.len() > 0
+            {
+                state.focused_pane = FocusedPane::Main;
+                state.main_screen.file_cursor = 0;
+                state.main_screen.file_list_scroll = 0;
+                return;
+            }
+
+            state.unstaged_pane.cursor = state
+                .unstaged_pane
+                .cursor
+                .saturating_add(1)
+                .min(unstaged_items_count.saturating_sub(1));
             state.unstaged_pane.diff_scroll = 0;
             state.main_screen.line_cursor = 0;
             state.unstaged_pane.is_diff_cursor_active = false;
             if state.unstaged_pane.cursor >= state.unstaged_pane.scroll + file_list_height {
-                state.unstaged_pane.scroll =
-                    state.unstaged_pane.cursor - file_list_height + 1;
+                state.unstaged_pane.scroll = state.unstaged_pane.cursor - file_list_height + 1;
             }
         }
         Input::Character('k') => {
@@ -907,6 +912,24 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
 
     match input {
         Input::KeyUp | Input::Character('\u{10}') => {
+            if state.main_screen.file_cursor == 0 {
+                if state.main_screen.has_unstaged_changes {
+                    let unstaged_items_count = state.unstaged_pane.list_items.len();
+                    if unstaged_items_count > 0 {
+                        state.focused_pane = FocusedPane::Unstaged;
+                        state.unstaged_pane.cursor = unstaged_items_count - 1;
+
+                        let (file_list_height, _) = state.unstaged_header_height(max_y);
+                        if state.unstaged_pane.cursor >= state.unstaged_pane.scroll + file_list_height
+                        {
+                            state.unstaged_pane.scroll =
+                                state.unstaged_pane.cursor - file_list_height + 1;
+                        }
+                        return;
+                    }
+                }
+            }
+
             state.main_screen.file_cursor = state.main_screen.file_cursor.saturating_sub(1);
             state.main_screen.diff_scroll = 0;
             state.main_screen.line_cursor = 0;

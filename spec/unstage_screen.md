@@ -8,7 +8,7 @@ The Unstaged Screen is where users view and manage changes in the working direct
 
 ## 2. Screen Layout and Content
 
-The screen is composed of two primary panels separated by a horizontal line:
+The screen is composed of two primary panels:
 
 ### 2.1. Top Panel: File List
 

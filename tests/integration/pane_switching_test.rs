@@ -72,3 +72,43 @@ fn test_cursor_restoration_on_switch() {
         _ => panic!("Expected a file to be selected"),
     }
 }
+
+#[test]
+fn test_move_from_main_to_unstaged_pane_with_up_arrow() {
+    let repo = TestRepo::new();
+    repo.create_file("staged.txt", "content");
+    repo.add_all();
+    repo.create_file("unstaged.txt", "content");
+
+    let files = git::get_diff(repo.path.clone());
+    let mut app_state = AppState::new(repo.path.clone(), files);
+
+    app_state.main_screen.file_cursor = 0;
+    app_state.focused_pane = FocusedPane::Main;
+
+    app_state = update_state(app_state, Some(Input::KeyUp), 80, 80);
+
+    assert_eq!(app_state.focused_pane, FocusedPane::Unstaged);
+    let unstaged_items_count = app_state.unstaged_pane.list_items.len();
+    assert_eq!(app_state.unstaged_pane.cursor, unstaged_items_count - 1);
+}
+
+#[test]
+fn test_move_from_unstaged_to_main_pane_with_down_arrow() {
+    let repo = TestRepo::new();
+    repo.create_file("staged.txt", "content");
+    repo.add_all();
+    repo.create_file("unstaged.txt", "content");
+
+    let files = git::get_diff(repo.path.clone());
+    let mut app_state = AppState::new(repo.path.clone(), files);
+
+    let unstaged_items_count = app_state.unstaged_pane.list_items.len();
+    app_state.unstaged_pane.cursor = unstaged_items_count - 1;
+    app_state.focused_pane = FocusedPane::Unstaged;
+
+    app_state = update_state(app_state, Some(Input::KeyDown), 80, 80);
+
+    assert_eq!(app_state.focused_pane, FocusedPane::Main);
+    assert_eq!(app_state.main_screen.file_cursor, 0);
+}
