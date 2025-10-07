@@ -272,10 +272,17 @@ fn render_line(
                        pair: chtype,
                        attr: pancurses::chtype,
                        remaining_scroll: &mut usize| {
+        let max_x = win.get_max_x();
+        let current_x = win.get_cur_x();
+        let remaining_width = if max_x > current_x { max_x - current_x } else { 0 };
+        if remaining_width == 0 {
+            return;
+        }
+
         if *remaining_scroll == 0 {
             win.attron(COLOR_PAIR(pair));
             win.attron(attr);
-            win.addstr(text);
+            win.addnstr(text, remaining_width as usize);
             win.attroff(attr);
             win.attroff(COLOR_PAIR(pair));
         } else {
@@ -284,7 +291,7 @@ fn render_line(
                 let scrolled_text = get_scrolled_line(text, *remaining_scroll);
                 win.attron(COLOR_PAIR(pair));
                 win.attron(attr);
-                win.addstr(scrolled_text);
+                win.addnstr(scrolled_text, remaining_width as usize);
                 win.attroff(attr);
                 win.attroff(COLOR_PAIR(pair));
                 *remaining_scroll = 0;
