@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command as OsCommand;
 use tempfile::TempDir;
 
-
 pub struct TestRepo {
     pub path: PathBuf,
     _temp_dir: TempDir,
@@ -28,7 +27,10 @@ impl TestRepo {
         run_git(&path, &["init"]);
         run_git(&path, &["config", "user.name", "Test"]);
         run_git(&path, &["config", "user.email", "test@example.com"]);
-        run_git(&path, &["remote", "add", "origin", remote_path.to_str().unwrap()]);
+        run_git(
+            &path,
+            &["remote", "add", "origin", remote_path.to_str().unwrap()],
+        );
 
         TestRepo {
             path,
@@ -40,8 +42,6 @@ impl TestRepo {
     pub fn create_file(&self, name: &str, content: &str) {
         fs::write(self.path.join(name), content).unwrap();
     }
-
-
 
     pub fn add_all(&self) {
         run_git(&self.path, &["add", "-A"]);

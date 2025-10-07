@@ -37,7 +37,7 @@ fn test_unstage_hunk_from_main_screen() {
     let repo = TestRepo::new();
     let mut initial_content = String::new();
     for i in 1..=10 {
-        initial_content.push_str(&format!("line{}\n", i));
+        initial_content.push_str(&format!("line{i}\n"));
     }
     repo.create_file("a.txt", &initial_content);
     repo.add_all();
@@ -53,7 +53,11 @@ fn test_unstage_hunk_from_main_screen() {
     let mut app_state = AppState::new(repo.path.clone(), files);
 
     assert_eq!(app_state.files.len(), 1);
-    assert_eq!(app_state.files[0].hunks.len(), 2, "Should have 2 hunks initially");
+    assert_eq!(
+        app_state.files[0].hunks.len(),
+        2,
+        "Should have 2 hunks initially"
+    );
 
     // Navigate to the file
     app_state.main_screen.file_cursor = 1;
@@ -64,7 +68,7 @@ fn test_unstage_hunk_from_main_screen() {
         .iter()
         .position(|l| l.contains("+changed10"))
         .unwrap();
-    
+
     app_state.main_screen.line_cursor = line_in_second_hunk;
     app_state.main_screen.is_diff_cursor_active = true;
 
@@ -73,12 +77,26 @@ fn test_unstage_hunk_from_main_screen() {
 
     // The file should still be staged, but with only one hunk
     assert_eq!(app_state.files.len(), 1, "File should still be staged");
-    assert_eq!(app_state.files[0].hunks.len(), 1, "Should have 1 hunk remaining");
-    assert!(!app_state.files[0].lines.iter().any(|l| l.contains("changed10")));
+    assert_eq!(
+        app_state.files[0].hunks.len(),
+        1,
+        "Should have 1 hunk remaining"
+    );
+    assert!(
+        !app_state.files[0]
+            .lines
+            .iter()
+            .any(|l| l.contains("changed10"))
+    );
 
     // The unstaged changes should now contain the second hunk
     let unstaged_files = git::get_unstaged_diff(&repo.path);
     assert_eq!(unstaged_files.len(), 1);
     assert_eq!(unstaged_files[0].hunks.len(), 1);
-    assert!(unstaged_files[0].lines.iter().any(|l| l.contains("changed10")));
+    assert!(
+        unstaged_files[0]
+            .lines
+            .iter()
+            .any(|l| l.contains("changed10"))
+    );
 }

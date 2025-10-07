@@ -15,7 +15,10 @@ fn test_stage_entire_file_from_unstaged_screen() {
 
     let files = git::get_diff(repo.path.clone());
     let mut app_state = AppState::new(repo.path.clone(), files);
-    assert!(app_state.files.is_empty(), "Should have no staged files initially");
+    assert!(
+        app_state.files.is_empty(),
+        "Should have no staged files initially"
+    );
 
     // Switch to unstaged screen
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
@@ -60,7 +63,7 @@ fn test_stage_untracked_file_from_unstaged_screen() {
 #[test]
 fn test_stage_hunk_from_unstaged_screen() {
     let repo = TestRepo::new();
-    let initial_content: String = (1..=10).map(|i| format!("line{}\n", i)).collect();
+    let initial_content: String = (1..=10).map(|i| format!("line{i}\n")).collect();
     repo.create_file("a.txt", &initial_content);
     repo.add_all();
     repo.commit("initial");
@@ -85,7 +88,7 @@ fn test_stage_hunk_from_unstaged_screen() {
         .iter()
         .position(|l| l.contains("+changed10"))
         .unwrap();
-    
+
     app_state.unstaged_pane.is_diff_cursor_active = true;
     // This is tricky, the line cursor is shared. We need to set it on main_screen.
     app_state.main_screen.line_cursor = line_in_second_hunk;
@@ -95,11 +98,21 @@ fn test_stage_hunk_from_unstaged_screen() {
 
     assert_eq!(app_state.unstaged_pane.unstaged_files.len(), 1);
     assert_eq!(app_state.unstaged_pane.unstaged_files[0].hunks.len(), 1);
-    assert!(!app_state.unstaged_pane.unstaged_files[0].lines.iter().any(|l| l.contains("changed10")));
+    assert!(
+        !app_state.unstaged_pane.unstaged_files[0]
+            .lines
+            .iter()
+            .any(|l| l.contains("changed10"))
+    );
 
     assert_eq!(app_state.files.len(), 1);
     assert_eq!(app_state.files[0].hunks.len(), 1);
-    assert!(app_state.files[0].lines.iter().any(|l| l.contains("changed10")));
+    assert!(
+        app_state.files[0]
+            .lines
+            .iter()
+            .any(|l| l.contains("changed10"))
+    );
 }
 
 #[test]

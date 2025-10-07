@@ -101,30 +101,29 @@ fn scroll_unstaged_diff_view(
     let unstaged_file_count = state.unstaged_pane.unstaged_files.len();
     let untracked_file_count = state.unstaged_pane.untracked_files.len();
 
-    let lines_count = if state.unstaged_pane.cursor > 0
-        && state.unstaged_pane.cursor <= unstaged_file_count
-    {
-        state.get_unstaged_file().map_or(0, |f| f.lines.len())
-    } else if state.unstaged_pane.cursor > unstaged_file_count + 1
-        && state.unstaged_pane.cursor <= unstaged_file_count + 1 + untracked_file_count
-    {
-        let file_index = state.unstaged_pane.cursor - unstaged_file_count - 2;
-        if let Some(file_path) = state.unstaged_pane.untracked_files.get(file_index) {
-            if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_path) {
-                if content.contains(&0x00) {
-                    1
+    let lines_count =
+        if state.unstaged_pane.cursor > 0 && state.unstaged_pane.cursor <= unstaged_file_count {
+            state.get_unstaged_file().map_or(0, |f| f.lines.len())
+        } else if state.unstaged_pane.cursor > unstaged_file_count + 1
+            && state.unstaged_pane.cursor <= unstaged_file_count + 1 + untracked_file_count
+        {
+            let file_index = state.unstaged_pane.cursor - unstaged_file_count - 2;
+            if let Some(file_path) = state.unstaged_pane.untracked_files.get(file_index) {
+                if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_path) {
+                    if content.contains(&0x00) {
+                        1
+                    } else {
+                        String::from_utf8_lossy(&content).lines().count()
+                    }
                 } else {
-                    String::from_utf8_lossy(&content).lines().count()
+                    1
                 }
             } else {
-                1
+                0
             }
         } else {
             0
-        }
-    } else {
-        0
-    };
+        };
 
     if lines_count > 0 {
         let mut main_pane_offset = 0;

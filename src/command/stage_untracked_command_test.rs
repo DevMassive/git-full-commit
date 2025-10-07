@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::command::{test_helpers::TestRepo, Command, StageUntrackedCommand};
+    use crate::command::{Command, StageUntrackedCommand, test_helpers::TestRepo};
 
     #[test]
     fn test_stage_untracked_files() {

@@ -173,7 +173,8 @@ impl AppState {
 
         let unstaged_files = get_unstaged_diff(&self.repo_path);
         let untracked_files = get_untracked_files(&self.repo_path).unwrap_or_default();
-        self.main_screen.has_unstaged_changes = !unstaged_files.is_empty() || !untracked_files.is_empty();
+        self.main_screen.has_unstaged_changes =
+            !unstaged_files.is_empty() || !untracked_files.is_empty();
 
         self.main_screen.list_items =
             Self::build_main_screen_list_items(&self.files, &self.previous_commits);
@@ -255,11 +256,7 @@ impl AppState {
     }
 
     pub fn get_unstaged_file(&self) -> Option<&FileDiff> {
-        if let Some(item) = self
-            .unstaged_pane
-            .list_items
-            .get(self.unstaged_pane.cursor)
-        {
+        if let Some(item) = self.unstaged_pane.list_items.get(self.unstaged_pane.cursor) {
             if let UnstagedListItem::File(file_diff) = item {
                 Some(file_diff)
             } else {

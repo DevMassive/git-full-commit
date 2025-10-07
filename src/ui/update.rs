@@ -14,7 +14,9 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 if !state.is_in_input_mode() {
                     let current_file_path = match state.focused_pane {
                         FocusedPane::Main => state.current_main_file().map(|f| f.file_name.clone()),
-                        FocusedPane::Unstaged => state.get_unstaged_file().map(|f| f.file_name.clone()),
+                        FocusedPane::Unstaged => {
+                            state.get_unstaged_file().map(|f| f.file_name.clone())
+                        }
                     };
 
                     state.focused_pane = match state.focused_pane {
@@ -25,24 +27,30 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                     if let Some(path) = current_file_path {
                         match state.focused_pane {
                             FocusedPane::Main => {
-                                if let Some(index) = state.main_screen.list_items.iter().position(|item| {
-                                    if let MainScreenListItem::File(f) = item {
-                                        f.file_name == path
-                                    } else {
-                                        false
-                                    }
-                                }) {
+                                if let Some(index) =
+                                    state.main_screen.list_items.iter().position(|item| {
+                                        if let MainScreenListItem::File(f) = item {
+                                            f.file_name == path
+                                        } else {
+                                            false
+                                        }
+                                    })
+                                {
                                     state.main_screen.file_cursor = index;
                                 }
                             }
                             FocusedPane::Unstaged => {
-                                if let Some(index) = state.unstaged_pane.list_items.iter().position(|item| {
-                                    if let crate::ui::main_screen::UnstagedListItem::File(f) = item {
-                                        f.file_name == path
-                                    } else {
-                                        false
-                                    }
-                                }) {
+                                if let Some(index) =
+                                    state.unstaged_pane.list_items.iter().position(|item| {
+                                        if let crate::ui::main_screen::UnstagedListItem::File(f) =
+                                            item
+                                        {
+                                            f.file_name == path
+                                        } else {
+                                            false
+                                        }
+                                    })
+                                {
                                     state.unstaged_pane.cursor = index;
                                 }
                             }
@@ -100,7 +108,9 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
         }
     }
 
-    if state.main_screen.has_unstaged_changes == false && state.focused_pane == FocusedPane::Unstaged {
+    if !state.main_screen.has_unstaged_changes
+        && state.focused_pane == FocusedPane::Unstaged
+    {
         state.focused_pane = FocusedPane::Main;
     }
 

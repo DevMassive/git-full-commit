@@ -140,7 +140,7 @@ fn render_unstaged_pane(window: &Window, state: &AppState, max_y: i32, max_x: i3
                 window.addstr("   ");
                 window.attroff(COLOR_PAIR(pair));
                 window.attron(COLOR_PAIR(status_pair));
-                window.addstr(format!("{}", status_char));
+                window.addstr(format!("{status_char}"));
                 window.attroff(COLOR_PAIR(status_pair));
                 window.attron(COLOR_PAIR(pair));
                 if file.status == FileStatus::Renamed {
@@ -171,7 +171,7 @@ fn render_unstaged_pane(window: &Window, state: &AppState, max_y: i32, max_x: i3
                     }
                 }
                 window.mv(line_y, 0);
-                window.addstr(format!("    ? {}", file_name));
+                window.addstr(format!("    ? {file_name}"));
                 window.attroff(COLOR_PAIR(pair));
             }
         }
@@ -238,7 +238,7 @@ fn render_main_pane(
                 window.addstr("   ");
                 window.attroff(COLOR_PAIR(pair));
                 window.attron(COLOR_PAIR(status_pair));
-                window.addstr(format!("{}", status_char));
+                window.addstr(format!("{status_char}"));
                 window.attroff(COLOR_PAIR(status_pair));
                 window.attron(COLOR_PAIR(pair));
                 if file.status == FileStatus::Renamed {
@@ -262,7 +262,8 @@ fn render_main_pane(
                 }
             }
             ListItem::PreviousCommitInfo {
-                hash: _, message,
+                hash: _,
+                message,
                 is_on_remote,
             } => {
                 let pair = if is_selected { 5 } else { 1 };
@@ -351,7 +352,11 @@ fn render_diff_view(window: &Window, state: &AppState, max_y: i32, top_offset: u
         }
         FocusedPane::Unstaged => {
             let cursor_position = state.main_screen.line_cursor;
-            match state.unstaged_pane.list_items.get(state.unstaged_pane.cursor) {
+            match state
+                .unstaged_pane
+                .list_items
+                .get(state.unstaged_pane.cursor)
+            {
                 Some(UnstagedListItem::File(selected_file)) => {
                     diff_view::render(
                         window,
@@ -372,7 +377,7 @@ fn render_diff_view(window: &Window, state: &AppState, max_y: i32, top_offset: u
                             } else {
                                 String::from_utf8_lossy(&content)
                                     .lines()
-                                    .map(|l| format!(" {}", l))
+                                    .map(|l| format!(" {l}"))
                                     .collect()
                             }
                         }
@@ -434,7 +439,7 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
         Input::KeyDown | Input::Character('\u{e}') => {
             if unstaged_items_count > 0
                 && state.unstaged_pane.cursor == unstaged_items_count - 1
-                && state.main_screen.list_items.len() > 0
+                && !state.main_screen.list_items.is_empty()
             {
                 state.focused_pane = FocusedPane::Main;
                 state.main_screen.file_cursor = 0;
@@ -463,24 +468,25 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
         }
         Input::Character('j') => {
             state.unstaged_pane.is_diff_cursor_active = true;
-            let file_lines_count =
-                match state.unstaged_pane.list_items.get(state.unstaged_pane.cursor) {
-                    Some(UnstagedListItem::File(file)) => file.lines.len(),
-                    Some(UnstagedListItem::UntrackedFile(file_name)) => {
-                        if let Ok((content, _)) =
-                            git::read_file_content(&state.repo_path, &file_name)
-                        {
-                            if is_binary(&content) {
-                                1
-                            } else {
-                                String::from_utf8_lossy(&content).lines().count()
-                            }
-                        } else {
+            let file_lines_count = match state
+                .unstaged_pane
+                .list_items
+                .get(state.unstaged_pane.cursor)
+            {
+                Some(UnstagedListItem::File(file)) => file.lines.len(),
+                Some(UnstagedListItem::UntrackedFile(file_name)) => {
+                    if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_name) {
+                        if is_binary(&content) {
                             1
+                        } else {
+                            String::from_utf8_lossy(&content).lines().count()
                         }
+                    } else {
+                        1
                     }
-                    _ => 0,
-                };
+                }
+                _ => 0,
+            };
 
             if state.main_screen.line_cursor < file_lines_count.saturating_sub(1) {
                 state.main_screen.line_cursor += 1;
@@ -493,8 +499,7 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
                 let diff_view_top = main_pane_offset + main_pane_height;
                 let content_height = (max_y as usize).saturating_sub(diff_view_top);
 
-                if state.main_screen.line_cursor
-                    >= state.unstaged_pane.diff_scroll + content_height
+                if state.main_screen.line_cursor >= state.unstaged_pane.diff_scroll + content_height
                 {
                     state.unstaged_pane.diff_scroll =
                         state.main_screen.line_cursor - content_height + 1;
@@ -503,16 +508,24 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
         }
         Input::KeyLeft => {
             let scroll_amount = (max_x as usize).saturating_sub(diff_view::LINE_CONTENT_OFFSET);
-            state.unstaged_pane.horizontal_scroll =
-                state.unstaged_pane.horizontal_scroll.saturating_sub(scroll_amount);
+            state.unstaged_pane.horizontal_scroll = state
+                .unstaged_pane
+                .horizontal_scroll
+                .saturating_sub(scroll_amount);
         }
         Input::KeyRight => {
             let scroll_amount = (max_x as usize).saturating_sub(diff_view::LINE_CONTENT_OFFSET);
-            state.unstaged_pane.horizontal_scroll =
-                state.unstaged_pane.horizontal_scroll.saturating_add(scroll_amount);
+            state.unstaged_pane.horizontal_scroll = state
+                .unstaged_pane
+                .horizontal_scroll
+                .saturating_add(scroll_amount);
         }
         Input::Character('\n') | Input::Character('u') => {
-            match state.unstaged_pane.list_items.get(state.unstaged_pane.cursor) {
+            match state
+                .unstaged_pane
+                .list_items
+                .get(state.unstaged_pane.cursor)
+            {
                 Some(UnstagedListItem::UnstagedChangesHeader) => {
                     let command = Box::new(StageUnstagedCommand::new(state.repo_path.clone()));
                     state.execute_and_refresh(command);
@@ -520,9 +533,9 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
                 Some(UnstagedListItem::File(file)) => {
                     if state.unstaged_pane.is_diff_cursor_active {
                         if let Some(hunk) =
-                            git_patch::find_hunk(&file, state.main_screen.line_cursor)
+                            git_patch::find_hunk(file, state.main_screen.line_cursor)
                         {
-                            let patch = git_patch::create_stage_hunk_patch(&file, hunk);
+                            let patch = git_patch::create_stage_hunk_patch(file, hunk);
                             let command =
                                 Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
 
@@ -575,11 +588,13 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
             }
         }
         Input::Character('1') => {
-            if let Some(UnstagedListItem::File(file)) =
-                state.unstaged_pane.list_items.get(state.unstaged_pane.cursor)
+            if let Some(UnstagedListItem::File(file)) = state
+                .unstaged_pane
+                .list_items
+                .get(state.unstaged_pane.cursor)
             {
                 if let Some(patch) =
-                    git_patch::create_stage_line_patch(&file, state.main_screen.line_cursor)
+                    git_patch::create_stage_line_patch(file, state.main_screen.line_cursor)
                 {
                     let command = Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
 
@@ -608,10 +623,14 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
             state.execute_and_refresh(command);
         }
         Input::Character('e') => {
-            match state.unstaged_pane.list_items.get(state.unstaged_pane.cursor) {
+            match state
+                .unstaged_pane
+                .list_items
+                .get(state.unstaged_pane.cursor)
+            {
                 Some(UnstagedListItem::File(file)) => {
                     let line_number =
-                        git_patch::get_line_number(&file, state.main_screen.line_cursor);
+                        git_patch::get_line_number(file, state.main_screen.line_cursor);
                     let file_path = state.repo_path.join(&file.file_name);
                     if let Some(path_str) = file_path.to_str() {
                         state.editor_request = Some(EditorRequest {
@@ -633,13 +652,17 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
             }
         }
         Input::Character('!') => {
-            match state.unstaged_pane.list_items.get(state.unstaged_pane.cursor) {
+            match state
+                .unstaged_pane
+                .list_items
+                .get(state.unstaged_pane.cursor)
+            {
                 Some(UnstagedListItem::File(file)) => {
                     if state.unstaged_pane.is_diff_cursor_active {
                         if let Some(hunk) =
-                            git_patch::find_hunk(&file, state.main_screen.line_cursor)
+                            git_patch::find_hunk(file, state.main_screen.line_cursor)
                         {
-                            let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
+                            let patch = git_patch::create_unstage_hunk_patch(file, hunk);
                             let command = Box::new(DiscardUnstagedHunkCommand::new(
                                 state.repo_path.clone(),
                                 patch,
@@ -659,9 +682,7 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
                     }
                 }
                 Some(UnstagedListItem::UntrackedFile(file_name)) => {
-                    if let Ok((content, _)) =
-                        git::read_file_content(&state.repo_path, &file_name)
-                    {
+                    if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_name) {
                         if is_binary(&content) {
                             return; // Do not delete binary files
                         }
@@ -680,7 +701,11 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
             let mut file_to_ignore: Option<String> = None;
             let mut is_tracked = false;
 
-            match state.unstaged_pane.list_items.get(state.unstaged_pane.cursor) {
+            match state
+                .unstaged_pane
+                .list_items
+                .get(state.unstaged_pane.cursor)
+            {
                 Some(UnstagedListItem::File(file)) => {
                     file_to_ignore = Some(file.file_name.clone());
                     is_tracked = true;
@@ -714,8 +739,6 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
 }
 
 fn handle_main_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
-
-
     if state.is_in_input_mode() {
         match input {
             Input::KeyUp
@@ -890,8 +913,6 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
 }
 
 fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
-
-
     if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
         if let Some(index) = state
             .main_screen
@@ -912,15 +933,16 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
 
     match input {
         Input::KeyUp | Input::Character('\u{10}') => {
-            if state.main_screen.file_cursor == 0 {
-                if state.main_screen.has_unstaged_changes {
+            if state.main_screen.file_cursor == 0
+                && state.main_screen.has_unstaged_changes {
                     let unstaged_items_count = state.unstaged_pane.list_items.len();
                     if unstaged_items_count > 0 {
                         state.focused_pane = FocusedPane::Unstaged;
                         state.unstaged_pane.cursor = unstaged_items_count - 1;
 
                         let (file_list_height, _) = state.unstaged_header_height(max_y);
-                        if state.unstaged_pane.cursor >= state.unstaged_pane.scroll + file_list_height
+                        if state.unstaged_pane.cursor
+                            >= state.unstaged_pane.scroll + file_list_height
                         {
                             state.unstaged_pane.scroll =
                                 state.unstaged_pane.cursor - file_list_height + 1;
@@ -928,7 +950,6 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                         return;
                     }
                 }
-            }
 
             state.main_screen.file_cursor = state.main_screen.file_cursor.saturating_sub(1);
             state.main_screen.diff_scroll = 0;
@@ -1002,17 +1023,23 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         }
         Input::KeyLeft => {
             let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
-            state.main_screen.horizontal_scroll =
-                state.main_screen.horizontal_scroll.saturating_sub(scroll_amount);
+            state.main_screen.horizontal_scroll = state
+                .main_screen
+                .horizontal_scroll
+                .saturating_sub(scroll_amount);
         }
         Input::KeyRight => {
             let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
-            state.main_screen.horizontal_scroll =
-                state.main_screen.horizontal_scroll.saturating_add(scroll_amount);
+            state.main_screen.horizontal_scroll = state
+                .main_screen
+                .horizontal_scroll
+                .saturating_add(scroll_amount);
         }
         _ => {
-            if let Some(ListItem::CommitMessageInput) =
-                state.main_screen.list_items.get(state.main_screen.file_cursor)
+            if let Some(ListItem::CommitMessageInput) = state
+                .main_screen
+                .list_items
+                .get(state.main_screen.file_cursor)
             {
                 commit_view::handle_commit_input(state, input, max_y);
             } else {

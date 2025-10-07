@@ -6,12 +6,18 @@ use pancurses::Input;
 
 fn setup_long_file_repo() -> (TestRepo, AppState) {
     let repo = TestRepo::new();
-    let initial_content: String = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+    let initial_content: String = (0..100)
+        .map(|i| format!("line {i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     repo.create_file("a.txt", &initial_content);
     repo.add_all();
     repo.commit("initial");
 
-    let modified_content: String = (0..100).map(|i| format!("changed {}", i)).collect::<Vec<_>>().join("\n");
+    let modified_content: String = (0..100)
+        .map(|i| format!("changed {i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     repo.create_file("a.txt", &modified_content);
     repo.add_all();
 

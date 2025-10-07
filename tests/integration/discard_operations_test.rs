@@ -33,7 +33,7 @@ fn test_discard_staged_file() {
 #[test]
 fn test_discard_staged_hunk() {
     let repo = TestRepo::new();
-    let initial_content: String = (1..=10).map(|i| format!("line{}\n", i)).collect();
+    let initial_content: String = (1..=10).map(|i| format!("line{i}\n")).collect();
     repo.create_file("a.txt", &initial_content);
     repo.add_all();
     repo.commit("initial");
@@ -60,8 +60,13 @@ fn test_discard_staged_hunk() {
     app_state = update_state(app_state, Some(Input::Character('!')), 80, 80);
 
     assert_eq!(app_state.files[0].hunks.len(), 1);
-    assert!(!app_state.files[0].lines.iter().any(|l| l.contains("changed10")));
-    
+    assert!(
+        !app_state.files[0]
+            .lines
+            .iter()
+            .any(|l| l.contains("changed10"))
+    );
+
     let file_content = fs::read_to_string(repo.path.join("a.txt")).unwrap();
     assert!(!file_content.contains("changed10"));
     assert!(file_content.contains("changed1"));

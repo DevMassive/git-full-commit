@@ -61,7 +61,10 @@ fn test_undo_redo_history_clears_on_commit() {
 
     // Pressing > should do nothing
     app_state = update_state(app_state, Some(Input::Character('>')), 80, 80);
-    assert_eq!(app_state.command_history.undo_stack.len(), undo_stack_len_before);
+    assert_eq!(
+        app_state.command_history.undo_stack.len(),
+        undo_stack_len_before
+    );
 }
 
 #[test]

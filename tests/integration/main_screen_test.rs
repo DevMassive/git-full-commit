@@ -33,7 +33,7 @@ fn test_main_screen_list_navigation() {
 
     let files = git::get_diff(repo.path.clone());
     let mut app_state = AppState::new(repo.path, files);
-    
+
     // In AppState::new, cursor is placed on the first file if it exists.
     // list: [Header, File, Input, Commit], so cursor is at index 1.
     assert_eq!(app_state.main_screen.file_cursor, 1);
@@ -41,7 +41,10 @@ fn test_main_screen_list_navigation() {
     // Navigate down
     app_state = update_state(app_state, Some(Input::KeyDown), 80, 80);
     assert_eq!(app_state.main_screen.file_cursor, 2);
-    assert!(!app_state.main_screen.is_diff_cursor_active, "Diff cursor should be inactive after KeyDown");
+    assert!(
+        !app_state.main_screen.is_diff_cursor_active,
+        "Diff cursor should be inactive after KeyDown"
+    );
 
     // Navigate down again
     app_state = update_state(app_state, Some(Input::KeyDown), 80, 80);
@@ -50,7 +53,10 @@ fn test_main_screen_list_navigation() {
     // Navigate up
     app_state = update_state(app_state, Some(Input::KeyUp), 80, 80);
     assert_eq!(app_state.main_screen.file_cursor, 2);
-    assert!(!app_state.main_screen.is_diff_cursor_active, "Diff cursor should be inactive after KeyUp");
+    assert!(
+        !app_state.main_screen.is_diff_cursor_active,
+        "Diff cursor should be inactive after KeyUp"
+    );
 }
 
 #[test]
@@ -72,24 +78,45 @@ fn test_main_screen_diff_navigation_activation() {
     // Press 'j' to activate diff cursor and move down
     app_state = update_state(app_state, Some(Input::Character('j')), 80, 80);
     assert!(app_state.main_screen.is_diff_cursor_active);
-    assert_eq!(app_state.main_screen.file_cursor, 1, "File cursor should not change");
-    assert_eq!(app_state.main_screen.line_cursor, 1, "Line cursor should move down by 1");
+    assert_eq!(
+        app_state.main_screen.file_cursor, 1,
+        "File cursor should not change"
+    );
+    assert_eq!(
+        app_state.main_screen.line_cursor, 1,
+        "Line cursor should move down by 1"
+    );
 
     // Press 'j' again
     app_state = update_state(app_state, Some(Input::Character('j')), 80, 80);
-    assert_eq!(app_state.main_screen.line_cursor, 2, "Line cursor should move down by 1 again");
+    assert_eq!(
+        app_state.main_screen.line_cursor, 2,
+        "Line cursor should move down by 1 again"
+    );
 
     // Press 'k' to move up in the diff
     app_state = update_state(app_state, Some(Input::Character('k')), 80, 80);
     assert!(app_state.main_screen.is_diff_cursor_active);
     assert_eq!(app_state.main_screen.file_cursor, 1);
-    assert_eq!(app_state.main_screen.line_cursor, 1, "Line cursor should move up");
+    assert_eq!(
+        app_state.main_screen.line_cursor, 1,
+        "Line cursor should move up"
+    );
 
     // Press Arrow Up to deactivate diff cursor and move to header
     app_state = update_state(app_state, Some(Input::KeyUp), 80, 80);
-    assert!(!app_state.main_screen.is_diff_cursor_active, "Diff cursor should be inactive after arrow key");
-    assert_eq!(app_state.main_screen.file_cursor, 0, "File cursor should move up to header");
-    assert_eq!(app_state.main_screen.line_cursor, 0, "Line cursor should reset");
+    assert!(
+        !app_state.main_screen.is_diff_cursor_active,
+        "Diff cursor should be inactive after arrow key"
+    );
+    assert_eq!(
+        app_state.main_screen.file_cursor, 0,
+        "File cursor should move up to header"
+    );
+    assert_eq!(
+        app_state.main_screen.line_cursor, 0,
+        "Line cursor should reset"
+    );
 }
 
 #[test]
@@ -103,9 +130,11 @@ fn test_main_screen_no_untracked_files() {
     let files = git::get_diff(repo.path.clone());
     let app_state = AppState::new(repo.path, files);
 
-    assert!(!app_state
-        .unstaged_pane
-        .list_items
-        .iter()
-        .any(|item| matches!(item, UnstagedListItem::UntrackedFilesHeader)));
+    assert!(
+        !app_state
+            .unstaged_pane
+            .list_items
+            .iter()
+            .any(|item| matches!(item, UnstagedListItem::UntrackedFilesHeader))
+    );
 }

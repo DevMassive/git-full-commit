@@ -3,15 +3,15 @@ use std::io::Write;
 use std::path::PathBuf;
 
 #[cfg(test)]
-mod test_helpers;
+mod stage_all_command_test;
 #[cfg(test)]
 mod stage_file_command_test;
-#[cfg(test)]
-mod stage_all_command_test;
 #[cfg(test)]
 mod stage_unstaged_command_test;
 #[cfg(test)]
 mod stage_untracked_command_test;
+#[cfg(test)]
+mod test_helpers;
 #[cfg(test)]
 mod unstage_all_command_test;
 #[cfg(test)]

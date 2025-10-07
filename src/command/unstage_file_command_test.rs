@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::command::{test_helpers::TestRepo, Command, UnstageFileCommand};
+    use crate::command::{Command, UnstageFileCommand, test_helpers::TestRepo};
 
     #[test]
     fn test_unstage_staged_file() {

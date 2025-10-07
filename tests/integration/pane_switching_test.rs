@@ -1,8 +1,8 @@
 use crate::git_test::common::TestRepo;
 use git_full_commit::app_state::{AppState, FocusedPane};
 use git_full_commit::git;
-use git_full_commit::ui::update::update_state;
 use git_full_commit::ui::main_screen::UnstagedListItem;
+use git_full_commit::ui::update::update_state;
 use pancurses::Input;
 
 #[test]
@@ -37,7 +37,11 @@ fn test_screen_switching_is_blocked_in_commit_mode() {
 
     // Try to switch screen
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
-    assert_eq!(app_state.focused_pane, FocusedPane::Main, "Should not switch screen in commit mode");
+    assert_eq!(
+        app_state.focused_pane,
+        FocusedPane::Main,
+        "Should not switch screen in commit mode"
+    );
 }
 
 #[test]
@@ -48,7 +52,7 @@ fn test_cursor_restoration_on_switch() {
     repo.commit("initial");
 
     // Staged change
-    repo.create_file("a.txt", "world"); 
+    repo.create_file("a.txt", "world");
     repo.add_all();
 
     // Unstaged change
@@ -62,9 +66,10 @@ fn test_cursor_restoration_on_switch() {
 
     // Switch to unstaged screen
     app_state = update_state(app_state, Some(Input::Character('\t')), 80, 80);
-    
+
     // The cursor should be on a.txt on the unstaged screen
-    let selected_unstaged_file = &app_state.unstaged_pane.list_items[app_state.unstaged_pane.cursor];
+    let selected_unstaged_file =
+        &app_state.unstaged_pane.list_items[app_state.unstaged_pane.cursor];
     match selected_unstaged_file {
         UnstagedListItem::File(f) => {
             assert_eq!(f.file_name, "a.txt");

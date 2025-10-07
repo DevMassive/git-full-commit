@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::command::{test_helpers::TestRepo, Command, StageFileCommand};
+    use crate::command::{Command, StageFileCommand, test_helpers::TestRepo};
 
     #[test]
     fn test_stage_modified_file() {

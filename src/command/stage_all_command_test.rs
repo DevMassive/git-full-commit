@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::command::{test_helpers::TestRepo, Command, StageAllCommand};
+    use crate::command::{Command, StageAllCommand, test_helpers::TestRepo};
 
     #[test]
     fn test_stage_all_modified_only() {

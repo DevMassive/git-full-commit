@@ -274,7 +274,11 @@ fn render_line(
                        remaining_scroll: &mut usize| {
         let max_x = win.get_max_x();
         let current_x = win.get_cur_x();
-        let remaining_width = if max_x > current_x { max_x - current_x } else { 0 };
+        let remaining_width = if max_x > current_x {
+            max_x - current_x
+        } else {
+            0
+        };
         if remaining_width == 0 {
             return;
         }
