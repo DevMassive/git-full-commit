@@ -97,6 +97,70 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
         return;
     };
 
+    if state.pending_esc {
+        state.pending_esc = false;
+        match input {
+            Input::KeyLeft | Input::Character('b') => {
+                let cursor = state.main_screen.commit_cursor;
+                let message_chars: Vec<char> = message.chars().collect();
+                let mut i = cursor.saturating_sub(1);
+                while i > 0 && message_chars.get(i).map_or(false, |c| c.is_whitespace()) {
+                    i -= 1;
+                }
+                while i > 0 && message_chars.get(i).map_or(false, |c| !c.is_whitespace()) {
+                    i -= 1;
+                }
+                if i > 0 && message_chars.get(i).map_or(false, |c| c.is_whitespace()) {
+                    i += 1;
+                }
+                state.main_screen.commit_cursor = i;
+                return;
+            }
+            Input::KeyRight | Input::Character('f') => {
+                let cursor = state.main_screen.commit_cursor;
+                let message_chars: Vec<char> = message.chars().collect();
+                let len = message_chars.len();
+                let mut i = cursor;
+                while i < len && message_chars.get(i).map_or(false, |c| !c.is_whitespace()) {
+                    i += 1;
+                }
+                while i < len && message_chars.get(i).map_or(false, |c| c.is_whitespace()) {
+                    i += 1;
+                }
+                state.main_screen.commit_cursor = i;
+                return;
+            }
+            Input::KeyBackspace | Input::Character('\x7f') | Input::Character('\x08') => {
+                let cursor_pos = state.main_screen.commit_cursor;
+                if cursor_pos > 0 {
+                    let message_before_cursor: String =
+                        message.chars().take(cursor_pos).collect();
+                    let new_cursor_pos = if let Some(pos) = message_before_cursor.rfind(|c: char| !c.is_whitespace()) {
+                        if let Some(pos) = message_before_cursor[..pos].rfind(char::is_whitespace) {
+                            pos + 1
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    };
+
+                    let start_byte = message.char_indices().nth(new_cursor_pos).map_or(0, |(idx, _)| idx);
+                    let end_byte = message.char_indices().nth(cursor_pos).map_or(message.len(), |(idx, _)| idx);
+
+                    message.replace_range(start_byte..end_byte, "");
+                    state.main_screen.commit_cursor = new_cursor_pos;
+
+                    if !is_amend {
+                        let _ = commit_storage::save_commit_message(&state.repo_path, message);
+                    }
+                }
+                return;
+            }
+            _ => {}
+        }
+    }
+
     match input {
         Input::Character('\n') => {
             if message.is_empty() {
@@ -137,7 +201,8 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
 
             if staged_diff_output.stdout.is_empty() {
                 state.running = false;
-            } else {
+            }
+            else {
                 state.refresh_diff();
                 state.main_screen.file_cursor = 0;
             }
@@ -178,7 +243,9 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
                 .min(message_len);
         }
         Input::Character(c) => {
-            if c == '\u{1}' {
+            if c == '\u{1b}' {
+                state.pending_esc = true;
+            } else if c == '\u{1}' {
                 // Ctrl-A: beginning of line
                 state.main_screen.commit_cursor = 0;
             } else if c == '\u{5}' {

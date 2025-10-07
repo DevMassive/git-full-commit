@@ -31,25 +31,26 @@ fn scroll_content(
 
     let max_line = lines_count.saturating_sub(1);
 
-    let mut new_line_cursor = line_cursor;
-    let mut new_scroll = scroll;
-
-    match direction {
+    let (new_line_cursor, new_scroll) = match direction {
         ScrollDirection::Down => {
-            new_line_cursor = line_cursor.saturating_add(scroll_amount).min(max_line);
-
-            if new_line_cursor >= scroll + content_height {
-                new_scroll = scroll.saturating_add(scroll_amount);
-            }
+            let new_line_cursor = line_cursor.saturating_add(scroll_amount).min(max_line);
+            let new_scroll = if new_line_cursor >= scroll + content_height {
+                scroll.saturating_add(scroll_amount)
+            } else {
+                scroll
+            };
+            (new_line_cursor, new_scroll)
         }
         ScrollDirection::Up => {
-            new_line_cursor = line_cursor.saturating_sub(scroll_amount);
-
-            if new_line_cursor < scroll {
-                new_scroll = scroll.saturating_sub(scroll_amount);
-            }
+            let new_line_cursor = line_cursor.saturating_sub(scroll_amount);
+            let new_scroll = if new_line_cursor < scroll {
+                scroll.saturating_sub(scroll_amount)
+            } else {
+                scroll
+            };
+            (new_line_cursor, new_scroll)
         }
-    }
+    };
 
     (new_line_cursor, new_scroll)
 }

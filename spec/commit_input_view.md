@@ -30,6 +30,9 @@ The following keybindings are active when the Commit Message Input view is selec
 | `Ctrl-E` (`\u{5}`)                     | Moves the cursor to the end of the line.          |
 | `Ctrl-K` (`\u{b}`)                     | Deletes all text from the cursor to the end of the line. |
 | `Up Arrow`, `Down Arrow`              | Moves selection out of the input field, deactivating the text cursor and committing the user to list navigation mode. |
+| `Meta-Left`                           | Moves the cursor to the beginning of the previous word. |
+| `Meta-Right`                          | Moves the cursor to the beginning of the next word. |
+| `Meta-Backspace`                      | Deletes the word immediately before the cursor.   |
 
 ## 3. State and Workflow
 

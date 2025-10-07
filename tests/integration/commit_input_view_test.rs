@@ -169,3 +169,109 @@ fn test_amend_is_disabled_for_remote_commit() {
         MainScreenListItem::AmendingCommitMessageInput { .. }
     ));
 }
+
+#[test]
+fn test_commit_message_word_movement() {
+    // Setup repo with a staged file
+    let repo = TestRepo::new();
+    repo.create_file("a.txt", "hello");
+    repo.add_all();
+
+    let files = git::get_diff(repo.path.clone());
+    let mut app_state = AppState::new(repo.path.clone(), files);
+
+    // Navigate to commit message input
+    app_state.main_screen.file_cursor = 2;
+    app_state = update_state(app_state, Some(Input::Character('\n')), 80, 80); // Press enter to activate
+
+    // Type a commit message
+    let commit_message = "word1 word2 word3";
+    for ch in commit_message.chars() {
+        app_state = update_state(app_state, Some(Input::Character(ch)), 80, 80);
+    }
+    assert_eq!(app_state.main_screen.commit_message, commit_message);
+    assert_eq!(app_state.main_screen.commit_cursor, commit_message.len());
+
+    // Test meta+left
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::KeyLeft), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::KeyLeft), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 ".len());
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::KeyLeft), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, 0);
+
+    // Test meta+right
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::KeyRight), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 ".len());
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::KeyRight), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::KeyRight), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 word3".len());
+
+    // Test meta+backspace
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::KeyBackspace), 80, 80);
+    assert_eq!(app_state.main_screen.commit_message, "word1 word2 ");
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
+
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::KeyBackspace), 80, 80);
+    assert_eq!(app_state.main_screen.commit_message, "word1 ");
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 ".len());
+
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::KeyBackspace), 80, 80);
+    assert_eq!(app_state.main_screen.commit_message, "");
+    assert_eq!(app_state.main_screen.commit_cursor, 0);
+}
+
+#[test]
+fn test_commit_message_word_movement_bf() {
+    // Setup repo with a staged file
+    let repo = TestRepo::new();
+    repo.create_file("a.txt", "hello");
+    repo.add_all();
+
+    let files = git::get_diff(repo.path.clone());
+    let mut app_state = AppState::new(repo.path.clone(), files);
+
+    // Navigate to commit message input
+    app_state.main_screen.file_cursor = 2;
+    app_state = update_state(app_state, Some(Input::Character('\n')), 80, 80); // Press enter to activate
+
+    // Type a commit message
+    let commit_message = "word1 word2 word3";
+    for ch in commit_message.chars() {
+        app_state = update_state(app_state, Some(Input::Character(ch)), 80, 80);
+    }
+    assert_eq!(app_state.main_screen.commit_message, commit_message);
+    assert_eq!(app_state.main_screen.commit_cursor, commit_message.len());
+
+    // Test meta+b
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::Character('b')), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::Character('b')), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 ".len());
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::Character('b')), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, 0);
+
+    // Test meta+f
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::Character('f')), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 ".len());
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::Character('f')), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
+    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
+    app_state = update_state(app_state, Some(Input::Character('f')), 80, 80);
+    assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 word3".len());
+}
