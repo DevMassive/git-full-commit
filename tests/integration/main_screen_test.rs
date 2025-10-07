@@ -1,6 +1,7 @@
 use crate::git_test::common::TestRepo;
 use git_full_commit::app_state::{AppState, FocusedPane};
 use git_full_commit::git;
+use git_full_commit::ui::main_screen::UnstagedListItem;
 use git_full_commit::ui::update::update_state;
 use pancurses::Input;
 
@@ -89,4 +90,22 @@ fn test_main_screen_diff_navigation_activation() {
     assert!(!app_state.main_screen.is_diff_cursor_active, "Diff cursor should be inactive after arrow key");
     assert_eq!(app_state.main_screen.file_cursor, 0, "File cursor should move up to header");
     assert_eq!(app_state.main_screen.line_cursor, 0, "Line cursor should reset");
+}
+
+#[test]
+fn test_main_screen_no_untracked_files() {
+    let repo = TestRepo::new();
+    repo.create_file("a.txt", "hello");
+    repo.add_all();
+    repo.commit("initial commit");
+    repo.create_file("a.txt", "hello world");
+
+    let files = git::get_diff(repo.path.clone());
+    let app_state = AppState::new(repo.path, files);
+
+    assert!(!app_state
+        .unstaged_pane
+        .list_items
+        .iter()
+        .any(|item| matches!(item, UnstagedListItem::UntrackedFilesHeader)));
 }

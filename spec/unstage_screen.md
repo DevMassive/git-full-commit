@@ -12,9 +12,9 @@ The screen is composed of two primary panels separated by a horizontal line:
 
 ### 2.1. Top Panel: File List
 
-- Displays two groups of files:
-  1.  **Unstaged Changes:** A list of files that have been modified but not yet staged.
-  2.  **Untracked Files:** A list of files that are new to the repository.
+- Displays up to two groups of files:
+  1.  **Unstaged Changes:** A list of files that have been modified but not yet staged. This section is only shown if there are unstaged changes.
+  2.  **Untracked Files:** A list of files that are new to the repository. This section is only shown if there are untracked files.
 
 ### 2.2. Bottom Panel: Diff View
 

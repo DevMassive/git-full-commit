@@ -25,9 +25,9 @@ This pane displays files with changes in the working directory that have not yet
   - The pane's height is dynamic, with a maximum size of one-third of the terminal's height.
   - If the content exceeds this height, the pane becomes vertically scrollable.
 - **Content:**
-  - It contains two sections, each with a header:
-    1.  **Unstaged changes:** A list of modified files.
-    2.  **Untracked files:** A list of new files not yet tracked by Git.
+  - It contains up to two sections, each with a header:
+    1.  **Unstaged changes:** A list of modified files. This section is only shown if there are unstaged changes.
+    2.  **Untracked files:** A list of new files not yet tracked by Git. This section is only shown if there are untracked files.
 
 ### 2.2. Bottom Pane: Staged Files, Commit Input & Log
 

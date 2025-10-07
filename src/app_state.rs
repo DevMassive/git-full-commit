@@ -133,9 +133,11 @@ impl AppState {
         for file in unstaged_files {
             items.push(UnstagedListItem::File(file.clone()));
         }
-        items.push(UnstagedListItem::UntrackedFilesHeader);
-        for file_name in untracked_files {
-            items.push(UnstagedListItem::UntrackedFile(file_name.clone()));
+        if !untracked_files.is_empty() {
+            items.push(UnstagedListItem::UntrackedFilesHeader);
+            for file_name in untracked_files {
+                items.push(UnstagedListItem::UntrackedFile(file_name.clone()));
+            }
         }
         items
     }
