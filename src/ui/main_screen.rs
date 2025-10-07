@@ -65,7 +65,7 @@ pub fn render(window: &Window, state: &AppState) {
         render_main_pane(window, state, max_y, max_x, main_pane_offset);
 
     let main_pane_height = state.main_header_height(max_y).0;
-    let diff_view_top = main_pane_offset + main_pane_height + 1;
+    let diff_view_top = main_pane_offset + main_pane_height;
 
     render_diff_view(window, state, max_y, diff_view_top);
 
@@ -479,7 +479,15 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
 
             if state.main_screen.line_cursor < file_lines_count.saturating_sub(1) {
                 state.main_screen.line_cursor += 1;
-                let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
+
+                let mut main_pane_offset = 0;
+                if state.main_screen.has_unstaged_changes {
+                    main_pane_offset = state.unstaged_header_height(max_y).0 + 1;
+                }
+                let main_pane_height = state.main_header_height(max_y).0;
+                let diff_view_top = main_pane_offset + main_pane_height;
+                let content_height = (max_y as usize).saturating_sub(diff_view_top);
+
                 if state.main_screen.line_cursor
                     >= state.unstaged_pane.diff_scroll + content_height
                 {
@@ -953,8 +961,15 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
 
             if lines_count > 0 && state.main_screen.line_cursor < lines_count.saturating_sub(1) {
                 state.main_screen.line_cursor += 1;
-                let header_height = state.main_header_height(max_y).0;
-                let content_height = (max_y as usize).saturating_sub(header_height);
+
+                let mut main_pane_offset = 0;
+                if state.main_screen.has_unstaged_changes {
+                    main_pane_offset = state.unstaged_header_height(max_y).0 + 1;
+                }
+                let main_pane_height = state.main_header_height(max_y).0;
+                let diff_view_top = main_pane_offset + main_pane_height;
+                let content_height = (max_y as usize).saturating_sub(diff_view_top);
+
                 let cursor_line = state.get_cursor_line_index();
 
                 if cursor_line >= state.main_screen.diff_scroll + content_height {

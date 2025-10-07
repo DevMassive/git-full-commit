@@ -30,30 +30,39 @@ fn scroll_content(
     };
 
     let max_line = lines_count.saturating_sub(1);
+
     let mut new_line_cursor = line_cursor;
     let mut new_scroll = scroll;
 
     match direction {
         ScrollDirection::Down => {
-            if new_line_cursor.saturating_add(scroll_amount) >= new_scroll + content_height {
-                new_scroll = new_scroll.saturating_add(scroll_amount);
+            new_line_cursor = line_cursor.saturating_add(scroll_amount).min(max_line);
+
+            if new_line_cursor >= scroll + content_height {
+                new_scroll = scroll.saturating_add(scroll_amount);
             }
-            new_line_cursor = new_line_cursor.saturating_add(scroll_amount);
-            new_line_cursor = new_line_cursor.min(max_line);
         }
         ScrollDirection::Up => {
-            new_line_cursor = new_line_cursor.saturating_sub(scroll_amount);
-            if new_line_cursor < new_scroll {
-                new_scroll = new_scroll.saturating_sub(scroll_amount);
+            new_line_cursor = line_cursor.saturating_sub(scroll_amount);
+
+            if new_line_cursor < scroll {
+                new_scroll = scroll.saturating_sub(scroll_amount);
             }
         }
     }
+
     (new_line_cursor, new_scroll)
 }
 
 fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollAmount, max_y: i32) {
-    let header_height = state.main_header_height(max_y).0;
-    let content_height = (max_y as usize).saturating_sub(header_height);
+    let mut main_pane_offset = 0;
+    if state.main_screen.has_unstaged_changes {
+        main_pane_offset = state.unstaged_header_height(max_y).0 + 1;
+    }
+    let main_pane_height = state.main_header_height(max_y).0;
+    let diff_view_top = main_pane_offset + main_pane_height;
+    let content_height = (max_y as usize).saturating_sub(diff_view_top);
+
     let num_files = state.files.len();
     let lines_count =
         if state.main_screen.file_cursor > 0 && state.main_screen.file_cursor <= num_files {
@@ -118,9 +127,13 @@ fn scroll_unstaged_diff_view(
     };
 
     if lines_count > 0 {
-        let file_list_total_items = unstaged_file_count + untracked_file_count + 2;
-        let file_list_height = (max_y as usize / 3).max(3).min(file_list_total_items);
-        let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
+        let mut main_pane_offset = 0;
+        if state.main_screen.has_unstaged_changes {
+            main_pane_offset = state.unstaged_header_height(max_y).0 + 1;
+        }
+        let main_pane_height = state.main_header_height(max_y).0;
+        let diff_view_top = main_pane_offset + main_pane_height;
+        let content_height = (max_y as usize).saturating_sub(diff_view_top);
 
         let (new_line_cursor, new_scroll) = scroll_content(
             state.main_screen.line_cursor,

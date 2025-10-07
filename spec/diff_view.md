@@ -23,8 +23,6 @@ The diff view contains several key visual elements to help users understand the 
 - When a line has been modified, the application highlights the specific words that have changed.
 - **Highlighting Method:** Changed characters or words within a modified line are rendered with a reverse-video effect (foreground and background colors are swapped), making them stand out from the rest of the line.
 
-## 3. Scrolling the Diff View
-
 The diff view can be scrolled vertically and horizontally to inspect all changes in a file.
 
 ### 3.1. Line-by-Line Scrolling (Vertical)
@@ -45,22 +43,24 @@ The scroll amount for horizontal movement depends on the current screen.
 
 ### 3.3. Page Scrolling (Vertical)
 
+Page scrolling follows a two-step logic: first the cursor moves, then the view scrolls only if necessary.
+
 - **User Action (Page Down):** Press the `space` bar or `Ctrl+V`.
-- **Expected Outcome:** The view and the line cursor scroll down by a "full page" (the height of the diff panel).
+- **Expected Outcome:**
+  1.  The line cursor moves down by one page (the height of the diff view), but does not exceed the last line of the content.
+  2.  If the new cursor position is below the visible area of the view, the view scrolls down by exactly one page. This can result in blank lines being shown at the bottom if scrolling near the end of the content.
 
 - **User Action (Page Up):** Press the `b` key or `Ctrl+B`.
-- **Expected Outcome:** The view and the line cursor scroll up by one full page.
+- **Expected Outcome:**
+  1.  The line cursor moves up by one page.
+  2.  If the new cursor position is above the visible area of the view, the view scrolls up by exactly one page. The view will not scroll past the beginning of the content (no blank lines are shown at the top).
 
 ### 3.4. Half-Page Scrolling (Vertical)
 
+Half-page scrolling follows the same two-step logic as full-page scrolling, but with half the page height.
+
 - **User Action (Half Page Down):** Press `Ctrl+D`.
-- **Expected Outcome:** The view and the line cursor scroll down by a "half page" (half the height of the diff panel).
+- **Expected Outcome:** The cursor moves down by half a page, and the view scrolls by half a page if the cursor moves off-screen.
 
 - **User Action (Half Page Up):** Press `Ctrl+U`.
-- **Expected Outcome:** The view and the line cursor scroll up by one half page.
-
-## 4. Detailed Scrolling Mechanics
-
-- **Cursor and View are Linked:** Page and half-page scroll actions modify both the `line_cursor` and the `scroll` offset to create a cohesive scrolling experience.
-- **Boundary Conditions:** The cursor position is always clamped to stay within the bounds of the diff content.
-- **Scrolling Logic:** The `scroll` offset is automatically adjusted to ensure the `line_cursor` remains visible within the viewport after a scroll action.
+- **Expected Outcome:** The cursor moves up by half a page, and the view scrolls by half a page if the cursor moves off-screen.
