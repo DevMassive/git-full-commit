@@ -108,7 +108,7 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
     let mut current_file_lines: Vec<String> = Vec::new();
     let mut current_file_line_index = 0;
 
-    let diff_line_re = Regex::new(r#"^diff --git a/("[^"]+"|\S+) b/("[^"]+"|\S+)"#).unwrap();
+    let diff_line_re = Regex::new(r#"^diff --git a/(.+) b/(.+)"#).unwrap();
 
     for line in diff_str.lines() {
         if let Some(caps) = diff_line_re.captures(line) {
