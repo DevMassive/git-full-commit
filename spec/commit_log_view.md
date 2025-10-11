@@ -62,6 +62,9 @@ This document specifies the behavior of the Commit Log View, which is part of th
   4.  A header is displayed at the top, indicating that the user is in reordering mode and showing the available commands.
 
 - **Reordering Mode Commands:**
-  - `Meta + Up/Down Arrow`: Swaps the currently selected commit with its neighbor.
+  - `Up/Down Arrow`: Swaps the currently selected commit with its neighbor.
+  - `!`: Discards the currently selected commit. This is a visual change only; the commit is not actually discarded until the reordering is confirmed.
+  - `<`: Undoes the last action (swap or discard).
+  - `>`: Redoes the last undone action.
   - `Enter`: Confirms the new commit order and exits reordering mode. The application will then perform a safe rebase operation in the background. If any conflicts are detected, the operation is aborted, and the commit order remains unchanged.
   - `Esc` or `q`: Cancels the reordering, reverts the commit list to its original order, and exits reordering mode.

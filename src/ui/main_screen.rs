@@ -1,10 +1,10 @@
 use crate::app_state::{AppState, EditorRequest, FocusedPane};
 use crate::command::{
-    ApplyPatchCommand, CheckoutFileCommand, DeleteUntrackedFileCommand, DiscardFileCommand,
-    DiscardHunkCommand, DiscardUnstagedHunkCommand, IgnoreFileCommand,
-    IgnoreUnstagedTrackedFileCommand, IgnoreUntrackedFileCommand, StageAllCommand,
-    StageFileCommand, StagePatchCommand, StageUnstagedCommand, StageUntrackedCommand,
-    UnstageAllCommand, UnstageFileCommand,
+    ApplyPatchCommand, CheckoutFileCommand, CommandHistory, DeleteUntrackedFileCommand,
+    DiscardCommitCommand, DiscardFileCommand, DiscardHunkCommand, DiscardUnstagedHunkCommand,
+    IgnoreFileCommand, IgnoreUnstagedTrackedFileCommand, IgnoreUntrackedFileCommand,
+    StageAllCommand, StageFileCommand, StagePatchCommand, StageUnstagedCommand,
+    StageUntrackedCommand, SwapCommitCommand, UnstageAllCommand, UnstageFileCommand,
 };
 use crate::commit_storage;
 use crate::git::{self, FileStatus};
@@ -747,14 +747,7 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
 
 fn handle_main_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
     if state.main_screen.is_reordering_commits {
-        match input {
-            Input::Character('\n') | Input::Character('q') | Input::Character('\u{1b}') => {
-                handle_reorder_mode_input(state, input);
-            }
-            _ => {
-                handle_navigation(state, input, max_y, max_x);
-            }
-        }
+        handle_reorder_mode_input(state, input, max_y);
         return;
     }
 
@@ -931,27 +924,96 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
     true
 }
 
-fn handle_reorder_mode_input(state: &mut AppState, input: Input) {
+fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
     match input {
-        Input::Character('q') | Input::Character('\u{1b}') => {
+        Input::Character('q') | Input::Character('\u{1b}') => { // Quit / Esc
             state.main_screen.list_items =
                 state.main_screen.original_list_items_for_reorder.clone();
             state.main_screen.is_reordering_commits = false;
+            state.reorder_command_history = None;
         }
-        Input::Character('\n') => {
+        Input::Character('\n') => { // Enter
             let original_commits =
                 get_commits_from_list(&state.main_screen.original_list_items_for_reorder);
             let reordered_commits = get_commits_from_list(&state.main_screen.list_items);
 
-            let command = Box::new(crate::command::ReorderCommitsCommand::new(
-                state.repo_path.clone(),
-                original_commits,
-                reordered_commits,
-            ));
-            state.execute_and_refresh(command);
+            if original_commits != reordered_commits {
+                let command = Box::new(crate::command::ReorderCommitsCommand::new(
+                    state.repo_path.clone(),
+                    original_commits,
+                    reordered_commits,
+                ));
+                state.execute_and_refresh(command);
+            }
             state.main_screen.is_reordering_commits = false;
+            state.reorder_command_history = None;
         }
-        _ => {}
+        Input::KeyUp | Input::Character('\u{10}') => {
+            let cursor = state.main_screen.file_cursor;
+            if cursor > 0 {
+                if let Some(ListItem::PreviousCommitInfo { .. }) =
+                    state.main_screen.list_items.get(cursor - 1)
+                {
+                    let command = Box::new(SwapCommitCommand::new(
+                        &mut state.main_screen.list_items,
+                        cursor,
+                        cursor - 1,
+                    ));
+                    state.execute_reorder_command(command);
+                    state.main_screen.file_cursor -= 1;
+                }
+            }
+        }
+        Input::KeyDown | Input::Character('\u{e}') => {
+            let cursor = state.main_screen.file_cursor;
+            if cursor < state.main_screen.list_items.len() - 1 {
+                if let Some(ListItem::PreviousCommitInfo { .. }) =
+                    state.main_screen.list_items.get(cursor + 1)
+                {
+                    let command = Box::new(SwapCommitCommand::new(
+                        &mut state.main_screen.list_items,
+                        cursor,
+                        cursor + 1,
+                    ));
+                    state.execute_reorder_command(command);
+                    state.main_screen.file_cursor += 1;
+                }
+            }
+        }
+        Input::Character('!') => {
+            let cursor = state.main_screen.file_cursor;
+            if let Some(ListItem::PreviousCommitInfo { .. }) =
+                state.main_screen.list_items.get(cursor)
+            {
+                let command = Box::new(DiscardCommitCommand::new(
+                    &mut state.main_screen.list_items,
+                    cursor,
+                ));
+                state.execute_reorder_command(command);
+                if cursor >= state.main_screen.list_items.len()
+                    && !state.main_screen.list_items.is_empty()
+                {
+                    state.main_screen.file_cursor = state.main_screen.list_items.len() - 1;
+                }
+            }
+        }
+        Input::Character('<') => {
+            let cursor_state = crate::cursor_state::CursorState::from_app_state(state);
+            if let Some(history) = &mut state.reorder_command_history {
+                if let Some(cursor) = history.undo(cursor_state) {
+                    cursor.apply_to_app_state(state);
+                }
+            }
+        }
+        Input::Character('>') => {
+            let cursor_state = crate::cursor_state::CursorState::from_app_state(state);
+            if let Some(history) = &mut state.reorder_command_history {
+                if let Some(cursor) = history.redo(cursor_state) {
+                    cursor.apply_to_app_state(state);
+                }
+            }
+        }
+        _ => scroll::handle_scroll(state, input, max_y),
     }
 }
 
@@ -1000,19 +1062,23 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         match input {
             Input::KeyUp => {
                 if let Some(ListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
-                    if !state.main_screen.is_reordering_commits {
-                        state.main_screen.original_list_items_for_reorder =
-                            state.main_screen.list_items.clone();
-                        state.main_screen.is_reordering_commits = true;
-                    }
+                    state.main_screen.original_list_items_for_reorder =
+                        state.main_screen.list_items.clone();
+                    state.main_screen.is_reordering_commits = true;
+                    state.reorder_command_history = Some(CommandHistory::new());
 
-                    let cursor = &mut state.main_screen.file_cursor;
-                    if *cursor > 0 {
+                    let cursor = state.main_screen.file_cursor;
+                    if cursor > 0 {
                         if let Some(ListItem::PreviousCommitInfo { .. }) =
-                            state.main_screen.list_items.get(*cursor - 1)
+                            state.main_screen.list_items.get(cursor - 1)
                         {
-                            state.main_screen.list_items.swap(*cursor, *cursor - 1);
-                            *cursor -= 1;
+                            let command = Box::new(SwapCommitCommand::new(
+                                &mut state.main_screen.list_items,
+                                cursor,
+                                cursor - 1,
+                            ));
+                            state.execute_reorder_command(command);
+                            state.main_screen.file_cursor -= 1;
                         }
                     }
                     return;
@@ -1020,19 +1086,23 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             }
             Input::KeyDown => {
                 if let Some(ListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
-                    if !state.main_screen.is_reordering_commits {
-                        state.main_screen.original_list_items_for_reorder =
-                            state.main_screen.list_items.clone();
-                        state.main_screen.is_reordering_commits = true;
-                    }
+                    state.main_screen.original_list_items_for_reorder =
+                        state.main_screen.list_items.clone();
+                    state.main_screen.is_reordering_commits = true;
+                    state.reorder_command_history = Some(CommandHistory::new());
 
-                    let cursor = &mut state.main_screen.file_cursor;
-                    if *cursor < state.main_screen.list_items.len() - 1 {
+                    let cursor = state.main_screen.file_cursor;
+                    if cursor < state.main_screen.list_items.len() - 1 {
                         if let Some(ListItem::PreviousCommitInfo { .. }) =
-                            state.main_screen.list_items.get(*cursor + 1)
+                            state.main_screen.list_items.get(cursor + 1)
                         {
-                            state.main_screen.list_items.swap(*cursor, *cursor + 1);
-                            *cursor += 1;
+                            let command = Box::new(SwapCommitCommand::new(
+                                &mut state.main_screen.list_items,
+                                cursor,
+                                cursor + 1,
+                            ));
+                            state.execute_reorder_command(command);
+                            state.main_screen.file_cursor += 1;
                         }
                     }
                     return;
