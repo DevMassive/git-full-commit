@@ -21,6 +21,7 @@ mod unstage_file_command_test;
 
 use crate::cursor_state::CursorState;
 use crate::git::{self, CommitInfo};
+use crate::ui::main_screen::ListItem;
 
 pub trait Command {
     fn execute(&mut self) -> bool;
@@ -186,6 +187,82 @@ impl Command for ReorderCommitsCommand {
 
     fn undo(&mut self) {
         let _ = git::reset_hard(&self.repo_path, "HEAD@{1}");
+    }
+
+    command_impl!();
+}
+
+pub struct DiscardCommitCommand {
+    pub list_items: *mut Vec<ListItem>,
+    pub index: usize,
+    removed_item: Option<ListItem>,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl DiscardCommitCommand {
+    pub fn new(list_items: *mut Vec<ListItem>, index: usize) -> Self {
+        Self {
+            list_items,
+            index,
+            removed_item: None,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for DiscardCommitCommand {
+    fn execute(&mut self) -> bool {
+        unsafe {
+            self.removed_item = Some((*self.list_items).remove(self.index));
+        }
+        true
+    }
+
+    fn undo(&mut self) {
+        if let Some(item) = self.removed_item.take() {
+            unsafe {
+                (*self.list_items).insert(self.index, item);
+            }
+        }
+    }
+
+    command_impl!();
+}
+
+pub struct SwapCommitCommand {
+    pub list_items: *mut Vec<ListItem>,
+    pub index1: usize,
+    pub index2: usize,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl SwapCommitCommand {
+    pub fn new(list_items: *mut Vec<ListItem>, index1: usize, index2: usize) -> Self {
+        Self {
+            list_items,
+            index1,
+            index2,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for SwapCommitCommand {
+    fn execute(&mut self) -> bool {
+        unsafe {
+            (*self.list_items).swap(self.index1, self.index2);
+        }
+        true
+    }
+
+    fn undo(&mut self) {
+        unsafe {
+            (*self.list_items).swap(self.index1, self.index2);
+        }
     }
 
     command_impl!();

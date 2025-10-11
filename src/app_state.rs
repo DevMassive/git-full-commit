@@ -55,6 +55,7 @@ pub struct AppState {
     pub running: bool,
     pub files: Vec<FileDiff>,
     pub command_history: CommandHistory,
+    pub reorder_command_history: Option<CommandHistory>,
     pub previous_commits: Vec<CommitInfo>,
     pub selected_commit_files: Vec<FileDiff>,
     pub focused_pane: FocusedPane,
@@ -97,6 +98,7 @@ impl AppState {
             running: true,
             files,
             command_history: CommandHistory::new(),
+            reorder_command_history: None,
             previous_commits,
             selected_commit_files,
             focused_pane,
@@ -232,6 +234,13 @@ impl AppState {
         let cursor_state = CursorState::from_app_state(self);
         self.command_history.execute(command, cursor_state);
         self.refresh_diff(false);
+    }
+
+    pub fn execute_reorder_command(&mut self, command: Box<dyn Command>) {
+        let cursor_state = CursorState::from_app_state(self);
+        if let Some(history) = &mut self.reorder_command_history {
+            history.execute(command, cursor_state);
+        }
     }
 
     pub fn update_selected_commit_diff(&mut self) {
