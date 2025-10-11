@@ -3,6 +3,8 @@ use std::io::Write;
 use std::path::PathBuf;
 
 #[cfg(test)]
+mod reorder_commits_command_test;
+#[cfg(test)]
 mod stage_all_command_test;
 #[cfg(test)]
 mod stage_file_command_test;
@@ -18,7 +20,7 @@ mod unstage_all_command_test;
 mod unstage_file_command_test;
 
 use crate::cursor_state::CursorState;
-use crate::git;
+use crate::git::{self, CommitInfo};
 
 pub trait Command {
     fn execute(&mut self) -> bool;
@@ -68,6 +70,125 @@ impl UnstageFileCommand {
             cursor_before_undo: None,
         }
     }
+}
+
+pub struct ReorderCommitsCommand {
+    pub repo_path: PathBuf,
+    pub original_commits: Vec<CommitInfo>,
+    pub reordered_commits: Vec<CommitInfo>,
+    cursor_before_execute: Option<CursorState>,
+    cursor_before_undo: Option<CursorState>,
+}
+
+impl ReorderCommitsCommand {
+    pub fn new(
+        repo_path: PathBuf,
+        original_commits: Vec<CommitInfo>,
+        reordered_commits: Vec<CommitInfo>,
+    ) -> Self {
+        Self {
+            repo_path,
+            original_commits,
+            reordered_commits,
+            cursor_before_execute: None,
+            cursor_before_undo: None,
+        }
+    }
+}
+
+impl Command for ReorderCommitsCommand {
+    fn execute(&mut self) -> bool {
+        if self.original_commits.len() < 2 {
+            return false;
+        }
+        if self.original_commits == self.reordered_commits {
+            return true;
+        }
+
+        // --- Get original state ---
+        let original_branch = match git::get_current_branch_name(&self.repo_path) {
+            Ok(name) => name,
+            Err(_) => return false,
+        };
+        let stashed = match git::stash_unstaged_changes(&self.repo_path) {
+            Ok(stashed) => stashed,
+            Err(_) => return false,
+        };
+
+        // --- Find the base and the commits to re-order ---
+        let mut original_chrono = self.original_commits.clone();
+        original_chrono.reverse();
+        let mut reordered_chrono = self.reordered_commits.clone();
+        reordered_chrono.reverse();
+
+        let mut base_commit_opt: Option<&CommitInfo> = None;
+        let mut first_diverged_idx = 0;
+        for (i, (original, reordered)) in original_chrono.iter().zip(reordered_chrono.iter()).enumerate() {
+            if original.hash == reordered.hash {
+                base_commit_opt = Some(original);
+                first_diverged_idx = i + 1;
+            } else {
+                break;
+            }
+        }
+
+        let commits_to_pick = &reordered_chrono[first_diverged_idx..];
+        let temp_branch = format!("reorder-temp-{}", chrono::Utc::now().timestamp());
+
+        // --- Create temp branch ---
+        if let Some(base_commit) = base_commit_opt {
+            // Normal case: create branch from the last common commit
+            if git::create_branch_at(&self.repo_path, &temp_branch, &base_commit.hash).is_err() {
+                if stashed { let _ = git::pop_stash(&self.repo_path); }
+                return false;
+            }
+            if git::checkout_branch(&self.repo_path, &temp_branch).is_err() {
+                let _ = git::delete_branch(&self.repo_path, &temp_branch, true);
+                if stashed { let _ = git::pop_stash(&self.repo_path); }
+                return false;
+            }
+        } else {
+            // Root reorder case: create an orphan branch
+            if git::checkout_orphan_branch(&self.repo_path, &temp_branch).is_err() {
+                 if stashed { let _ = git::pop_stash(&self.repo_path); }
+                return false;
+            }
+        }
+
+        // --- Cherry-pick ---
+        for commit in commits_to_pick {
+            if git::cherry_pick(&self.repo_path, &commit.hash).is_err() {
+                let _ = git::cherry_pick_abort(&self.repo_path);
+                let _ = git::checkout_branch(&self.repo_path, &original_branch);
+                let _ = git::delete_branch(&self.repo_path, &temp_branch, true);
+                if stashed { let _ = git::pop_stash(&self.repo_path); }
+                return false;
+            }
+        }
+
+        // --- Update original branch ---
+        if git::checkout_branch(&self.repo_path, &original_branch).is_err() {
+            // Recovery is hard here. Leave temp branch for manual recovery.
+            return false;
+        }
+        if git::reset_hard(&self.repo_path, &temp_branch).is_err() {
+            return false;
+        }
+
+        // --- Final cleanup ---
+        let _ = git::delete_branch(&self.repo_path, &temp_branch, true);
+        if stashed {
+            let _ = git::pop_stash(&self.repo_path);
+        }
+
+        true
+    }
+
+    fn undo(&mut self) {
+        let _ = git::reset_hard(&self.repo_path, "HEAD@{1}");
+    }
+
+    command_impl!();
 }
 
 impl Command for UnstageFileCommand {

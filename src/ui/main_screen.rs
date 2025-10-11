@@ -49,7 +49,7 @@ pub fn render(window: &Window, state: &AppState) {
     let (max_y, max_x) = window.get_max_yx();
     let mut main_pane_offset = 0;
 
-    if state.main_screen.has_unstaged_changes {
+    if state.main_screen.has_unstaged_changes && !state.main_screen.is_reordering_commits {
         let unstaged_pane_height = render_unstaged_pane(window, state, max_y, max_x);
         main_pane_offset = unstaged_pane_height;
     }
@@ -57,10 +57,17 @@ pub fn render(window: &Window, state: &AppState) {
     let (main_pane_carret_y, main_pane_carret_x) =
         render_main_pane(window, state, max_y, max_x, main_pane_offset);
 
-    let main_pane_height = state.main_header_height(max_y).0;
-    let diff_view_top = main_pane_offset + main_pane_height;
-
-    render_diff_view(window, state, max_y, diff_view_top);
+    if state.main_screen.is_reordering_commits {
+        window.attron(COLOR_PAIR(1));
+        let title = " Commit Reordering (Up/Down: move, Enter: confirm, Esc/q: cancel) ";
+        let title_x = (max_x - title.len() as i32) / 2;
+        window.mvaddstr(0, title_x, title);
+        window.attroff(COLOR_PAIR(1));
+    } else {
+        let main_pane_height = state.main_header_height(max_y).0;
+        let diff_view_top = main_pane_offset + main_pane_height;
+        render_diff_view(window, state, max_y, diff_view_top);
+    }
 
     let is_editing_commit = state.is_in_input_mode();
 
@@ -739,6 +746,18 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
 }
 
 fn handle_main_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
+    if state.main_screen.is_reordering_commits {
+        match input {
+            Input::Character('\n') | Input::Character('q') | Input::Character('\u{1b}') => {
+                handle_reorder_mode_input(state, input);
+            }
+            _ => {
+                handle_navigation(state, input, max_y, max_x);
+            }
+        }
+        return;
+    }
+
     if state.is_in_input_mode() {
         match input {
             Input::KeyUp
@@ -912,6 +931,51 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
     true
 }
 
+fn handle_reorder_mode_input(state: &mut AppState, input: Input) {
+    match input {
+        Input::Character('q') | Input::Character('\u{1b}') => {
+            state.main_screen.list_items =
+                state.main_screen.original_list_items_for_reorder.clone();
+            state.main_screen.is_reordering_commits = false;
+        }
+        Input::Character('\n') => {
+            let original_commits =
+                get_commits_from_list(&state.main_screen.original_list_items_for_reorder);
+            let reordered_commits = get_commits_from_list(&state.main_screen.list_items);
+
+            let command = Box::new(crate::command::ReorderCommitsCommand::new(
+                state.repo_path.clone(),
+                original_commits,
+                reordered_commits,
+            ));
+            state.execute_and_refresh(command);
+            state.main_screen.is_reordering_commits = false;
+        }
+        _ => {}
+    }
+}
+
+fn get_commits_from_list(list: &[ListItem]) -> Vec<crate::git::CommitInfo> {
+    list.iter()
+        .filter_map(|item| {
+            if let ListItem::PreviousCommitInfo {
+                hash,
+                message,
+                is_on_remote,
+            } = item
+            {
+                Some(crate::git::CommitInfo {
+                    hash: hash.clone(),
+                    message: message.clone(),
+                    is_on_remote: *is_on_remote,
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
     if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
         if let Some(index) = state
@@ -931,25 +995,71 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         state.main_screen.amending_commit_hash = None;
     }
 
+    if state.pending_esc {
+        state.pending_esc = false;
+        match input {
+            Input::KeyUp => {
+                if let Some(ListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
+                    if !state.main_screen.is_reordering_commits {
+                        state.main_screen.original_list_items_for_reorder =
+                            state.main_screen.list_items.clone();
+                        state.main_screen.is_reordering_commits = true;
+                    }
+
+                    let cursor = &mut state.main_screen.file_cursor;
+                    if *cursor > 0 {
+                        if let Some(ListItem::PreviousCommitInfo { .. }) =
+                            state.main_screen.list_items.get(*cursor - 1)
+                        {
+                            state.main_screen.list_items.swap(*cursor, *cursor - 1);
+                            *cursor -= 1;
+                        }
+                    }
+                    return;
+                }
+            }
+            Input::KeyDown => {
+                if let Some(ListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
+                    if !state.main_screen.is_reordering_commits {
+                        state.main_screen.original_list_items_for_reorder =
+                            state.main_screen.list_items.clone();
+                        state.main_screen.is_reordering_commits = true;
+                    }
+
+                    let cursor = &mut state.main_screen.file_cursor;
+                    if *cursor < state.main_screen.list_items.len() - 1 {
+                        if let Some(ListItem::PreviousCommitInfo { .. }) =
+                            state.main_screen.list_items.get(*cursor + 1)
+                        {
+                            state.main_screen.list_items.swap(*cursor, *cursor + 1);
+                            *cursor += 1;
+                        }
+                    }
+                    return;
+                }
+            }
+            _ => {}
+        }
+    }
+
     match input {
         Input::KeyUp | Input::Character('\u{10}') => {
-            if state.main_screen.file_cursor == 0
-                && state.main_screen.has_unstaged_changes {
-                    let unstaged_items_count = state.unstaged_pane.list_items.len();
-                    if unstaged_items_count > 0 {
-                        state.focused_pane = FocusedPane::Unstaged;
-                        state.unstaged_pane.cursor = unstaged_items_count - 1;
+            if state.main_screen.file_cursor == 0 && state.main_screen.has_unstaged_changes {
+                let unstaged_items_count = state.unstaged_pane.list_items.len();
+                if unstaged_items_count > 0 {
+                    state.focused_pane = FocusedPane::Unstaged;
+                    state.unstaged_pane.cursor = unstaged_items_count - 1;
 
-                        let (file_list_height, _) = state.unstaged_header_height(max_y);
-                        if state.unstaged_pane.cursor
-                            >= state.unstaged_pane.scroll + file_list_height
-                        {
-                            state.unstaged_pane.scroll =
-                                state.unstaged_pane.cursor - file_list_height + 1;
-                        }
-                        return;
+                    let (file_list_height, _) = state.unstaged_header_height(max_y);
+                    if state.unstaged_pane.cursor
+                        >= state.unstaged_pane.scroll + file_list_height
+                    {
+                        state.unstaged_pane.scroll =
+                            state.unstaged_pane.cursor - file_list_height + 1;
                     }
+                    return;
                 }
+            }
 
             state.main_screen.file_cursor = state.main_screen.file_cursor.saturating_sub(1);
             state.main_screen.diff_scroll = 0;
@@ -1034,6 +1144,9 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                 .main_screen
                 .horizontal_scroll
                 .saturating_add(scroll_amount);
+        }
+        Input::Character('\u{1b}') => {
+            state.pending_esc = true;
         }
         _ => {
             if let Some(ListItem::CommitMessageInput) = state

@@ -48,3 +48,20 @@ This document specifies the behavior of the Commit Log View, which is part of th
 - **Canceling Amend Mode:**
   - Navigating away from the input field using the `Up` or `Down` arrow keys cancels the operation.
   - The input field disappears, and the original commit log entry is restored in its place.
+
+### 3.2. Reordering Commits
+
+- **Trigger:**
+  - Pressing `Meta + Up Arrow` or `Meta + Down Arrow` while a **local only** commit is selected.
+  - This action is ignored if the selected commit is already on a remote.
+
+- **Outcome:**
+  1.  The application enters "Commit Reordering Mode."
+  2.  The selected commit is swapped with its adjacent commit in the direction of the arrow key.
+  3.  In this mode, the Unstaged and Staged panes are hidden, and the Commit Log View expands to fill the screen.
+  4.  A header is displayed at the top, indicating that the user is in reordering mode and showing the available commands.
+
+- **Reordering Mode Commands:**
+  - `Meta + Up/Down Arrow`: Swaps the currently selected commit with its neighbor.
+  - `Enter`: Confirms the new commit order and exits reordering mode. The application will then perform a safe rebase operation in the background. If any conflicts are detected, the operation is aborted, and the commit order remains unchanged.
+  - `Esc` or `q`: Cancels the reordering, reverts the commit list to its original order, and exits reordering mode.

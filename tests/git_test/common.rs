@@ -48,7 +48,7 @@ impl TestRepo {
     }
 
     pub fn commit(&self, msg: &str) {
-        run_git(&self.path, &["commit", "-m", msg]);
+        run_git(&self.path, &["commit", "--allow-empty", "-m", msg]);
     }
 
     pub fn push(&self) {

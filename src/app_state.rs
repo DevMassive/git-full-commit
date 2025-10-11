@@ -32,6 +32,8 @@ pub struct MainScreenState {
     pub is_diff_cursor_active: bool,
     pub has_unstaged_changes: bool,
     pub list_items: Vec<MainScreenListItem>,
+    pub is_reordering_commits: bool,
+    pub original_list_items_for_reorder: Vec<MainScreenListItem>,
 }
 
 #[derive(Default)]
@@ -276,9 +278,14 @@ impl AppState {
     }
 
     pub fn main_header_height(&self, max_y: i32) -> (usize, usize) {
-        let file_list_total_items = self.main_screen.list_items.len();
-        let height = (max_y as usize / 3).max(3).min(file_list_total_items);
-        (height, file_list_total_items)
+        if self.main_screen.is_reordering_commits {
+            let file_list_total_items = self.main_screen.list_items.len();
+            (max_y as usize - 1, file_list_total_items)
+        } else {
+            let file_list_total_items = self.main_screen.list_items.len();
+            let height = (max_y as usize / 3).max(3).min(file_list_total_items);
+            (height, file_list_total_items)
+        }
     }
 
     pub fn unstaged_header_height(&self, max_y: i32) -> (usize, usize) {
