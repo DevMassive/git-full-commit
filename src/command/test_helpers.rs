@@ -66,6 +66,19 @@ impl TestRepo {
     }
 }
 
+pub fn create_file(repo_path: &Path, name: &str, content: &str) {
+    fs::write(repo_path.join(name), content).unwrap();
+}
+
+pub fn commit(repo_path: &Path, msg: &str) {
+    run_git(repo_path, &["add", "-A"]);
+    run_git(repo_path, &["commit", "--allow-empty", "-m", msg]);
+}
+
+pub fn get_log(repo_path: &Path) -> Vec<crate::git::CommitInfo> {
+    crate::git::get_local_commits(repo_path).unwrap()
+}
+
 pub fn run_git(dir: &Path, args: &[&str]) {
     let output = OsCommand::new("git")
         .args(args)

@@ -750,3 +750,189 @@ pub fn is_commit_on_remote(repo_path: &Path, hash: &str) -> Result<bool> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     Ok(!stdout.trim().is_empty())
 }
+
+pub fn stash_unstaged_changes(repo_path: &Path) -> Result<bool> {
+    let output = git_command()
+        .arg("stash")
+        .arg("push")
+        .arg("-u")
+        .arg("-m")
+        .arg("git-branchless-reorder-stash")
+        .current_dir(repo_path)
+        .output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(!stdout.contains("No local changes to save"))
+}
+
+pub fn pop_stash(repo_path: &Path) -> Result<()> {
+    let stash_list_output = git_command()
+        .arg("stash")
+        .arg("list")
+        .current_dir(repo_path)
+        .output()?;
+    let stash_list = String::from_utf8_lossy(&stash_list_output.stdout);
+    let stash_ref = stash_list
+        .lines()
+        .find(|line| line.contains("git-branchless-reorder-stash"))
+        .and_then(|line| line.split(':').next())
+        .map(|s| s.to_string());
+
+    if let Some(stash_ref) = stash_ref {
+        git_command()
+            .arg("stash")
+            .arg("pop")
+            .arg(&stash_ref)
+            .current_dir(repo_path)
+            .output()?;
+    }
+    Ok(())
+}
+
+pub fn get_current_branch_name(repo_path: &Path) -> Result<String> {
+    let output = git_command()
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!("Failed to get current branch name");
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+pub fn get_commit_parent(repo_path: &Path, commit_hash: &str) -> Result<String> {
+    let output = git_command()
+        .arg("rev-parse")
+        .arg(format!("{}^", commit_hash))
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!("Failed to get parent for commit {}", commit_hash);
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+pub fn create_branch_at(repo_path: &Path, branch_name: &str, start_point: &str) -> Result<()> {
+    let output = git_command()
+        .arg("branch")
+        .arg(branch_name)
+        .arg(start_point)
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to create branch {} at {}. Stderr: {}",
+            branch_name,
+            start_point,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
+
+pub fn checkout_branch(repo_path: &Path, branch_name: &str) -> Result<()> {
+    let output = git_command()
+        .arg("checkout")
+        .arg(branch_name)
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to checkout branch {}. Stderr: {}",
+            branch_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
+
+pub fn checkout_orphan_branch(repo_path: &Path, branch_name: &str) -> Result<()> {
+    let output = git_command()
+        .arg("checkout")
+        .arg("--orphan")
+        .arg(branch_name)
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to checkout orphan branch {}. Stderr: {}",
+            branch_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    // After checkout --orphan, the index is full and working dir is dirty.
+    // We need to clear them to start fresh. `git rm` can fail on an empty index.
+    // So we ignore the error.
+    let _ = git_command()
+        .arg("rm")
+        .arg("-rf")
+        .arg(".")
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+
+pub fn cherry_pick(repo_path: &Path, commit_hash: &str) -> Result<()> {
+    let output = git_command()
+        .arg("cherry-pick")
+        .arg("--allow-empty")
+        .arg(commit_hash)
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to cherry-pick {}. Stderr: {}",
+            commit_hash,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
+
+pub fn cherry_pick_abort(repo_path: &Path) -> Result<()> {
+    git_command()
+        .arg("cherry-pick")
+        .arg("--abort")
+        .current_dir(repo_path)
+        .output()?;
+    Ok(())
+}
+
+pub fn reset_hard(repo_path: &Path, target: &str) -> Result<()> {
+    let output = git_command()
+        .arg("reset")
+        .arg("--hard")
+        .arg(target)
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to reset --hard to {}. Stderr: {}",
+            target,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
+
+pub fn delete_branch(repo_path: &Path, branch_name: &str, force: bool) -> Result<()> {
+    let mut cmd = git_command();
+    cmd.arg("branch");
+    if force {
+        cmd.arg("-D");
+    } else {
+        cmd.arg("-d");
+    }
+    cmd.arg(branch_name);
+    let output = cmd.current_dir(repo_path).output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to delete branch {}. Stderr: {}",
+            branch_name,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
