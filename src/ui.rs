@@ -29,7 +29,7 @@ pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>)
             endwin();
             let _ = external_command::open_editor(&request.file_path, request.line_number);
 
-            state.refresh_diff();
+            state.refresh_diff(false);
 
             window = initscr();
             window.keypad(true);

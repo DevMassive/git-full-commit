@@ -161,7 +161,7 @@ impl AppState {
         }
     }
 
-    pub fn refresh_diff(&mut self) {
+    pub fn refresh_diff(&mut self, reset_cursor: bool) {
         let old_file_cursor = self.main_screen.file_cursor;
         let old_line_cursor = self.main_screen.line_cursor;
         let old_scroll = self.main_screen.diff_scroll;
@@ -187,29 +187,35 @@ impl AppState {
 
         self.update_selected_commit_diff();
 
-        if self.files.is_empty() {
-            self.main_screen.file_cursor = 0;
+        if reset_cursor {
+            self.main_screen.file_cursor = if self.main_screen.list_items.len() > 1 { 1 } else { 0 };
             self.main_screen.line_cursor = 0;
             self.main_screen.diff_scroll = 0;
         } else {
-            self.main_screen.file_cursor =
-                old_file_cursor.min(self.main_screen.list_items.len() - 1);
-            if let Some(item) = self
-                .main_screen
-                .list_items
-                .get(self.main_screen.file_cursor)
-            {
-                if let MainScreenListItem::File(file) = item {
-                    let max_line = file.lines.len().saturating_sub(1);
-                    self.main_screen.line_cursor = old_line_cursor.min(max_line);
-                    self.main_screen.diff_scroll = old_scroll.min(max_line);
+            if self.files.is_empty() {
+                self.main_screen.file_cursor = 0;
+                self.main_screen.line_cursor = 0;
+                self.main_screen.diff_scroll = 0;
+            } else {
+                self.main_screen.file_cursor =
+                    old_file_cursor.min(self.main_screen.list_items.len() - 1);
+                if let Some(item) = self
+                    .main_screen
+                    .list_items
+                    .get(self.main_screen.file_cursor)
+                {
+                    if let MainScreenListItem::File(file) = item {
+                        let max_line = file.lines.len().saturating_sub(1);
+                        self.main_screen.line_cursor = old_line_cursor.min(max_line);
+                        self.main_screen.diff_scroll = old_scroll.min(max_line);
+                    } else {
+                        self.main_screen.line_cursor = 0;
+                        self.main_screen.diff_scroll = 0;
+                    }
                 } else {
                     self.main_screen.line_cursor = 0;
                     self.main_screen.diff_scroll = 0;
                 }
-            } else {
-                self.main_screen.line_cursor = 0;
-                self.main_screen.diff_scroll = 0;
             }
         }
         self.main_screen.file_list_scroll = old_file_list_scroll;
@@ -223,7 +229,7 @@ impl AppState {
     pub fn execute_and_refresh(&mut self, command: Box<dyn Command>) {
         let cursor_state = CursorState::from_app_state(self);
         self.command_history.execute(command, cursor_state);
-        self.refresh_diff();
+        self.refresh_diff(false);
     }
 
     pub fn update_selected_commit_diff(&mut self) {

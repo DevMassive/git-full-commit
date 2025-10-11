@@ -167,7 +167,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
                 return;
             }
 
-            if is_amend {
+            let commit_result = if is_amend {
                 if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
                     let has_staged_changes = !state.files.is_empty();
                     let result = if has_staged_changes {
@@ -175,25 +175,27 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
                     } else {
                         git::reword_commit(&state.repo_path, &hash, message)
                     };
-
-                    match result {
-                        Ok(_) => {
-                            state.command_history.clear();
-                            state.main_screen.amending_commit_hash = None;
-                            state.refresh_diff();
-                        }
-                        Err(e) => {
-                            state.error_message = Some(format!("Error amending commit: {e}"));
-                        }
-                    }
+                    state.main_screen.amending_commit_hash = None;
+                    result
+                } else {
+                    // This case should not happen, but for safety...
+                    return;
                 }
             } else {
-                git::commit(&state.repo_path, message).expect("Failed to commit.");
-                let _ = commit_storage::delete_commit_message(&state.repo_path);
-                message.clear();
-                state.command_history.clear();
+                let result = git::commit(&state.repo_path, message);
+                if result.is_ok() {
+                    let _ = commit_storage::delete_commit_message(&state.repo_path);
+                    message.clear();
+                }
+                result
+            };
+
+            if let Err(e) = commit_result {
+                state.error_message = Some(format!("Error committing: {e}"));
+                return;
             }
 
+            state.command_history.clear();
             git::add_all(&state.repo_path).expect("Failed to git add -A.");
 
             let staged_diff_output = git::get_staged_diff_output(&state.repo_path)
@@ -201,10 +203,8 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
 
             if staged_diff_output.stdout.is_empty() {
                 state.running = false;
-            }
-            else {
-                state.refresh_diff();
-                state.main_screen.file_cursor = 0;
+            } else {
+                state.refresh_diff(true);
             }
         }
         Input::KeyBackspace | Input::Character('\x7f') | Input::Character('\x08') => {

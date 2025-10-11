@@ -82,10 +82,10 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 if !state.is_in_input_mode() {
                     let cursor_state = CursorState::from_app_state(&state);
                     if let Some(cursor) = state.command_history.undo(cursor_state) {
-                        state.refresh_diff();
+                        state.refresh_diff(false);
                         cursor.apply_to_app_state(&mut state);
                     } else {
-                        state.refresh_diff();
+                        state.refresh_diff(false);
                     }
                     return state;
                 }
@@ -94,10 +94,10 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                 if !state.is_in_input_mode() {
                     let cursor_state = CursorState::from_app_state(&state);
                     if let Some(cursor) = state.command_history.redo(cursor_state) {
-                        state.refresh_diff();
+                        state.refresh_diff(false);
                         cursor.apply_to_app_state(&mut state);
                     } else {
-                        state.refresh_diff();
+                        state.refresh_diff(false);
                     }
                     return state;
                 }
