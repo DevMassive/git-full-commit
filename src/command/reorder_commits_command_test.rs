@@ -145,3 +145,39 @@ fn test_reorder_commits_with_fixup() {
     let b_txt_content = repo.get_file_content_at_commit("b.txt", &new_log[0].hash);
     assert_eq!(b_txt_content, "b");
 }
+
+#[test]
+fn test_reorder_commits_with_message_change() {
+    let repo = TestRepo::new();
+    repo.commit("commit 0");
+    repo.commit("commit 1");
+    repo.commit("commit 2");
+
+    let original_commits = get_log(&repo.path);
+    let mut reordered_commits = original_commits.clone();
+
+    // Swap commit 2 and 1
+    reordered_commits.swap(0, 1);
+
+    // find "commit 1" and change it's message to "new message"
+    reordered_commits
+        .iter_mut()
+        .find(|c| c.message == "commit 1")
+        .unwrap()
+        .message = "new message".to_string();
+
+    let mut command = ReorderCommitsCommand::new(
+        repo.path.clone(),
+        original_commits.clone(),
+        reordered_commits.clone(),
+    );
+
+    let result = command.execute();
+    assert!(result);
+
+    let log = get_log(&repo.path);
+    assert_eq!(
+        log.iter().map(|c| &c.message).collect::<Vec<_>>(),
+        vec!["new message", "commit 2", "commit 0"]
+    );
+}

@@ -309,6 +309,7 @@ impl AppState {
             self.current_main_item(),
             Some(MainScreenListItem::CommitMessageInput)
                 | Some(MainScreenListItem::AmendingCommitMessageInput { .. })
+                | Some(MainScreenListItem::EditingReorderCommit { .. })
         )
     }
 }

@@ -44,6 +44,14 @@ pub enum ListItem {
         hash: String,
         message: String,
     },
+    EditingReorderCommit {
+        hash: String,
+        original_message: String,
+        current_text: String,
+        cursor: usize,
+        is_on_remote: bool,
+        is_fixup: bool,
+    }
 }
 
 pub fn render(window: &Window, state: &AppState) {
@@ -320,6 +328,23 @@ fn render_main_pane(
             ListItem::AmendingCommitMessageInput { .. } => {
                 (carret_x, carret_y) =
                     commit_view::render(window, state, is_selected, line_y, max_x);
+            }
+            ListItem::EditingReorderCommit {
+                current_text,
+                cursor,
+                ..
+            } => {
+                if is_selected {
+                    (carret_x, carret_y) = commit_view::render_editor(
+                        window,
+                        current_text,
+                        *cursor,
+                        is_selected,
+                        line_y,
+                        max_x,
+                        " ● ",
+                    );
+                }
             }
         }
     }
@@ -758,6 +783,10 @@ fn handle_main_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x:
     }
 
     if state.is_in_input_mode() {
+        if let Some(ListItem::EditingReorderCommit { .. }) = state.current_main_item() {
+            handle_reorder_mode_input(state, input, max_y);
+            return;
+        }
         match input {
             Input::KeyUp
             | Input::Character('\u{10}')
@@ -798,6 +827,9 @@ fn unstage_line(state: &mut AppState, max_y: i32) {
 }
 
 fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
+    if state.pending_esc {
+        return false;
+    }
     match input {
         Input::Character('q') => {
             if state.main_screen.is_diff_cursor_active {
@@ -932,12 +964,85 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
 }
 
 fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
+    if let Some(item) = state
+        .main_screen
+        .list_items
+        .get_mut(state.main_screen.file_cursor)
+    {
+        if let ListItem::EditingReorderCommit {
+            current_text,
+            cursor,
+            original_message,
+            hash,
+            is_on_remote,
+            is_fixup,
+        } = item
+        {
+            match input {
+                Input::Character('\n') => {
+                    // Enter
+                    *item = ListItem::PreviousCommitInfo {
+                        hash: hash.clone(),
+                        message: current_text.clone(),
+                        is_on_remote: *is_on_remote,
+                        is_fixup: *is_fixup, // Preserve fixup status
+                    };
+                }
+                Input::Character('\u{1b}') | Input::Character('\u{3}') => {
+                    // Esc or Ctrl+C
+                    *item = ListItem::PreviousCommitInfo {
+                        hash: hash.clone(),
+                        message: original_message.clone(),
+                        is_on_remote: *is_on_remote,
+                        is_fixup: *is_fixup, // Preserve fixup status
+                    };
+                }
+                _ => {
+                    eprintln!("EDITING: Handling generic text input: {:?}", input);
+                    commit_view::handle_generic_text_input(
+                        current_text,
+                        cursor,
+                        &mut state.pending_esc,
+                        input,
+                    );
+                }
+            }
+            return;
+        }
+    }
+
+
+    if state.pending_esc {
+        state.pending_esc = false;
+        if input == Input::Character('\n') {
+            let current_index = state.main_screen.file_cursor;
+            if let Some(ListItem::PreviousCommitInfo { hash, message, is_on_remote, is_fixup }) = state.main_screen.list_items.get(current_index).cloned() {
+                if !is_on_remote {
+                    if let Some(item) = state.main_screen.list_items.get_mut(current_index) {
+                        *item = ListItem::EditingReorderCommit {
+                            hash,
+                            original_message: message.clone(),
+                            current_text: message.clone(),
+                            cursor: message.chars().count(),
+                            is_on_remote,
+                            is_fixup,
+                        };
+                    }
+                }
+            }
+        }
+        return;
+    }
+
     match input {
-        Input::Character('q') | Input::Character('\u{1b}') => { // Quit / Esc
+        Input::Character('q') => {
             state.main_screen.list_items =
                 state.main_screen.original_list_items_for_reorder.clone();
             state.main_screen.is_reordering_commits = false;
             state.reorder_command_history = None;
+        }
+        Input::Character('\u{1b}') => { // Esc
+            state.pending_esc = true;
         }
         Input::Character('\n') => { // Enter
             let original_commits =
@@ -1038,23 +1143,30 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
 
 fn get_commits_from_list(list: &[ListItem]) -> Vec<crate::git::CommitInfo> {
     list.iter()
-        .filter_map(|item| {
-            if let ListItem::PreviousCommitInfo {
+        .filter_map(|item| match item {
+            ListItem::PreviousCommitInfo {
                 hash,
                 message,
                 is_on_remote,
                 is_fixup,
-            } = item
-            {
-                Some(crate::git::CommitInfo {
-                    hash: hash.clone(),
-                    message: message.clone(),
-                    is_on_remote: *is_on_remote,
-                    is_fixup: *is_fixup,
-                })
-            } else {
-                None
-            }
+            } => Some(crate::git::CommitInfo {
+                hash: hash.clone(),
+                message: message.clone(),
+                is_on_remote: *is_on_remote,
+                is_fixup: *is_fixup,
+            }),
+            ListItem::EditingReorderCommit {
+                hash,
+                current_text,
+                is_on_remote,
+                ..
+            } => Some(crate::git::CommitInfo {
+                hash: hash.clone(),
+                message: current_text.clone(),
+                is_on_remote: *is_on_remote,
+                is_fixup: false, // Editing resets fixup status
+            }),
+            _ => None,
         })
         .collect()
 }
@@ -1125,6 +1237,28 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                             ));
                             state.execute_reorder_command(command);
                             state.main_screen.file_cursor += 1;
+                        }
+                    }
+                    return;
+                }
+            }
+            Input::Character('\n') => { // Enter
+                if let Some(ListItem::PreviousCommitInfo { hash, message, is_on_remote, is_fixup }) = state.current_main_item().cloned() {
+                    if !is_on_remote {
+                        state.main_screen.is_reordering_commits = true;
+                        state.main_screen.original_list_items_for_reorder = state.main_screen.list_items.clone();
+                        state.reorder_command_history = Some(CommandHistory::new());
+
+                        let current_index = state.main_screen.file_cursor;
+                        if let Some(item) = state.main_screen.list_items.get_mut(current_index) {
+                            *item = ListItem::EditingReorderCommit {
+                                hash,
+                                original_message: message.clone(),
+                                current_text: message.clone(),
+                                cursor: message.chars().count(),
+                                is_on_remote,
+                                is_fixup,
+                            };
                         }
                     }
                     return;

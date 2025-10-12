@@ -5,12 +5,14 @@ use pancurses::COLOR_PAIR;
 use pancurses::Input;
 use unicode_width::UnicodeWidthStr;
 
-pub fn render(
+pub fn render_editor(
     window: &pancurses::Window,
-    state: &AppState,
+    text: &str,
+    cursor: usize,
     is_selected: bool,
     line_y: i32,
     max_x: i32,
+    prefix: &str,
 ) -> (i32, i32) {
     let pair = if is_selected { 5 } else { 1 };
     window.attron(COLOR_PAIR(pair));
@@ -21,7 +23,40 @@ pub fn render(
     }
     window.mv(line_y, 0);
 
-    let prefix = " ○ ";
+    window.addstr(prefix);
+    let available_width = (max_x as usize).saturating_sub(prefix.width());
+    let mut truncated_message = String::new();
+    let mut current_width = 0;
+    for ch in text.chars() {
+        let char_width = ch.to_string().width();
+        if current_width + char_width > available_width {
+            break;
+        }
+        truncated_message.push(ch);
+        current_width += char_width;
+    }
+    window.addstr(&truncated_message);
+
+    window.attroff(COLOR_PAIR(pair));
+
+    let commit_line_y = line_y;
+    let prefix_width = prefix.width();
+    let message_before_cursor: String = text.chars().take(cursor).collect();
+    let cursor_display_pos = prefix_width + message_before_cursor.width();
+
+    let carret_x = cursor_display_pos as i32;
+    let carret_y = commit_line_y;
+
+    (carret_x, carret_y)
+}
+
+pub fn render(
+    window: &pancurses::Window,
+    state: &AppState,
+    is_selected: bool,
+    line_y: i32,
+    max_x: i32,
+) -> (i32, i32) {
     let (message, placeholder) =
         if let Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput {
             message, ..
@@ -35,74 +70,47 @@ pub fn render(
             )
         };
 
-    window.addstr(prefix);
     if message.is_empty() {
-        let pair = if is_selected { 16 } else { 9 };
+        let pair = if is_selected { 5 } else { 1 };
         window.attron(COLOR_PAIR(pair));
-        window.addstr(placeholder);
-        window.attroff(COLOR_PAIR(pair));
-    } else {
-        let available_width = (max_x as usize).saturating_sub(prefix.width());
-        let mut truncated_message = String::new();
-        let mut current_width = 0;
-        for ch in message.chars() {
-            let char_width = ch.to_string().width();
-            if current_width + char_width > available_width {
-                break;
+        if is_selected {
+            for x in 0..max_x {
+                window.mvaddch(line_y, x, ' ');
             }
-            truncated_message.push(ch);
-            current_width += char_width;
         }
-        window.addstr(&truncated_message);
+        window.mv(line_y, 0);
+        let prefix = " ○ ";
+        window.addstr(prefix);
+        let placeholder_pair = if is_selected { 16 } else { 9 };
+        window.attron(COLOR_PAIR(placeholder_pair));
+        window.addstr(placeholder);
+        window.attroff(COLOR_PAIR(placeholder_pair));
+        window.attroff(COLOR_PAIR(pair));
+        (0, 0)
+    } else {
+        render_editor(
+            window,
+            message,
+            state.main_screen.commit_cursor,
+            is_selected,
+            line_y,
+            max_x,
+            " ○ ",
+        )
     }
-    window.attroff(COLOR_PAIR(pair));
-
-    let commit_line_y = line_y;
-    let prefix_width = prefix.width();
-    let message_before_cursor: String = message
-        .chars()
-        .take(state.main_screen.commit_cursor)
-        .collect();
-    let cursor_display_pos = prefix_width + message_before_cursor.width();
-
-    let carret_x = cursor_display_pos as i32;
-    let carret_y = commit_line_y;
-
-    (carret_x, carret_y)
 }
 
-pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
-    let is_amend = matches!(
-        state.current_main_item(),
-        Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput { .. })
-    );
-
-    let message_to_edit = if is_amend {
-        if let Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput {
-            message, ..
-        }) = state
-            .main_screen
-            .list_items
-            .get_mut(state.main_screen.file_cursor)
-        {
-            Some(message)
-        } else {
-            None
-        }
-    } else {
-        Some(&mut state.main_screen.commit_message)
-    };
-
-    let Some(message) = message_to_edit else {
-        return;
-    };
-
-    if state.pending_esc {
-        state.pending_esc = false;
+pub fn handle_generic_text_input(
+    text: &mut String,
+    cursor: &mut usize,
+    pending_esc: &mut bool,
+    input: Input,
+) {
+    if *pending_esc {
+        *pending_esc = false;
         match input {
             Input::KeyLeft | Input::Character('b') => {
-                let cursor = state.main_screen.commit_cursor;
-                let message_chars: Vec<char> = message.chars().collect();
+                let message_chars: Vec<char> = text.chars().collect();
                 let mut i = cursor.saturating_sub(1);
                 while i > 0 && message_chars.get(i).map_or(false, |c| c.is_whitespace()) {
                     i -= 1;
@@ -113,29 +121,29 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
                 if i > 0 && message_chars.get(i).map_or(false, |c| c.is_whitespace()) {
                     i += 1;
                 }
-                state.main_screen.commit_cursor = i;
+                *cursor = i;
                 return;
             }
             Input::KeyRight | Input::Character('f') => {
-                let cursor = state.main_screen.commit_cursor;
-                let message_chars: Vec<char> = message.chars().collect();
+                let message_chars: Vec<char> = text.chars().collect();
                 let len = message_chars.len();
-                let mut i = cursor;
+                let mut i = *cursor;
                 while i < len && message_chars.get(i).map_or(false, |c| !c.is_whitespace()) {
                     i += 1;
                 }
                 while i < len && message_chars.get(i).map_or(false, |c| c.is_whitespace()) {
                     i += 1;
                 }
-                state.main_screen.commit_cursor = i;
+                *cursor = i;
                 return;
             }
             Input::KeyBackspace | Input::Character('\x7f') | Input::Character('\x08') => {
-                let cursor_pos = state.main_screen.commit_cursor;
+                let cursor_pos = *cursor;
                 if cursor_pos > 0 {
-                    let message_before_cursor: String =
-                        message.chars().take(cursor_pos).collect();
-                    let new_cursor_pos = if let Some(pos) = message_before_cursor.rfind(|c: char| !c.is_whitespace()) {
+                    let message_before_cursor: String = text.chars().take(cursor_pos).collect();
+                    let new_cursor_pos = if let Some(pos) =
+                        message_before_cursor.rfind(|c: char| !c.is_whitespace())
+                    {
                         if let Some(pos) = message_before_cursor[..pos].rfind(char::is_whitespace) {
                             pos + 1
                         } else {
@@ -145,15 +153,14 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
                         0
                     };
 
-                    let start_byte = message.char_indices().nth(new_cursor_pos).map_or(0, |(idx, _)| idx);
-                    let end_byte = message.char_indices().nth(cursor_pos).map_or(message.len(), |(idx, _)| idx);
+                    let start_byte = text.char_indices().nth(new_cursor_pos).map_or(0, |(idx, _)| idx);
+                    let end_byte = text
+                        .char_indices()
+                        .nth(cursor_pos)
+                        .map_or(text.len(), |(idx, _)| idx);
 
-                    message.replace_range(start_byte..end_byte, "");
-                    state.main_screen.commit_cursor = new_cursor_pos;
-
-                    if !is_amend {
-                        let _ = commit_storage::save_commit_message(&state.repo_path, message);
-                    }
+                    text.replace_range(start_byte..end_byte, "");
+                    *cursor = new_cursor_pos;
                 }
                 return;
             }
@@ -162,119 +169,137 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
     }
 
     match input {
-        Input::Character('\n') => {
-            if message.is_empty() {
-                return;
-            }
-
-            let commit_result = if is_amend {
-                if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
-                    let has_staged_changes = !state.files.is_empty();
-                    let result = if has_staged_changes {
-                        git::amend_commit_with_staged_changes(&state.repo_path, &hash, message)
-                    } else {
-                        git::reword_commit(&state.repo_path, &hash, message)
-                    };
-                    state.main_screen.amending_commit_hash = None;
-                    result
-                } else {
-                    // This case should not happen, but for safety...
-                    return;
-                }
-            } else {
-                let result = git::commit(&state.repo_path, message);
-                if result.is_ok() {
-                    let _ = commit_storage::delete_commit_message(&state.repo_path);
-                    message.clear();
-                }
-                result
-            };
-
-            if let Err(e) = commit_result {
-                state.error_message = Some(format!("Error committing: {e}"));
-                return;
-            }
-
-            state.command_history.clear();
-            git::add_all(&state.repo_path).expect("Failed to git add -A.");
-
-            let staged_diff_output = git::get_staged_diff_output(&state.repo_path)
-                .expect("Failed to git diff --staged.");
-
-            if staged_diff_output.stdout.is_empty() {
-                state.running = false;
-            } else {
-                state.refresh_diff(true);
-            }
-        }
         Input::KeyBackspace | Input::Character('\x7f') | Input::Character('\x08') => {
-            if state.main_screen.commit_cursor > 0 {
-                let char_index_to_remove = state.main_screen.commit_cursor - 1;
-                if let Some((byte_index, _)) = message.char_indices().nth(char_index_to_remove) {
-                    message.remove(byte_index);
-                    state.main_screen.commit_cursor -= 1;
-                    if !is_amend {
-                        let _ = commit_storage::save_commit_message(&state.repo_path, message);
-                    }
+            if *cursor > 0 {
+                let char_index_to_remove = *cursor - 1;
+                if let Some((byte_index, _)) = text.char_indices().nth(char_index_to_remove) {
+                    text.remove(byte_index);
+                    *cursor -= 1;
                 }
             }
         }
         Input::KeyDC => {
-            if state.main_screen.commit_cursor < message.chars().count() {
-                if let Some((byte_index, _)) =
-                    message.char_indices().nth(state.main_screen.commit_cursor)
-                {
-                    message.remove(byte_index);
-                    if !is_amend {
-                        let _ = commit_storage::save_commit_message(&state.repo_path, message);
-                    }
+            if *cursor < text.chars().count() {
+                if let Some((byte_index, _)) = text.char_indices().nth(*cursor) {
+                    text.remove(byte_index);
                 }
             }
         }
         Input::KeyLeft => {
-            state.main_screen.commit_cursor = state.main_screen.commit_cursor.saturating_sub(1);
+            *cursor = cursor.saturating_sub(1);
         }
         Input::KeyRight => {
-            let message_len = message.chars().count();
-            state.main_screen.commit_cursor = state
-                .main_screen
-                .commit_cursor
-                .saturating_add(1)
-                .min(message_len);
+            let message_len = text.chars().count();
+            *cursor = cursor.saturating_add(1).min(message_len);
         }
         Input::Character(c) => {
             if c == '\u{1b}' {
-                state.pending_esc = true;
+                *pending_esc = true;
             } else if c == '\u{1}' {
                 // Ctrl-A: beginning of line
-                state.main_screen.commit_cursor = 0;
+                *cursor = 0;
             } else if c == '\u{5}' {
                 // Ctrl-E: end of line
-                state.main_screen.commit_cursor = message.chars().count();
+                *cursor = text.chars().count();
             } else if c == '\u{b}' {
                 // Ctrl-K: kill to end of line
-                if state.main_screen.commit_cursor < message.chars().count() {
-                    let byte_offset = message
+                if *cursor < text.chars().count() {
+                    let byte_offset = text
                         .char_indices()
-                        .nth(state.main_screen.commit_cursor)
-                        .map_or(message.len(), |(idx, _)| idx);
-                    message.truncate(byte_offset);
-                    if !is_amend {
-                        let _ = commit_storage::save_commit_message(&state.repo_path, message);
-                    }
+                        .nth(*cursor)
+                        .map_or(text.len(), |(idx, _)| idx);
+                    text.truncate(byte_offset);
                 }
             } else if !c.is_control() {
-                let byte_offset = message
+                let byte_offset = text
                     .char_indices()
-                    .nth(state.main_screen.commit_cursor)
-                    .map_or(message.len(), |(idx, _)| idx);
-                message.insert(byte_offset, c);
-                state.main_screen.commit_cursor += 1;
-                if !is_amend {
-                    let _ = commit_storage::save_commit_message(&state.repo_path, message);
-                }
+                    .nth(*cursor)
+                    .map_or(text.len(), |(idx, _)| idx);
+                text.insert(byte_offset, c);
+                *cursor += 1;
             }
         }
         _ => {}
+    }
+}
+
+pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
+    let is_amend = matches!(
+        state.current_main_item(),
+        Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput { .. })
+    );
+
+    let (message_to_edit, cursor_to_edit) = if is_amend {
+        if let Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput {
+            message, ..
+        }) = state
+            .main_screen
+            .list_items
+            .get_mut(state.main_screen.file_cursor)
+        {
+            (Some(message), Some(&mut state.main_screen.commit_cursor))
+        } else {
+            (None, None)
+        }
+    } else {
+        (
+            Some(&mut state.main_screen.commit_message),
+            Some(&mut state.main_screen.commit_cursor),
+        )
+    };
+
+    let (Some(message), Some(cursor)) = (message_to_edit, cursor_to_edit) else {
+        return;
+    };
+
+    if input == Input::Character('\n') {
+        if message.is_empty() {
+            return;
+        }
+
+        let commit_result = if is_amend {
+            if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
+                let has_staged_changes = !state.files.is_empty();
+                let result = if has_staged_changes {
+                    git::amend_commit_with_staged_changes(&state.repo_path, &hash, message)
+                } else {
+                    git::reword_commit(&state.repo_path, &hash, message)
+                };
+                state.main_screen.amending_commit_hash = None;
+                result
+            } else {
+                // This case should not happen, but for safety...
+                return;
+            }
+        } else {
+            let result = git::commit(&state.repo_path, message);
+            if result.is_ok() {
+                let _ = commit_storage::delete_commit_message(&state.repo_path);
+                message.clear();
+            }
+            result
+        };
+
+        if let Err(e) = commit_result {
+            state.error_message = Some(format!("Error committing: {e}"));
+            return;
+        }
+
+        state.command_history.clear();
+        git::add_all(&state.repo_path).expect("Failed to git add -A.");
+
+        let staged_diff_output = git::get_staged_diff_output(&state.repo_path)
+            .expect("Failed to git diff --staged.");
+
+        if staged_diff_output.stdout.is_empty() {
+            state.running = false;
+        } else {
+            state.refresh_diff(true);
+        }
+    } else {
+        handle_generic_text_input(message, cursor, &mut state.pending_esc, input);
+        if !is_amend {
+            let _ = commit_storage::save_commit_message(&state.repo_path, message);
+        }
     }
 }
