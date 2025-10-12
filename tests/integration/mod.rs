@@ -10,3 +10,4 @@ pub mod fixup_commit_test;
 pub mod stage_operations_test;
 pub mod undo_redo_test;
 pub mod unstage_operations_test;
+mod edit_commit_message_test;

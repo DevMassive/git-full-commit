@@ -58,13 +58,19 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                     }
                 }
             }
-            Input::Character('\u{3}') => {
-                let _ = commit_storage::save_commit_message(
-                    &state.repo_path,
-                    &state.main_screen.commit_message,
-                );
-                state.running = false;
-                return state;
+            Input::Character('\u{3}') => { // Ctrl+C
+                if state.main_screen.is_reordering_commits {
+                    // In reorder mode, Ctrl+C is used to cancel edits, so pass it down.
+                    main_screen::handle_input(&mut state, input, max_y, max_x);
+                } else {
+                    // Otherwise, it's a global quit command.
+                    let _ = commit_storage::save_commit_message(
+                        &state.repo_path,
+                        &state.main_screen.commit_message,
+                    );
+                    state.running = false;
+                    return state;
+                }
             }
             Input::Character('Q') => {
                 if !state.is_in_input_mode() {

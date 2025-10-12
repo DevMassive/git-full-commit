@@ -191,6 +191,23 @@ impl Command for ReorderCommitsCommand {
                     return false;
                 }
             }
+
+            // Check if the message needs to be amended
+            let original_commit = self
+                .original_commits
+                .iter()
+                .find(|c| c.hash == commit.hash);
+
+            if let Some(original) = original_commit {
+                if original.message != commit.message {
+                    if let Err(e) =
+                        git::commit_amend_with_message(&self.repo_path, &commit.message)
+                    {
+                        rebase_failed(e);
+                        return false;
+                    }
+                }
+            }
         }
 
         // --- Update original branch ---

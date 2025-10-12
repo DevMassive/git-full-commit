@@ -44,11 +44,21 @@ pub fn select_commit_in_log(state: &mut AppState, index: usize) {
 pub fn assert_commit_list(list_items: &[ListItem], expected: &[&str]) {
     let mut actual = Vec::new();
     for item in list_items {
-        if let ListItem::PreviousCommitInfo { message, .. } = item {
-            actual.push(message.clone());
+        match item {
+            ListItem::PreviousCommitInfo { message, .. } => {
+                actual.push(message.clone());
+            }
+            ListItem::EditingReorderCommit { current_text, .. } => {
+                actual.push(current_text.clone());
+            }
+            _ => {}
         }
     }
     assert_eq!(actual, expected);
+}
+
+pub fn get_log(repo_path: &std::path::Path) -> Vec<git::CommitInfo> {
+    git::get_local_commits(repo_path).unwrap()
 }
 
 impl TestRepo {

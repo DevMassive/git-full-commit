@@ -271,6 +271,24 @@ pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn commit_amend_with_message(repo_path: &Path, message: &str) -> Result<()> {
+    let output = git_command()
+        .arg("commit")
+        .arg("--amend")
+        .arg("--allow-empty")
+        .arg("-m")
+        .arg(message)
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to amend commit with message. Stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
+}
+
 pub fn commit_amend_no_edit(repo_path: &Path) -> Result<()> {
     let output = git_command()
         .arg("commit")
