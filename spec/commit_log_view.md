@@ -63,6 +63,7 @@ This document specifies the behavior of the Commit Log View, which is part of th
 
 - **Reordering Mode Commands:**
   - `Up/Down Arrow`: Swaps the currently selected commit with its neighbor.
+  - `f`: Toggles the "fixup" status of the selected commit. When a commit is marked as a fixup, its message will be visually replaced with "fixup!". Upon execution, this commit will be squashed into its preceding commit, and its message will be discarded. Pressing `f` again will revert it to a normal commit.
   - `!`: Discards the currently selected commit. This is a visual change only; the commit is not actually discarded until the reordering is confirmed.
   - `<`: Undoes the last action (swap or discard).
   - `>`: Redoes the last undone action.

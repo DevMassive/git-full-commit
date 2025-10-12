@@ -52,13 +52,23 @@ impl TestRepo {
     }
 
     pub fn commit(&self, msg: &str) {
-        run_git(&self.path, &["commit", "-m", msg]);
+        run_git(&self.path, &["commit", "--allow-empty", "-m", msg]);
     }
 
     pub fn get_status(&self) -> String {
         let output = OsCommand::new("git")
             .arg("status")
             .arg("--porcelain")
+            .current_dir(&self.path)
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&output.stdout).to_string()
+    }
+
+    pub fn get_file_content_at_commit(&self, file_name: &str, hash: &str) -> String {
+        let output = OsCommand::new("git")
+            .arg("show")
+            .arg(format!("{}:{}", hash, file_name))
             .current_dir(&self.path)
             .output()
             .unwrap();

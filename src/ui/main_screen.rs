@@ -38,6 +38,7 @@ pub enum ListItem {
         hash: String,
         message: String,
         is_on_remote: bool,
+        is_fixup: bool,
     },
     AmendingCommitMessageInput {
         hash: String,
@@ -272,6 +273,7 @@ fn render_main_pane(
                 hash: _,
                 message,
                 is_on_remote,
+                is_fixup,
             } => {
                 let pair = if is_selected { 5 } else { 1 };
                 window.attron(COLOR_PAIR(pair));
@@ -295,8 +297,11 @@ fn render_main_pane(
                 window.attroff(COLOR_PAIR(status_pair));
 
                 window.attron(COLOR_PAIR(pair));
-                use unicode_width::UnicodeWidthStr;
-                let prefix_width = " ● ".width();
+                if *is_fixup {
+                    window.addstr("fixup!");
+                } else {
+                    use unicode_width::UnicodeWidthStr;
+                    let prefix_width = " ● ".width();
                 let available_width = (max_x as usize).saturating_sub(prefix_width);
                 let mut truncated_message = String::new();
                 let mut current_width = 0;
@@ -309,6 +314,7 @@ fn render_main_pane(
                     current_width += char_width;
                 }
                 window.addstr(&truncated_message);
+                }
                 window.attroff(COLOR_PAIR(pair));
             }
             ListItem::AmendingCommitMessageInput { .. } => {
@@ -866,6 +872,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
                     hash,
                     message,
                     is_on_remote,
+                    is_fixup: _,
                 }) => {
                     if !is_on_remote {
                         state.main_screen.amending_commit_hash = Some(hash.clone());
@@ -980,6 +987,18 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
                 }
             }
         }
+        Input::Character('f') => {
+            let cursor = state.main_screen.file_cursor;
+            if let Some(ListItem::PreviousCommitInfo { .. }) =
+                state.main_screen.list_items.get(cursor)
+            {
+                let command = Box::new(crate::command::FixupCommitCommand::new(
+                    &mut state.main_screen.list_items as *mut _,
+                    cursor,
+                ));
+                state.execute_reorder_command(command);
+            }
+        }
         Input::Character('!') => {
             let cursor = state.main_screen.file_cursor;
             if let Some(ListItem::PreviousCommitInfo { .. }) =
@@ -1024,12 +1043,14 @@ fn get_commits_from_list(list: &[ListItem]) -> Vec<crate::git::CommitInfo> {
                 hash,
                 message,
                 is_on_remote,
+                is_fixup,
             } = item
             {
                 Some(crate::git::CommitInfo {
                     hash: hash.clone(),
                     message: message.clone(),
                     is_on_remote: *is_on_remote,
+                    is_fixup: *is_fixup,
                 })
             } else {
                 None
@@ -1051,6 +1072,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                     hash: commit.hash.clone(),
                     message: commit.message.clone(),
                     is_on_remote: commit.is_on_remote,
+                    is_fixup: commit.is_fixup,
                 };
             }
         }
