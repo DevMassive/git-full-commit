@@ -139,9 +139,9 @@ fn test_reorder_commits_with_fixup() {
 
     // Verify the content of the squashed commit
     let a_txt_content = repo.get_file_content_at_commit("a.txt", &new_log[1].hash);
-    assert_eq!(a_txt_content, "ab\n");
+    assert_eq!(a_txt_content, "ab");
 
     // Verify the content of the third commit
     let b_txt_content = repo.get_file_content_at_commit("b.txt", &new_log[0].hash);
-    assert_eq!(b_txt_content, "b\n"); // git adds a newline
+    assert_eq!(b_txt_content, "b");
 }

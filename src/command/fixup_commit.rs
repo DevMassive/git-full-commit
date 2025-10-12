@@ -22,10 +22,14 @@ impl FixupCommitCommand {
     fn toggle_fixup(&mut self) -> bool {
         unsafe {
             let list_items = &mut *self.list_items;
-            let len = list_items.len();
-            // The root commit is the last one in the list.
-            if self.index >= len.saturating_sub(1) {
-                return false;
+            let last_commit_index = list_items
+                .iter()
+                .rposition(|item| matches!(item, ListItem::PreviousCommitInfo { .. }));
+
+            if let Some(last_commit_index) = last_commit_index {
+                if self.index == last_commit_index {
+                    return false; // Can't fixup the root commit
+                }
             }
 
             if let Some(ListItem::PreviousCommitInfo { is_fixup, .. }) =

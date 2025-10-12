@@ -131,7 +131,7 @@ impl Command for ReorderCommitsCommand {
         let mut base_commit_opt: Option<&CommitInfo> = None;
         let mut first_diverged_idx = 0;
         for (i, (original, reordered)) in original_chrono.iter().zip(reordered_chrono.iter()).enumerate() {
-            if original.hash == reordered.hash {
+            if original == reordered {
                 base_commit_opt = Some(original);
                 first_diverged_idx = i + 1;
             } else {

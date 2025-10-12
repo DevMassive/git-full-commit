@@ -17,17 +17,17 @@ fn test_fixup_commit_in_reorder_mode() {
     pancurses.send_input(Input::KeyUp); // Enter reorder mode
     state = repo.update_state(state, &mut pancurses);
 
-    // After entering reorder mode, the selection is on "commit 2" (index 0).
-    // Let's move down to select "commit 1" (index 1)
-    pancurses.send_input(Input::KeyDown);
-    state = repo.update_state(state, &mut pancurses);
+    // After entering reorder mode, "commit 1" and "commit 2" are swapped,
+    // and the cursor is on "commit 1".
 
-    // Press 'f' to mark "commit 1" as a fixup
+    // Press 'f' to mark the selected commit ("commit 1") as a fixup
     pancurses.send_input(Input::Character('f'));
     state = repo.update_state(state, &mut pancurses);
 
     // Assert that the message for "commit 1" is now "fixup!"
-    if let ListItem::PreviousCommitInfo { is_fixup, .. } = &state.main_screen.list_items[1] {
+    if let ListItem::PreviousCommitInfo { is_fixup, .. } =
+        &state.main_screen.list_items[state.main_screen.file_cursor]
+    {
         assert!(*is_fixup);
     } else {
         panic!("Expected a PreviousCommitInfo item");
