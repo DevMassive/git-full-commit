@@ -35,11 +35,18 @@ pub struct FileDiff {
     pub status: FileStatus,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct CommitInfo {
     pub hash: String,
     pub message: String,
     pub is_on_remote: bool,
+    pub is_fixup: bool,
+}
+
+impl PartialEq for CommitInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash && self.message == other.message && self.is_on_remote == other.is_on_remote && self.is_fixup == other.is_fixup
+    }
 }
 
 pub fn get_local_commits(repo_path: &Path) -> Result<Vec<CommitInfo>> {
@@ -66,6 +73,7 @@ pub fn get_local_commits(repo_path: &Path) -> Result<Vec<CommitInfo>> {
             hash,
             message,
             is_on_remote,
+            is_fixup: false,
         });
 
         if is_on_remote {
@@ -260,6 +268,23 @@ pub fn commit(repo_path: &Path, message: &str) -> Result<()> {
         .arg(message)
         .current_dir(repo_path)
         .output()?;
+    Ok(())
+}
+
+pub fn commit_amend_no_edit(repo_path: &Path) -> Result<()> {
+    let output = git_command()
+        .arg("commit")
+        .arg("--amend")
+        .arg("--no-edit")
+        .arg("--allow-empty")
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to commit --amend --no-edit. Stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
     Ok(())
 }
 
@@ -500,6 +525,23 @@ pub fn add_all_with_size_limit(repo_path: &Path, size_limit: u64) -> Result<()> 
                 stage_file(repo_path, file_name)?;
             }
         }
+    }
+    Ok(())
+}
+
+pub fn cherry_pick_no_commit(repo_path: &Path, commit_hash: &str) -> Result<()> {
+    let output = git_command()
+        .arg("cherry-pick")
+        .arg("--no-commit")
+        .arg(commit_hash)
+        .current_dir(repo_path)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Failed to cherry-pick -n {}. Stderr: {}",
+            commit_hash,
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
     Ok(())
 }
@@ -915,6 +957,19 @@ pub fn reset_hard(repo_path: &Path, target: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+pub fn run_git_command(repo_path: &Path, args: &[&str]) -> Result<String> {
+    let output = git_command().args(args).current_dir(repo_path).output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "Git command failed: {:?}\n---\nstdout:\n{}\n---\nstderr:\n{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 pub fn delete_branch(repo_path: &Path, branch_name: &str, force: bool) -> Result<()> {

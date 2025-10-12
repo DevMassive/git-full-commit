@@ -19,9 +19,15 @@ mod unstage_all_command_test;
 #[cfg(test)]
 mod unstage_file_command_test;
 
+mod fixup_commit;
+#[cfg(test)]
+mod fixup_commit_test;
+
 use crate::cursor_state::CursorState;
 use crate::git::{self, CommitInfo};
 use crate::ui::main_screen::ListItem;
+
+pub use fixup_commit::FixupCommitCommand;
 
 pub trait Command {
     fn execute(&mut self) -> bool;
@@ -156,18 +162,41 @@ impl Command for ReorderCommitsCommand {
             }
         }
 
-        // --- Cherry-pick ---
+        // --- Re-create history on temp branch ---
+        let rebase_failed = |e: anyhow::Error| {
+            let _ = git::cherry_pick_abort(&self.repo_path);
+            let _ = git::checkout_branch(&self.repo_path, &original_branch);
+            let _ = git::delete_branch(&self.repo_path, &temp_branch, true);
+            if stashed {
+                let _ = git::pop_stash(&self.repo_path);
+            }
+        };
+
+        // Iterate through chronological list of commits to apply
         for commit in commits_to_pick {
-            if git::cherry_pick(&self.repo_path, &commit.hash).is_err() {
-                let _ = git::cherry_pick_abort(&self.repo_path);
-                let _ = git::checkout_branch(&self.repo_path, &original_branch);
-                let _ = git::delete_branch(&self.repo_path, &temp_branch, true);
-                if stashed { let _ = git::pop_stash(&self.repo_path); }
-                return false;
+            if commit.is_fixup {
+                // If it's a fixup, we apply its changes to the staging area, then amend them into the previous commit.
+                if let Err(e) = git::cherry_pick_no_commit(&self.repo_path, &commit.hash) {
+                    rebase_failed(e);
+                    return false;
+                }
+                if let Err(e) = git::commit_amend_no_edit(&self.repo_path) {
+                    rebase_failed(e);
+                    return false;
+                }
+            } else {
+                // Otherwise, just pick the commit
+                if let Err(e) = git::cherry_pick(&self.repo_path, &commit.hash) {
+                    rebase_failed(e);
+                    return false;
+                }
             }
         }
 
         // --- Update original branch ---
+        if let Ok(log) = git::run_git_command(&self.repo_path, &["log", "--pretty=%s"]) {
+            eprintln!("--- Temp Branch Log ---\n{}", log);
+        }
         if git::checkout_branch(&self.repo_path, &original_branch).is_err() {
             // Recovery is hard here. Leave temp branch for manual recovery.
             return false;

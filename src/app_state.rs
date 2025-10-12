@@ -125,6 +125,7 @@ impl AppState {
                 hash: commit.hash.clone(),
                 message: commit.message.clone(),
                 is_on_remote: commit.is_on_remote,
+                is_fixup: commit.is_fixup,
             });
         }
         items

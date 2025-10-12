@@ -104,3 +104,44 @@ fn test_reorder_commits_with_unstaged_changes() {
     let status = repo.get_status();
     assert!(status.contains("?? unstaged.txt"));
 }
+
+#[test]
+fn test_reorder_commits_with_fixup() {
+    let repo = TestRepo::new();
+    repo.create_file("a.txt", "a");
+    repo.add_all();
+    repo.commit("first");
+
+    repo.create_file("a.txt", "ab");
+    repo.add_all();
+    repo.commit("second");
+
+    repo.create_file("b.txt", "b");
+    repo.add_all();
+    repo.commit("third");
+
+    let original_log = get_log(&repo.path);
+    let mut reordered_log = original_log.clone();
+
+    // Mark "second" (index 1) as a fixup of "first" (index 2)
+    if let Some(commit_to_fixup) = reordered_log.get_mut(1) {
+        commit_to_fixup.is_fixup = true;
+    }
+
+    let mut command =
+        ReorderCommitsCommand::new(repo.path.clone(), original_log, reordered_log);
+    assert!(command.execute());
+
+    let new_log = get_log(&repo.path);
+    assert_eq!(new_log.len(), 2);
+    assert_eq!(new_log[0].message, "third");
+    assert_eq!(new_log[1].message, "first");
+
+    // Verify the content of the squashed commit
+    let a_txt_content = repo.get_file_content_at_commit("a.txt", &new_log[1].hash);
+    assert_eq!(a_txt_content, "ab\n");
+
+    // Verify the content of the third commit
+    let b_txt_content = repo.get_file_content_at_commit("b.txt", &new_log[0].hash);
+    assert_eq!(b_txt_content, "b\n"); // git adds a newline
+}
