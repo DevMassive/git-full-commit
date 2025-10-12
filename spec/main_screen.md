@@ -42,6 +42,7 @@ This pane displays staged changes and the commit history.
 
 - This view always occupies the bottom-most portion of the screen, below the other panes.
 - Its content is dynamic, showing the diff for the item selected in the currently active pane (either Top or Bottom).
+  - When a commit is selected, the diff view includes file statistics.
 - *Note: All interactions within the Diff View are detailed in `spec/diff_view.md`.*
 
 ## 3. Navigation and Command Model

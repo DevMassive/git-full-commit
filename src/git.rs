@@ -225,6 +225,8 @@ pub fn get_diff(repo_path: PathBuf) -> Vec<FileDiff> {
 pub fn get_commit_diff(repo_path: &Path, hash: &str) -> Result<Vec<FileDiff>> {
     let output = git_command()
         .arg("show")
+        .arg("--stat")
+        .arg("--patch")
         .arg(hash)
         .current_dir(repo_path)
         .output()?;
