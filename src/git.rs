@@ -114,7 +114,7 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
     let mut current_file: Option<FileDiff> = None;
     let mut current_hunk: Option<Hunk> = None;
     let mut current_file_lines: Vec<String> = Vec::new();
-    let mut current_file_line_index = 0;
+    let mut header_lines: Vec<String> = Vec::new();
 
     let diff_line_re = Regex::new(r#"^diff --git a/(.+) b/(.+)"#).unwrap();
 
@@ -127,9 +127,9 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
                 }
                 file.lines = current_file_lines;
                 files.push(file);
-                current_file_lines = Vec::new();
-                current_file_line_index = 0;
             }
+
+            current_file_lines = Vec::new();
 
             let old_file_name = caps
                 .get(1)
@@ -149,6 +149,10 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
                 lines: Vec::new(), // Will be filled in later
                 status: FileStatus::Modified,
             });
+
+            if files.is_empty() {
+                current_file_lines.extend(header_lines.drain(..));
+            }
         } else if line.starts_with("new file mode") {
             if let Some(file) = current_file.as_mut() {
                 file.status = FileStatus::Added;
@@ -182,7 +186,7 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
                 .unwrap_or(0);
 
             current_hunk = Some(Hunk {
-                start_line: current_file_line_index,
+                start_line: current_file_lines.len(),
                 lines: vec![line.to_string()],
                 old_start,
                 new_start,
@@ -194,7 +198,8 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
 
         if current_file.is_some() {
             current_file_lines.push(line.to_string());
-            current_file_line_index += 1;
+        } else {
+            header_lines.push(line.to_string());
         }
     }
 
@@ -205,6 +210,14 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
         }
         file.lines = current_file_lines;
         files.push(file);
+    } else if !header_lines.is_empty() {
+        files.push(FileDiff {
+            file_name: "".to_string(),
+            old_file_name: "".to_string(),
+            hunks: Vec::new(),
+            lines: header_lines,
+            status: FileStatus::Modified,
+        });
     }
 
     files
