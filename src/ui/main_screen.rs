@@ -1036,8 +1036,31 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
 
     match input {
         Input::Character('q') => {
+            let current_hash = if let Some(item) = state.main_screen.list_items.get(state.main_screen.file_cursor) {
+                match item {
+                    ListItem::PreviousCommitInfo { hash, .. } => Some(hash.clone()),
+                    ListItem::EditingReorderCommit { hash, .. } => Some(hash.clone()),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+
             state.main_screen.list_items =
                 state.main_screen.original_list_items_for_reorder.clone();
+
+            if let Some(hash) = current_hash {
+                if let Some(pos) = state.main_screen.list_items.iter().position(|item| {
+                    if let ListItem::PreviousCommitInfo { hash: h, .. } = item {
+                        h == &hash
+                    } else {
+                        false
+                    }
+                }) {
+                    state.main_screen.file_cursor = pos;
+                }
+            }
+
             state.main_screen.is_reordering_commits = false;
             state.reorder_command_history = None;
         }
@@ -1171,6 +1194,51 @@ fn get_commits_from_list(list: &[ListItem]) -> Vec<crate::git::CommitInfo> {
         .collect()
 }
 
+fn start_reorder_mode(state: &mut AppState) {
+    if state.main_screen.is_reordering_commits {
+        return;
+    }
+
+    let current_cursor = state.main_screen.file_cursor;
+    let current_item_hash = if let Some(item) = state.main_screen.list_items.get(current_cursor) {
+        match item {
+            ListItem::PreviousCommitInfo { hash, .. } => Some(hash.clone()),
+            ListItem::EditingReorderCommit { hash, .. } => Some(hash.clone()),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    state.main_screen.original_list_items_for_reorder = state.main_screen.list_items.clone();
+
+    state.main_screen.list_items.retain(|item| {
+        matches!(
+            item,
+            ListItem::PreviousCommitInfo { .. } | ListItem::EditingReorderCommit { .. }
+        )
+    });
+
+    if let Some(hash) = current_item_hash {
+        let new_cursor = state
+            .main_screen
+            .list_items
+            .iter()
+            .position(|item| match item {
+                ListItem::PreviousCommitInfo { hash: h, .. } => h == &hash,
+                ListItem::EditingReorderCommit { hash: h, .. } => h == &hash,
+                _ => false,
+            })
+            .unwrap_or(0);
+        state.main_screen.file_cursor = new_cursor;
+    } else {
+        state.main_screen.file_cursor = 0;
+    }
+
+    state.main_screen.is_reordering_commits = true;
+    state.reorder_command_history = Some(CommandHistory::new());
+}
+
 fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
     if let Some(hash) = state.main_screen.amending_commit_hash.clone() {
         if let Some(index) = state
@@ -1196,11 +1264,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         match input {
             Input::KeyUp => {
                 if let Some(ListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
-                    state.main_screen.original_list_items_for_reorder =
-                        state.main_screen.list_items.clone();
-                    state.main_screen.is_reordering_commits = true;
-                    state.reorder_command_history = Some(CommandHistory::new());
-
+                    start_reorder_mode(state);
                     let cursor = state.main_screen.file_cursor;
                     if cursor > 0 {
                         if let Some(ListItem::PreviousCommitInfo { .. }) =
@@ -1220,11 +1284,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             }
             Input::KeyDown => {
                 if let Some(ListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
-                    state.main_screen.original_list_items_for_reorder =
-                        state.main_screen.list_items.clone();
-                    state.main_screen.is_reordering_commits = true;
-                    state.reorder_command_history = Some(CommandHistory::new());
-
+                    start_reorder_mode(state);
                     let cursor = state.main_screen.file_cursor;
                     if cursor < state.main_screen.list_items.len() - 1 {
                         if let Some(ListItem::PreviousCommitInfo { .. }) =
@@ -1245,10 +1305,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             Input::Character('\n') => { // Enter
                 if let Some(ListItem::PreviousCommitInfo { hash, message, is_on_remote, is_fixup }) = state.current_main_item().cloned() {
                     if !is_on_remote {
-                        state.main_screen.is_reordering_commits = true;
-                        state.main_screen.original_list_items_for_reorder = state.main_screen.list_items.clone();
-                        state.reorder_command_history = Some(CommandHistory::new());
-
+                        start_reorder_mode(state);
                         let current_index = state.main_screen.file_cursor;
                         if let Some(item) = state.main_screen.list_items.get_mut(current_index) {
                             *item = ListItem::EditingReorderCommit {
