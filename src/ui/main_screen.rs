@@ -783,10 +783,6 @@ fn handle_main_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x:
     }
 
     if state.is_in_input_mode() {
-        if let Some(ListItem::EditingReorderCommit { .. }) = state.current_main_item() {
-            handle_reorder_mode_input(state, input, max_y);
-            return;
-        }
         match input {
             Input::KeyUp
             | Input::Character('\u{10}')
@@ -998,7 +994,6 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
                     };
                 }
                 _ => {
-                    eprintln!("EDITING: Handling generic text input: {:?}", input);
                     commit_view::handle_generic_text_input(
                         current_text,
                         cursor,
