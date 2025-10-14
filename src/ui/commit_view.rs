@@ -85,7 +85,10 @@ pub fn render(
         window.addstr(placeholder);
         window.attroff(COLOR_PAIR(placeholder_pair));
         window.attroff(COLOR_PAIR(pair));
-        (0, 0)
+        (
+            prefix.width().try_into().unwrap_or_default(),
+            line_y,
+        )
     } else {
         render_editor(
             window,
