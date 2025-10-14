@@ -11,9 +11,10 @@ use crate::external_command;
 use color::setup_colors;
 use pancurses::{curs_set, endwin, initscr, noecho, start_color};
 use render::render;
+use std::io::Write;
 use update::update_state;
 
-pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>) {
+pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>, debug: bool) {
     let mut window = initscr();
     window.keypad(true);
     noecho();
@@ -42,6 +43,14 @@ pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>)
 
         render(&window, &state);
         let input = window.getch();
+        if debug {
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("debug.log")
+                .unwrap();
+            writeln!(file, "Input: {:?}", input).unwrap();
+        }
         let (max_y, max_x) = window.get_max_yx();
         state = update_state(state, input, max_y, max_x);
     }

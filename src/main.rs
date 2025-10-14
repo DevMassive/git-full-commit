@@ -10,10 +10,18 @@ struct Args {
     /// Path to the git repository
     #[arg(short, long)]
     repo: Option<PathBuf>,
+
+    /// Enable debug logging
+    #[arg(long)]
+    debug: bool,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    if args.debug {
+        // Truncate the log file
+        let _ = std::fs::File::create("debug.log");
+    }
     let repo_path = match args.repo {
         Some(path) => path,
         None => {
@@ -27,6 +35,6 @@ fn main() -> Result<()> {
             PathBuf::from(String::from_utf8(output.stdout)?.trim())
         }
     };
-    run(repo_path)?;
+    run(repo_path, args.debug)?;
     Ok(())
 }

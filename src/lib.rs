@@ -11,7 +11,7 @@ pub mod git_patch;
 pub mod ui;
 pub mod util;
 
-pub fn run(repo_path: PathBuf) -> Result<()> {
+pub fn run(repo_path: PathBuf, debug: bool) -> Result<()> {
     let staged_diff_output = git::get_staged_diff_output(&repo_path)?;
 
     if staged_diff_output.stdout.is_empty() {
@@ -19,7 +19,7 @@ pub fn run(repo_path: PathBuf) -> Result<()> {
     }
 
     let files = git::get_diff(repo_path.clone());
-    ui::tui_loop(repo_path.clone(), files);
+    ui::tui_loop(repo_path.clone(), files, debug);
 
     Ok(())
 }
