@@ -1189,7 +1189,7 @@ fn get_commits_from_list(list: &[ListItem]) -> Vec<crate::git::CommitInfo> {
         .collect()
 }
 
-fn start_reorder_mode(state: &mut AppState) {
+pub fn start_reorder_mode(state: &mut AppState) {
     if state.main_screen.is_reordering_commits {
         return;
     }

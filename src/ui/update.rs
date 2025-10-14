@@ -3,6 +3,7 @@ use crate::commit_storage;
 use crate::cursor_state::CursorState;
 use crate::ui::main_screen::{self, ListItem as MainScreenListItem};
 use pancurses::Input;
+use std::io::Write;
 
 pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x: i32) -> AppState {
     state.error_message = None;
@@ -120,5 +121,86 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
         state.focused_pane = FocusedPane::Main;
     }
 
+    state
+}
+
+use crate::command::SwapCommitCommand;
+
+pub fn update_state_with_alt(
+    mut state: AppState,
+    input: Option<Input>,
+    _max_y: i32,
+    _max_x: i32,
+) -> AppState {
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("debug.log")
+        .unwrap();
+    writeln!(file, "in update_state_with_alt").unwrap();
+    writeln!(
+        file,
+        "is_reordering_commits: {}",
+        state.main_screen.is_reordering_commits
+    )
+    .unwrap();
+
+    if !state.main_screen.is_reordering_commits {
+        if let Some(MainScreenListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
+            main_screen::start_reorder_mode(&mut state);
+            writeln!(file, "Started reorder mode automatically").unwrap();
+        }
+    }
+
+    if state.main_screen.is_reordering_commits {
+        if let Some(input) = input {
+            writeln!(file, "input: {:?}", input).unwrap();
+            match input {
+                Input::KeyUp => {
+                    let cursor = state.main_screen.file_cursor;
+                    let len = state.main_screen.list_items.len();
+                    writeln!(file, "cursor: {}, len: {}", cursor, len).unwrap();
+
+                    if cursor > 0 {
+                        let next_item = state.main_screen.list_items.get(cursor - 1);
+                        writeln!(file, "prev_item: {:?}", next_item).unwrap();
+
+                        if let Some(MainScreenListItem::PreviousCommitInfo { .. }) = next_item {
+                            writeln!(file, "Condition met, executing reorder up").unwrap();
+                            let command = Box::new(SwapCommitCommand::new(
+                                &mut state.main_screen.list_items,
+                                cursor,
+                                cursor - 1,
+                            ));
+                            state.execute_reorder_command(command);
+                            state.main_screen.file_cursor -= 1;
+                        }
+                    }
+                }
+                Input::KeyDown => {
+                    let cursor = state.main_screen.file_cursor;
+                    let len = state.main_screen.list_items.len();
+                    writeln!(file, "cursor: {}, len: {}", cursor, len).unwrap();
+
+                    if cursor < len - 1 {
+                        let next_item = state.main_screen.list_items.get(cursor + 1);
+                        writeln!(file, "next_item: {:?}", next_item).unwrap();
+
+                        if let Some(MainScreenListItem::PreviousCommitInfo { .. }) = next_item {
+                            writeln!(file, "Condition met, executing reorder down").unwrap();
+                            let command = Box::new(SwapCommitCommand::new(
+                                &mut state.main_screen.list_items,
+                                cursor,
+                                cursor + 1,
+                            ));
+                            state.execute_reorder_command(command);
+                            state.main_screen.file_cursor += 1;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
     state
 }
