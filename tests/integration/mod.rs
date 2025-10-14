@@ -1,13 +1,13 @@
-pub mod common;
 pub mod commit_input_view_test;
+pub mod common;
 pub mod diff_view_test;
 pub mod discard_operations_test;
+mod edit_commit_message_test;
+pub mod fixup_commit_test;
 pub mod ignore_operations_test;
 pub mod main_screen_test;
 pub mod pane_switching_test;
 pub mod reorder_commits_test;
-pub mod fixup_commit_test;
 pub mod stage_operations_test;
 pub mod undo_redo_test;
 pub mod unstage_operations_test;
-mod edit_commit_message_test;

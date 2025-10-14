@@ -1,4 +1,4 @@
-use crate::command::test_helpers::{commit, create_file, get_log, TestRepo};
+use crate::command::test_helpers::{TestRepo, commit, create_file, get_log};
 use crate::command::{Command, ReorderCommitsCommand};
 
 #[test]
@@ -63,10 +63,7 @@ fn test_reorder_commits_successfully() {
 
     let new_log = get_log(&repo.path);
     assert_eq!(
-        new_log
-            .iter()
-            .map(|c| &c.message)
-            .collect::<Vec<&String>>(),
+        new_log.iter().map(|c| &c.message).collect::<Vec<&String>>(),
         reordered_log
             .iter()
             .map(|c| &c.message)
@@ -91,10 +88,7 @@ fn test_reorder_commits_with_unstaged_changes() {
 
     let new_log = get_log(&repo.path);
     assert_eq!(
-        new_log
-            .iter()
-            .map(|c| &c.message)
-            .collect::<Vec<&String>>(),
+        new_log.iter().map(|c| &c.message).collect::<Vec<&String>>(),
         reordered_log
             .iter()
             .map(|c| &c.message)
@@ -128,8 +122,7 @@ fn test_reorder_commits_with_fixup() {
         commit_to_fixup.is_fixup = true;
     }
 
-    let mut command =
-        ReorderCommitsCommand::new(repo.path.clone(), original_log, reordered_log);
+    let mut command = ReorderCommitsCommand::new(repo.path.clone(), original_log, reordered_log);
     assert!(command.execute());
 
     let new_log = get_log(&repo.path);

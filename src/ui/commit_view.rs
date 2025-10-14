@@ -112,13 +112,13 @@ pub fn handle_generic_text_input(
             Input::KeyLeft | Input::Character('b') => {
                 let message_chars: Vec<char> = text.chars().collect();
                 let mut i = cursor.saturating_sub(1);
-                while i > 0 && message_chars.get(i).map_or(false, |c| c.is_whitespace()) {
+                while i > 0 && message_chars.get(i).is_some_and(|c| c.is_whitespace()) {
                     i -= 1;
                 }
-                while i > 0 && message_chars.get(i).map_or(false, |c| !c.is_whitespace()) {
+                while i > 0 && message_chars.get(i).is_some_and(|c| !c.is_whitespace()) {
                     i -= 1;
                 }
-                if i > 0 && message_chars.get(i).map_or(false, |c| c.is_whitespace()) {
+                if i > 0 && message_chars.get(i).is_some_and(|c| c.is_whitespace()) {
                     i += 1;
                 }
                 *cursor = i;
@@ -128,10 +128,10 @@ pub fn handle_generic_text_input(
                 let message_chars: Vec<char> = text.chars().collect();
                 let len = message_chars.len();
                 let mut i = *cursor;
-                while i < len && message_chars.get(i).map_or(false, |c| !c.is_whitespace()) {
+                while i < len && message_chars.get(i).is_some_and(|c| !c.is_whitespace()) {
                     i += 1;
                 }
-                while i < len && message_chars.get(i).map_or(false, |c| c.is_whitespace()) {
+                while i < len && message_chars.get(i).is_some_and(|c| c.is_whitespace()) {
                     i += 1;
                 }
                 *cursor = i;
@@ -153,7 +153,10 @@ pub fn handle_generic_text_input(
                         0
                     };
 
-                    let start_byte = text.char_indices().nth(new_cursor_pos).map_or(0, |(idx, _)| idx);
+                    let start_byte = text
+                        .char_indices()
+                        .nth(new_cursor_pos)
+                        .map_or(0, |(idx, _)| idx);
                     let end_byte = text
                         .char_indices()
                         .nth(cursor_pos)
@@ -288,8 +291,8 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
         state.command_history.clear();
         git::add_all(&state.repo_path).expect("Failed to git add -A.");
 
-        let staged_diff_output = git::get_staged_diff_output(&state.repo_path)
-            .expect("Failed to git diff --staged.");
+        let staged_diff_output =
+            git::get_staged_diff_output(&state.repo_path).expect("Failed to git diff --staged.");
 
         if staged_diff_output.stdout.is_empty() {
             state.running = false;

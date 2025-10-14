@@ -1,8 +1,5 @@
 use crate::integration::common::{
-    assert_commit_list,
-    generate_test_repo_and_pancurses,
-    select_commit_in_log,
-    get_log,
+    assert_commit_list, generate_test_repo_and_pancurses, get_log, select_commit_in_log,
 };
 use pancurses::Input;
 

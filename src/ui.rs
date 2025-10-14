@@ -9,7 +9,7 @@ pub mod update;
 use crate::app_state::AppState;
 use crate::external_command;
 use color::setup_colors;
-use pancurses::{curs_set, endwin, initscr, noecho, start_color, Input};
+use pancurses::{Input, curs_set, endwin, initscr, noecho, start_color};
 use render::render;
 use std::io::Write;
 use std::thread;
@@ -67,7 +67,7 @@ pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>,
                 .append(true)
                 .open("debug.log")
                 .unwrap();
-            writeln!(file, "Input: {:?}", input).unwrap();
+            writeln!(file, "Input: {input:?}").unwrap();
         }
 
         if let Some(Input::Character('\u{1b}')) = input {
@@ -78,7 +78,7 @@ pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>,
                     .append(true)
                     .open("debug.log")
                     .unwrap();
-                writeln!(file, "Next char after ESC: {:?}", next_char).unwrap();
+                writeln!(file, "Next char after ESC: {next_char:?}").unwrap();
             }
             if let Some(Input::Character('[')) = next_char {
                 let third_char = window.getch();
@@ -88,12 +88,13 @@ pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>,
                         .append(true)
                         .open("debug.log")
                         .unwrap();
-                    writeln!(file, "Third char after ESC [: {:?}", third_char).unwrap();
+                    writeln!(file, "Third char after ESC [: {third_char:?}").unwrap();
                 }
                 if let Some(Input::Character('A')) = third_char {
                     state = update::update_state_with_alt(state, Some(Input::KeyUp), max_y, max_x);
                 } else if let Some(Input::Character('B')) = third_char {
-                    state = update::update_state_with_alt(state, Some(Input::KeyDown), max_y, max_x);
+                    state =
+                        update::update_state_with_alt(state, Some(Input::KeyDown), max_y, max_x);
                 } else {
                     state = update_state(state, input, max_y, max_x);
                 }

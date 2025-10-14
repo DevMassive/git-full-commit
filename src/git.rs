@@ -45,7 +45,10 @@ pub struct CommitInfo {
 
 impl PartialEq for CommitInfo {
     fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash && self.message == other.message && self.is_on_remote == other.is_on_remote && self.is_fixup == other.is_fixup
+        self.hash == other.hash
+            && self.message == other.message
+            && self.is_on_remote == other.is_on_remote
+            && self.is_fixup == other.is_fixup
     }
 }
 
@@ -151,7 +154,7 @@ fn parse_diff(diff_str: &str) -> Vec<FileDiff> {
             });
 
             if files.is_empty() {
-                current_file_lines.extend(header_lines.drain(..));
+                current_file_lines.append(&mut header_lines);
             }
         } else if line.starts_with("new file mode") {
             if let Some(file) = current_file.as_mut() {
@@ -879,7 +882,7 @@ pub fn get_current_branch_name(repo_path: &Path) -> Result<String> {
 pub fn get_commit_parent(repo_path: &Path, commit_hash: &str) -> Result<String> {
     let output = git_command()
         .arg("rev-parse")
-        .arg(format!("{}^", commit_hash))
+        .arg(format!("{commit_hash}^"))
         .current_dir(repo_path)
         .output()?;
     if !output.status.success() {
@@ -947,7 +950,6 @@ pub fn checkout_orphan_branch(repo_path: &Path, branch_name: &str) -> Result<()>
         .output()?;
     Ok(())
 }
-
 
 pub fn cherry_pick(repo_path: &Path, commit_hash: &str) -> Result<()> {
     let output = git_command()

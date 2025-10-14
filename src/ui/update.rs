@@ -59,7 +59,8 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
                     }
                 }
             }
-            Input::Character('\u{3}') => { // Ctrl+C
+            Input::Character('\u{3}') => {
+                // Ctrl+C
                 if state.main_screen.is_reordering_commits {
                     // In reorder mode, Ctrl+C is used to cancel edits, so pass it down.
                     main_screen::handle_input(&mut state, input, max_y, max_x);
@@ -115,9 +116,7 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
         }
     }
 
-    if !state.main_screen.has_unstaged_changes
-        && state.focused_pane == FocusedPane::Unstaged
-    {
+    if !state.main_screen.has_unstaged_changes && state.focused_pane == FocusedPane::Unstaged {
         state.focused_pane = FocusedPane::Main;
     }
 
@@ -154,16 +153,16 @@ pub fn update_state_with_alt(
 
     if state.main_screen.is_reordering_commits {
         if let Some(input) = input {
-            writeln!(file, "input: {:?}", input).unwrap();
+            writeln!(file, "input: {input:?}").unwrap();
             match input {
                 Input::KeyUp => {
                     let cursor = state.main_screen.file_cursor;
                     let len = state.main_screen.list_items.len();
-                    writeln!(file, "cursor: {}, len: {}", cursor, len).unwrap();
+                    writeln!(file, "cursor: {cursor}, len: {len}").unwrap();
 
                     if cursor > 0 {
                         let next_item = state.main_screen.list_items.get(cursor - 1);
-                        writeln!(file, "prev_item: {:?}", next_item).unwrap();
+                        writeln!(file, "prev_item: {next_item:?}").unwrap();
 
                         if let Some(MainScreenListItem::PreviousCommitInfo { .. }) = next_item {
                             writeln!(file, "Condition met, executing reorder up").unwrap();
@@ -180,11 +179,11 @@ pub fn update_state_with_alt(
                 Input::KeyDown => {
                     let cursor = state.main_screen.file_cursor;
                     let len = state.main_screen.list_items.len();
-                    writeln!(file, "cursor: {}, len: {}", cursor, len).unwrap();
+                    writeln!(file, "cursor: {cursor}, len: {len}").unwrap();
 
                     if cursor < len - 1 {
                         let next_item = state.main_screen.list_items.get(cursor + 1);
-                        writeln!(file, "next_item: {:?}", next_item).unwrap();
+                        writeln!(file, "next_item: {next_item:?}").unwrap();
 
                         if let Some(MainScreenListItem::PreviousCommitInfo { .. }) = next_item {
                             writeln!(file, "Condition met, executing reorder down").unwrap();

@@ -130,7 +130,11 @@ impl Command for ReorderCommitsCommand {
 
         let mut base_commit_opt: Option<&CommitInfo> = None;
         let mut first_diverged_idx = 0;
-        for (i, (original, reordered)) in original_chrono.iter().zip(reordered_chrono.iter()).enumerate() {
+        for (i, (original, reordered)) in original_chrono
+            .iter()
+            .zip(reordered_chrono.iter())
+            .enumerate()
+        {
             if original == reordered {
                 base_commit_opt = Some(original);
                 first_diverged_idx = i + 1;
@@ -146,18 +150,24 @@ impl Command for ReorderCommitsCommand {
         if let Some(base_commit) = base_commit_opt {
             // Normal case: create branch from the last common commit
             if git::create_branch_at(&self.repo_path, &temp_branch, &base_commit.hash).is_err() {
-                if stashed { let _ = git::pop_stash(&self.repo_path); }
+                if stashed {
+                    let _ = git::pop_stash(&self.repo_path);
+                }
                 return false;
             }
             if git::checkout_branch(&self.repo_path, &temp_branch).is_err() {
                 let _ = git::delete_branch(&self.repo_path, &temp_branch, true);
-                if stashed { let _ = git::pop_stash(&self.repo_path); }
+                if stashed {
+                    let _ = git::pop_stash(&self.repo_path);
+                }
                 return false;
             }
         } else {
             // Root reorder case: create an orphan branch
             if git::checkout_orphan_branch(&self.repo_path, &temp_branch).is_err() {
-                 if stashed { let _ = git::pop_stash(&self.repo_path); }
+                if stashed {
+                    let _ = git::pop_stash(&self.repo_path);
+                }
                 return false;
             }
         }
@@ -193,15 +203,11 @@ impl Command for ReorderCommitsCommand {
             }
 
             // Check if the message needs to be amended
-            let original_commit = self
-                .original_commits
-                .iter()
-                .find(|c| c.hash == commit.hash);
+            let original_commit = self.original_commits.iter().find(|c| c.hash == commit.hash);
 
             if let Some(original) = original_commit {
                 if original.message != commit.message {
-                    if let Err(e) =
-                        git::commit_amend_with_message(&self.repo_path, &commit.message)
+                    if let Err(e) = git::commit_amend_with_message(&self.repo_path, &commit.message)
                     {
                         rebase_failed(e);
                         return false;
@@ -212,7 +218,7 @@ impl Command for ReorderCommitsCommand {
 
         // --- Update original branch ---
         if let Ok(log) = git::run_git_command(&self.repo_path, &["log", "--pretty=%s"]) {
-            eprintln!("--- Temp Branch Log ---\n{}", log);
+            eprintln!("--- Temp Branch Log ---\n{log}");
         }
         if git::checkout_branch(&self.repo_path, &original_branch).is_err() {
             // Recovery is hard here. Leave temp branch for manual recovery.

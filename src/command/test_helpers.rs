@@ -68,7 +68,7 @@ impl TestRepo {
     pub fn get_file_content_at_commit(&self, file_name: &str, hash: &str) -> String {
         let output = OsCommand::new("git")
             .arg("show")
-            .arg(format!("{}:{}", hash, file_name))
+            .arg(format!("{hash}:{file_name}"))
             .current_dir(&self.path)
             .output()
             .unwrap();

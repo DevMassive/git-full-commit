@@ -1,5 +1,5 @@
 use crate::integration::common::{
-    assert_commit_list, generate_test_repo_and_pancurses, select_commit_in_log,
+    generate_test_repo_and_pancurses, select_commit_in_log,
 };
 use git_full_commit::ui::main_screen::ListItem;
 use pancurses::Input;

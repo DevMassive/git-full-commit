@@ -51,7 +51,7 @@ pub enum ListItem {
         cursor: usize,
         is_on_remote: bool,
         is_fixup: bool,
-    }
+    },
 }
 
 pub fn render(window: &Window, state: &AppState) {
@@ -310,18 +310,18 @@ fn render_main_pane(
                 } else {
                     use unicode_width::UnicodeWidthStr;
                     let prefix_width = " ● ".width();
-                let available_width = (max_x as usize).saturating_sub(prefix_width);
-                let mut truncated_message = String::new();
-                let mut current_width = 0;
-                for ch in message.chars() {
-                    let char_width = ch.to_string().width();
-                    if current_width + char_width > available_width {
-                        break;
+                    let available_width = (max_x as usize).saturating_sub(prefix_width);
+                    let mut truncated_message = String::new();
+                    let mut current_width = 0;
+                    for ch in message.chars() {
+                        let char_width = ch.to_string().width();
+                        if current_width + char_width > available_width {
+                            break;
+                        }
+                        truncated_message.push(ch);
+                        current_width += char_width;
                     }
-                    truncated_message.push(ch);
-                    current_width += char_width;
-                }
-                window.addstr(&truncated_message);
+                    window.addstr(&truncated_message);
                 }
                 window.attroff(COLOR_PAIR(pair));
             }
@@ -1006,12 +1006,17 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
         }
     }
 
-
     if state.pending_esc {
         state.pending_esc = false;
         if input == Input::Character('\n') {
             let current_index = state.main_screen.file_cursor;
-            if let Some(ListItem::PreviousCommitInfo { hash, message, is_on_remote, is_fixup }) = state.main_screen.list_items.get(current_index).cloned() {
+            if let Some(ListItem::PreviousCommitInfo {
+                hash,
+                message,
+                is_on_remote,
+                is_fixup,
+            }) = state.main_screen.list_items.get(current_index).cloned()
+            {
                 if !is_on_remote {
                     if let Some(item) = state.main_screen.list_items.get_mut(current_index) {
                         *item = ListItem::EditingReorderCommit {
@@ -1031,7 +1036,11 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
 
     match input {
         Input::Character('q') => {
-            let current_hash = if let Some(item) = state.main_screen.list_items.get(state.main_screen.file_cursor) {
+            let current_hash = if let Some(item) = state
+                .main_screen
+                .list_items
+                .get(state.main_screen.file_cursor)
+            {
                 match item {
                     ListItem::PreviousCommitInfo { hash, .. } => Some(hash.clone()),
                     ListItem::EditingReorderCommit { hash, .. } => Some(hash.clone()),
@@ -1059,10 +1068,12 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
             state.main_screen.is_reordering_commits = false;
             state.reorder_command_history = None;
         }
-        Input::Character('\u{1b}') => { // Esc
+        Input::Character('\u{1b}') => {
+            // Esc
             state.pending_esc = true;
         }
-        Input::Character('\n') => { // Enter
+        Input::Character('\n') => {
+            // Enter
             let original_commits =
                 get_commits_from_list(&state.main_screen.original_list_items_for_reorder);
             let reordered_commits = get_commits_from_list(&state.main_screen.list_items);
@@ -1278,8 +1289,15 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                     return;
                 }
             }
-            Input::Character('\n') => { // Enter
-                if let Some(ListItem::PreviousCommitInfo { hash, message, is_on_remote, is_fixup }) = state.current_main_item().cloned() {
+            Input::Character('\n') => {
+                // Enter
+                if let Some(ListItem::PreviousCommitInfo {
+                    hash,
+                    message,
+                    is_on_remote,
+                    is_fixup,
+                }) = state.current_main_item().cloned()
+                {
                     if !is_on_remote {
                         start_reorder_mode(state);
                         let current_index = state.main_screen.file_cursor;
@@ -1310,9 +1328,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
                     state.unstaged_pane.cursor = unstaged_items_count - 1;
 
                     let (file_list_height, _) = state.unstaged_header_height(max_y);
-                    if state.unstaged_pane.cursor
-                        >= state.unstaged_pane.scroll + file_list_height
-                    {
+                    if state.unstaged_pane.cursor >= state.unstaged_pane.scroll + file_list_height {
                         state.unstaged_pane.scroll =
                             state.unstaged_pane.cursor - file_list_height + 1;
                     }

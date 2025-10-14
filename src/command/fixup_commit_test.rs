@@ -14,7 +14,7 @@ fn get_is_fixup(list: &[ListItem], index: usize) -> bool {
     if let ListItem::PreviousCommitInfo { is_fixup, .. } = &list[index] {
         *is_fixup
     } else {
-        panic!("Expected a commit item at index {}", index);
+        panic!("Expected a commit item at index {index}");
     }
 }
 

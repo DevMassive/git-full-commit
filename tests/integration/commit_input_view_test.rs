@@ -212,7 +212,10 @@ fn test_commit_message_word_movement() {
     assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
     app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
     app_state = update_state(app_state, Some(Input::KeyRight), 80, 80);
-    assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 word3".len());
+    assert_eq!(
+        app_state.main_screen.commit_cursor,
+        "word1 word2 word3".len()
+    );
 
     // Test meta+backspace
     app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
@@ -273,5 +276,8 @@ fn test_commit_message_word_movement_bf() {
     assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
     app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
     app_state = update_state(app_state, Some(Input::Character('f')), 80, 80);
-    assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 word3".len());
+    assert_eq!(
+        app_state.main_screen.commit_cursor,
+        "word1 word2 word3".len()
+    );
 }
