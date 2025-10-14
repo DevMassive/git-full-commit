@@ -58,11 +58,16 @@ This document specifies the behavior of the Commit Log View, which is part of th
 - **Outcome:**
   1.  The application enters "Commit Reordering Mode."
   2.  The selected commit is swapped with its adjacent commit in the direction of the arrow key.
-  3.  In this mode, the Unstaged and Staged panes are hidden, and the Commit Log View expands to fill the screen.
-  4.  A header is displayed at the top, indicating that the user is in reordering mode and showing the available commands.
+  3.  In this mode, the Unstaged and Staged panes are hidden. The screen consists of two panes:
+      1.  **Commit List:** A list of local commits that can be reordered.
+      2.  **Diff View:** Shows the diff for the currently selected commit.
+  4.  The commit list has a maximum height of one-third of the terminal height.
+  5.  A header is displayed at the top, indicating that the user is in reordering mode and showing the available commands.
 
 - **Reordering Mode Commands:**
-  - `Up/Down Arrow`: Swaps the currently selected commit with its neighbor.
+  - `Up/Down Arrow`: Moves the selection in the commit list.
+  - `Alt+Up/Down Arrow`: Swaps the currently selected commit with its neighbor.
+  - `j`/`k`, page up/down, etc.: Navigates the diff view.
   - `f`: Toggles the "fixup" status of the selected commit. When a commit is marked as a fixup, its message will be visually replaced with "fixup!". Upon execution, this commit will be squashed into its preceding commit, and its message will be discarded. Pressing `f` again will revert it to a normal commit.
   - `!`: Discards the currently selected commit. This is a visual change only; the commit is not actually discarded until the reordering is confirmed.
   - `<`: Undoes the last action (swap or discard).

@@ -64,8 +64,14 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
     let diff_view_top = main_pane_offset + main_pane_height;
     let content_height = (max_y as usize).saturating_sub(diff_view_top);
 
-    let num_files = state.files.len();
-    let lines_count =
+    let lines_count = if state.main_screen.is_reordering_commits {
+        state
+            .selected_commit_files
+            .iter()
+            .map(|f| f.lines.len())
+            .sum()
+    } else {
+        let num_files = state.files.len();
         if state.main_screen.file_cursor > 0 && state.main_screen.file_cursor <= num_files {
             state
                 .files
@@ -79,7 +85,8 @@ fn scroll_view(state: &mut AppState, direction: ScrollDirection, amount: ScrollA
                 .sum()
         } else {
             0
-        };
+        }
+    };
 
     let (new_line_cursor, new_scroll) = scroll_content(
         state.main_screen.line_cursor,

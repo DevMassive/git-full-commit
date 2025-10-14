@@ -245,13 +245,19 @@ impl AppState {
     }
 
     pub fn update_selected_commit_diff(&mut self) {
-        if let Some(item) = self.current_main_item() {
-            if let MainScreenListItem::PreviousCommitInfo { hash, .. } = item {
-                self.selected_commit_files =
-                    get_commit_diff(&self.repo_path, hash).unwrap_or_default();
-            } else {
-                self.selected_commit_files.clear();
+        let hash = if let Some(item) = self.current_main_item() {
+            match item {
+                MainScreenListItem::PreviousCommitInfo { hash, .. } => Some(hash.clone()),
+                MainScreenListItem::EditingReorderCommit { hash, .. } => Some(hash.clone()),
+                _ => None,
             }
+        } else {
+            None
+        };
+
+        if let Some(hash) = hash {
+            self.selected_commit_files =
+                get_commit_diff(&self.repo_path, &hash).unwrap_or_default();
         } else {
             self.selected_commit_files.clear();
         }
@@ -288,14 +294,9 @@ impl AppState {
     }
 
     pub fn main_header_height(&self, max_y: i32) -> (usize, usize) {
-        if self.main_screen.is_reordering_commits {
-            let file_list_total_items = self.main_screen.list_items.len();
-            (max_y as usize - 1, file_list_total_items)
-        } else {
-            let file_list_total_items = self.main_screen.list_items.len();
-            let height = (max_y as usize / 3).max(3).min(file_list_total_items);
-            (height, file_list_total_items)
-        }
+        let file_list_total_items = self.main_screen.list_items.len();
+        let height = (max_y as usize / 3).max(3).min(file_list_total_items);
+        (height, file_list_total_items)
     }
 
     pub fn unstaged_header_height(&self, max_y: i32) -> (usize, usize) {

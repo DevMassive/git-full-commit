@@ -71,11 +71,11 @@ pub fn render(window: &Window, state: &AppState) {
         let title_x = (max_x - title.len() as i32) / 2;
         window.mvaddstr(0, title_x, title);
         window.attroff(COLOR_PAIR(1));
-    } else {
-        let main_pane_height = state.main_header_height(max_y).0;
-        let diff_view_top = main_pane_offset + main_pane_height;
-        render_diff_view(window, state, max_y, diff_view_top);
     }
+
+    let main_pane_height = state.main_header_height(max_y).0;
+    let diff_view_top = main_pane_offset + main_pane_height;
+    render_diff_view(window, state, max_y, diff_view_top);
 
     let is_editing_commit = state.is_in_input_mode();
 
@@ -786,7 +786,7 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
 
 fn handle_main_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
     if state.main_screen.is_reordering_commits {
-        handle_reorder_mode_input(state, input, max_y);
+        handle_reorder_mode_input(state, input, max_y, max_x);
         return;
     }
 
@@ -964,7 +964,7 @@ fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
     true
 }
 
-fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
+fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
     if let Some(item) = state
         .main_screen
         .list_items
@@ -1063,6 +1063,9 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
         }
         Input::KeyUp | Input::Character('\u{10}') => {
             state.main_screen.file_cursor = state.main_screen.file_cursor.saturating_sub(1);
+            state.main_screen.diff_scroll = 0;
+            state.main_screen.line_cursor = 0;
+            state.update_selected_commit_diff();
         }
         Input::KeyDown | Input::Character('\u{e}') => {
             let item_count = state.main_screen.list_items.len();
@@ -1070,6 +1073,9 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
                 state.main_screen.file_cursor =
                     state.main_screen.file_cursor.saturating_add(1).min(item_count - 1);
             }
+            state.main_screen.diff_scroll = 0;
+            state.main_screen.line_cursor = 0;
+            state.update_selected_commit_diff();
         }
         Input::Character('f') => {
             let cursor = state.main_screen.file_cursor;
@@ -1116,7 +1122,7 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
                 }
             }
         }
-        _ => scroll::handle_scroll(state, input, max_y),
+        _ => handle_navigation(state, input, max_y, max_x),
     }
 }
 
