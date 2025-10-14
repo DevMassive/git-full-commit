@@ -217,9 +217,6 @@ impl Command for ReorderCommitsCommand {
         }
 
         // --- Update original branch ---
-        if let Ok(log) = git::run_git_command(&self.repo_path, &["log", "--pretty=%s"]) {
-            eprintln!("--- Temp Branch Log ---\n{log}");
-        }
         if git::checkout_branch(&self.repo_path, &original_branch).is_err() {
             // Recovery is hard here. Leave temp branch for manual recovery.
             return false;
