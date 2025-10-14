@@ -125,47 +125,43 @@ pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x
 
 use crate::command::SwapCommitCommand;
 
+fn is_item_on_remote(item: &MainScreenListItem) -> bool {
+    match item {
+        MainScreenListItem::PreviousCommitInfo { is_on_remote, .. } => *is_on_remote,
+        MainScreenListItem::EditingReorderCommit { is_on_remote, .. } => *is_on_remote,
+        _ => false,
+    }
+}
+
 pub fn update_state_with_alt(
     mut state: AppState,
     input: Option<Input>,
     _max_y: i32,
     _max_x: i32,
 ) -> AppState {
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("debug.log")
-        .unwrap();
-    writeln!(file, "in update_state_with_alt").unwrap();
-    writeln!(
-        file,
-        "is_reordering_commits: {}",
-        state.main_screen.is_reordering_commits
-    )
-    .unwrap();
-
     if !state.main_screen.is_reordering_commits {
         if let Some(MainScreenListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
             main_screen::start_reorder_mode(&mut state);
-            writeln!(file, "Started reorder mode automatically").unwrap();
         }
     }
 
     if state.main_screen.is_reordering_commits {
         if let Some(input) = input {
-            writeln!(file, "input: {input:?}").unwrap();
             match input {
                 Input::KeyUp => {
                     let cursor = state.main_screen.file_cursor;
-                    let len = state.main_screen.list_items.len();
-                    writeln!(file, "cursor: {cursor}, len: {len}").unwrap();
-
                     if cursor > 0 {
-                        let next_item = state.main_screen.list_items.get(cursor - 1);
-                        writeln!(file, "prev_item: {next_item:?}").unwrap();
+                        let can_swap = match (
+                            state.main_screen.list_items.get(cursor),
+                            state.main_screen.list_items.get(cursor - 1),
+                        ) {
+                            (Some(item1), Some(item2)) => {
+                                !is_item_on_remote(item1) && !is_item_on_remote(item2)
+                            }
+                            _ => false,
+                        };
 
-                        if let Some(MainScreenListItem::PreviousCommitInfo { .. }) = next_item {
-                            writeln!(file, "Condition met, executing reorder up").unwrap();
+                        if can_swap {
                             let command = Box::new(SwapCommitCommand::new(
                                 &mut state.main_screen.list_items,
                                 cursor,
@@ -178,15 +174,18 @@ pub fn update_state_with_alt(
                 }
                 Input::KeyDown => {
                     let cursor = state.main_screen.file_cursor;
-                    let len = state.main_screen.list_items.len();
-                    writeln!(file, "cursor: {cursor}, len: {len}").unwrap();
+                    if cursor < state.main_screen.list_items.len() - 1 {
+                        let can_swap = match (
+                            state.main_screen.list_items.get(cursor),
+                            state.main_screen.list_items.get(cursor + 1),
+                        ) {
+                            (Some(item1), Some(item2)) => {
+                                !is_item_on_remote(item1) && !is_item_on_remote(item2)
+                            }
+                            _ => false,
+                        };
 
-                    if cursor < len - 1 {
-                        let next_item = state.main_screen.list_items.get(cursor + 1);
-                        writeln!(file, "next_item: {next_item:?}").unwrap();
-
-                        if let Some(MainScreenListItem::PreviousCommitInfo { .. }) = next_item {
-                            writeln!(file, "Condition met, executing reorder down").unwrap();
+                        if can_swap {
                             let command = Box::new(SwapCommitCommand::new(
                                 &mut state.main_screen.list_items,
                                 cursor,
