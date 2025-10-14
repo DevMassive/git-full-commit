@@ -12,10 +12,7 @@ fn test_fixup_commit_in_reorder_mode() {
     // The commit log is ["commit 2", "commit 1", "commit 0"]
     // Select "commit 1" (index 1) to enter reorder mode
     select_commit_in_log(&mut state, 1);
-    pancurses.send_input(Input::Character('\u{1b}')); // ESC (Meta key)
-    state = repo.update_state(state, &mut pancurses);
-    pancurses.send_input(Input::KeyUp); // Enter reorder mode
-    state = repo.update_state(state, &mut pancurses);
+    state = repo.update_state_with_alt(state, &mut pancurses, Input::KeyUp); // Enter reorder mode
 
     // After entering reorder mode, "commit 1" and "commit 2" are swapped,
     // and the cursor is on "commit 1".

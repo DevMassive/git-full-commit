@@ -2,7 +2,7 @@ pub use crate::git_test::common::TestRepo;
 use git_full_commit::app_state::AppState;
 use git_full_commit::git;
 use git_full_commit::ui::main_screen::ListItem;
-use git_full_commit::ui::update::update_state;
+use git_full_commit::ui::update::{update_state, update_state_with_alt};
 use pancurses::Input;
 use std::collections::VecDeque;
 
@@ -69,6 +69,15 @@ impl TestRepo {
 
     pub fn update_state(&self, state: AppState, pancurses: &mut Pancurses) -> AppState {
         let input = pancurses.inputs.pop_front();
-        update_state(state, input, 80, 80)
+        update_state(state, input, 1024, 1024)
+    }
+
+    pub fn update_state_with_alt(
+        &self,
+        state: AppState,
+        _pancurses: &mut Pancurses,
+        input: Input,
+    ) -> AppState {
+        update_state_with_alt(state, Some(input), 1024, 1024)
     }
 }

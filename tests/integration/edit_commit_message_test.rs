@@ -12,11 +12,7 @@ fn test_edit_commit_message() {
     select_commit_in_log(&mut state, 1);
 
     // Press Option + Enter to start editing.
-    // pancurses represents this as ESC followed by the character.
-    pancurses.send_input(Input::Character('\u{1b}')); // ESC
-    state = repo.update_state(state, &mut pancurses);
-    pancurses.send_input(Input::Character('\n')); // Enter
-    state = repo.update_state(state, &mut pancurses);
+    state = repo.update_state_with_alt(state, &mut pancurses, Input::Character('\n')); // Enter
 
     // We are now in reorder mode and editing the commit message.
     // The commit list should be the same, but the UI is in a different mode.
@@ -40,17 +36,17 @@ fn test_edit_commit_message() {
 
     // Press Enter to confirm the message edit.
     pancurses.send_input(Input::Character('\n'));
-    state = repo.update_state(state, &mut pancurses);
-
-    // We are still in reorder mode. The list should now show the new message.
+    let mut state = repo.update_state(state, &mut pancurses);
     assert_commit_list(
         &state.main_screen.list_items,
         &["commit 2", new_message, "commit 0"],
     );
 
-    // Press Enter again to confirm the reorder.
+    state = repo.update_state(state, &mut pancurses);
+
+    // Press Enter to confirm the reorder
     pancurses.send_input(Input::Character('\n'));
-    let state = repo.update_state(state, &mut pancurses);
+    state = repo.update_state(state, &mut pancurses);
 
     // Now the reorder is complete, and the git history should be updated.
     let log = get_log(&repo.path);
@@ -67,10 +63,7 @@ fn test_cancel_edit_commit_message() {
     select_commit_in_log(&mut state, 1);
 
     // Press Option + Enter to start editing.
-    pancurses.send_input(Input::Character('\u{1b}')); // ESC
-    state = repo.update_state(state, &mut pancurses);
-    pancurses.send_input(Input::Character('\n')); // Enter
-    state = repo.update_state(state, &mut pancurses);
+    state = repo.update_state_with_alt(state, &mut pancurses, Input::Character('\n')); // Enter
 
     // Type something
     pancurses.send_input(Input::Character('a'));
@@ -78,7 +71,7 @@ fn test_cancel_edit_commit_message() {
 
     // Press Ctrl+C to cancel the edit
     pancurses.send_input(Input::Character('\u{3}'));
-    state = repo.update_state(state, &mut pancurses);
+    let mut state = repo.update_state(state, &mut pancurses);
 
     // We should still be in reorder mode, but the message should be restored.
     assert_commit_list(
@@ -88,7 +81,7 @@ fn test_cancel_edit_commit_message() {
 
     // Press Esc to cancel the reorder.
     pancurses.send_input(Input::Character('\u{1b}')); // ESC
-    let state = repo.update_state(state, &mut pancurses);
+    state = repo.update_state(state, &mut pancurses);
 
     // The log should be unchanged.
     let log = get_log(&repo.path);

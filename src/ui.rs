@@ -96,8 +96,10 @@ pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>,
                     state =
                         update::update_state_with_alt(state, Some(Input::KeyDown), max_y, max_x);
                 } else {
-                    state = update_state(state, input, max_y, max_x);
+                    state = update_state(state, third_char, max_y, max_x);
                 }
+            } else if let Some(next_input) = next_char {
+                state = update::update_state_with_alt(state, Some(next_input), max_y, max_x);
             } else {
                 state = update_state(state, input, max_y, max_x);
             }

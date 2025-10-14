@@ -2,7 +2,7 @@ use crate::git_test::common::TestRepo;
 use git_full_commit::app_state::AppState;
 use git_full_commit::git;
 use git_full_commit::ui::main_screen::ListItem as MainScreenListItem;
-use git_full_commit::ui::update::update_state;
+use git_full_commit::ui::update::{update_state, update_state_with_alt};
 use pancurses::Input;
 
 #[test]
@@ -193,43 +193,34 @@ fn test_commit_message_word_movement() {
     assert_eq!(app_state.main_screen.commit_cursor, commit_message.len());
 
     // Test meta+left
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::KeyLeft), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::KeyLeft), 80, 80);
     assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::KeyLeft), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::KeyLeft), 80, 80);
     assert_eq!(app_state.main_screen.commit_cursor, "word1 ".len());
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::KeyLeft), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::KeyLeft), 80, 80);
     assert_eq!(app_state.main_screen.commit_cursor, 0);
 
     // Test meta+right
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::KeyRight), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::KeyRight), 80, 80);
     assert_eq!(app_state.main_screen.commit_cursor, "word1 ".len());
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::KeyRight), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::KeyRight), 80, 80);
     assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::KeyRight), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::KeyRight), 80, 80);
     assert_eq!(
         app_state.main_screen.commit_cursor,
         "word1 word2 word3".len()
     );
 
     // Test meta+backspace
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::KeyBackspace), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::KeyBackspace), 80, 80);
     assert_eq!(app_state.main_screen.commit_message, "word1 word2 ");
     assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
 
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::KeyBackspace), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::KeyBackspace), 80, 80);
     assert_eq!(app_state.main_screen.commit_message, "word1 ");
     assert_eq!(app_state.main_screen.commit_cursor, "word1 ".len());
 
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::KeyBackspace), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::KeyBackspace), 80, 80);
     assert_eq!(app_state.main_screen.commit_message, "");
     assert_eq!(app_state.main_screen.commit_cursor, 0);
 }
@@ -257,25 +248,19 @@ fn test_commit_message_word_movement_bf() {
     assert_eq!(app_state.main_screen.commit_cursor, commit_message.len());
 
     // Test meta+b
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::Character('b')), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::Character('b')), 80, 80);
     assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::Character('b')), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::Character('b')), 80, 80);
     assert_eq!(app_state.main_screen.commit_cursor, "word1 ".len());
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::Character('b')), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::Character('b')), 80, 80);
     assert_eq!(app_state.main_screen.commit_cursor, 0);
 
     // Test meta+f
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::Character('f')), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::Character('f')), 80, 80);
     assert_eq!(app_state.main_screen.commit_cursor, "word1 ".len());
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::Character('f')), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::Character('f')), 80, 80);
     assert_eq!(app_state.main_screen.commit_cursor, "word1 word2 ".len());
-    app_state = update_state(app_state, Some(Input::Character('\u{1b}')), 80, 80);
-    app_state = update_state(app_state, Some(Input::Character('f')), 80, 80);
+    app_state = update_state_with_alt(app_state, Some(Input::Character('f')), 80, 80);
     assert_eq!(
         app_state.main_screen.commit_cursor,
         "word1 word2 word3".len()

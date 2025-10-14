@@ -3,7 +3,6 @@ use crate::commit_storage;
 use crate::cursor_state::CursorState;
 use crate::ui::main_screen::{self, ListItem as MainScreenListItem};
 use pancurses::Input;
-use std::io::Write;
 
 pub fn update_state(mut state: AppState, input: Option<Input>, max_y: i32, max_x: i32) -> AppState {
     state.error_message = None;
@@ -136,17 +135,54 @@ fn is_item_on_remote(item: &MainScreenListItem) -> bool {
 pub fn update_state_with_alt(
     mut state: AppState,
     input: Option<Input>,
-    _max_y: i32,
+    max_y: i32,
     _max_x: i32,
 ) -> AppState {
-    if !state.main_screen.is_reordering_commits {
-        if let Some(MainScreenListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
-            main_screen::start_reorder_mode(&mut state);
+    if let Some(input) = input {
+        if state.is_in_input_mode() {
+            main_screen::handle_alt_input(&mut state, input, max_y);
+            return state;
         }
-    }
 
-    if state.main_screen.is_reordering_commits {
-        if let Some(input) = input {
+        if !state.main_screen.is_reordering_commits {
+            if let Some(MainScreenListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
+                match input {
+                    Input::KeyUp | Input::KeyDown => {
+                        main_screen::start_reorder_mode(&mut state);
+                    }
+                    Input::Character('\n') => {
+                        if let Some(MainScreenListItem::PreviousCommitInfo {
+                            hash,
+                            message,
+                            is_on_remote,
+                            is_fixup,
+                        }) = state.current_main_item().cloned()
+                        {
+                            if !is_on_remote {
+                                main_screen::start_reorder_mode(&mut state);
+                                let current_index = state.main_screen.file_cursor;
+                                if let Some(item) =
+                                    state.main_screen.list_items.get_mut(current_index)
+                                {
+                                    *item = MainScreenListItem::EditingReorderCommit {
+                                        hash,
+                                        original_message: message.clone(),
+                                        current_text: message.clone(),
+                                        cursor: message.chars().count(),
+                                        is_on_remote,
+                                        is_fixup,
+                                    };
+                                }
+                            }
+                        }
+                        return state;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if state.main_screen.is_reordering_commits {
             match input {
                 Input::KeyUp => {
                     let cursor = state.main_screen.file_cursor;
@@ -193,6 +229,30 @@ pub fn update_state_with_alt(
                             ));
                             state.execute_reorder_command(command);
                             state.main_screen.file_cursor += 1;
+                        }
+                    }
+                }
+                Input::Character('\n') => {
+                    let current_index = state.main_screen.file_cursor;
+                    if let Some(MainScreenListItem::PreviousCommitInfo {
+                        hash,
+                        message,
+                        is_on_remote,
+                        is_fixup,
+                    }) = state.main_screen.list_items.get(current_index).cloned()
+                    {
+                        if !is_on_remote {
+                            if let Some(item) = state.main_screen.list_items.get_mut(current_index)
+                            {
+                                *item = MainScreenListItem::EditingReorderCommit {
+                                    hash,
+                                    original_message: message.clone(),
+                                    current_text: message.clone(),
+                                    cursor: message.chars().count(),
+                                    is_on_remote,
+                                    is_fixup,
+                                };
+                            }
                         }
                     }
                 }

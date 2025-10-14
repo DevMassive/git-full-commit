@@ -60,8 +60,7 @@ pub fn render(
     let (message, placeholder) =
         if let Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput {
             message, ..
-        }) = state.current_main_item()
-        {
+        }) = state.current_main_item() {
             (message.as_str(), "Enter amend message...")
         } else {
             (
@@ -100,77 +99,76 @@ pub fn render(
     }
 }
 
+pub fn handle_generic_text_input_with_alt(
+    text: &mut String,
+    cursor: &mut usize,
+    input: Input,
+) {
+    match input {
+        Input::KeyLeft | Input::Character('b') => {
+            let message_chars: Vec<char> = text.chars().collect();
+            let mut i = cursor.saturating_sub(1);
+            while i > 0 && message_chars.get(i).is_some_and(|c| c.is_whitespace()) {
+                i -= 1;
+            }
+            while i > 0 && message_chars.get(i).is_some_and(|c| !c.is_whitespace()) {
+                i -= 1;
+            }
+            if i > 0 && message_chars.get(i).is_some_and(|c| c.is_whitespace()) {
+                i += 1;
+            }
+            *cursor = i;
+        }
+        Input::KeyRight | Input::Character('f') => {
+            let message_chars: Vec<char> = text.chars().collect();
+            let len = message_chars.len();
+            let mut i = *cursor;
+            while i < len && message_chars.get(i).is_some_and(|c| !c.is_whitespace()) {
+                i += 1;
+            }
+            while i < len && message_chars.get(i).is_some_and(|c| c.is_whitespace()) {
+                i += 1;
+            }
+            *cursor = i;
+        }
+        Input::KeyBackspace | Input::Character('\x7f') | Input::Character('\x08') => {
+            let cursor_pos = *cursor;
+            if cursor_pos > 0 {
+                let message_before_cursor: String = text.chars().take(cursor_pos).collect();
+                let new_cursor_pos = if let Some(pos) =
+                    message_before_cursor.rfind(|c: char| !c.is_whitespace())
+                {
+                    if let Some(pos) = message_before_cursor[..pos].rfind(char::is_whitespace) {
+                        pos + 1
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+
+                let start_byte = text
+                    .char_indices()
+                    .nth(new_cursor_pos)
+                    .map_or(0, |(idx, _)| idx);
+                let end_byte = text
+                    .char_indices()
+                    .nth(cursor_pos)
+                    .map_or(text.len(), |(idx, _)| idx);
+
+                text.replace_range(start_byte..end_byte, "");
+                *cursor = new_cursor_pos;
+            }
+        }
+        _ => {}
+    }
+}
+
 pub fn handle_generic_text_input(
     text: &mut String,
     cursor: &mut usize,
-    pending_esc: &mut bool,
     input: Input,
 ) {
-    if *pending_esc {
-        *pending_esc = false;
-        match input {
-            Input::KeyLeft | Input::Character('b') => {
-                let message_chars: Vec<char> = text.chars().collect();
-                let mut i = cursor.saturating_sub(1);
-                while i > 0 && message_chars.get(i).is_some_and(|c| c.is_whitespace()) {
-                    i -= 1;
-                }
-                while i > 0 && message_chars.get(i).is_some_and(|c| !c.is_whitespace()) {
-                    i -= 1;
-                }
-                if i > 0 && message_chars.get(i).is_some_and(|c| c.is_whitespace()) {
-                    i += 1;
-                }
-                *cursor = i;
-                return;
-            }
-            Input::KeyRight | Input::Character('f') => {
-                let message_chars: Vec<char> = text.chars().collect();
-                let len = message_chars.len();
-                let mut i = *cursor;
-                while i < len && message_chars.get(i).is_some_and(|c| !c.is_whitespace()) {
-                    i += 1;
-                }
-                while i < len && message_chars.get(i).is_some_and(|c| c.is_whitespace()) {
-                    i += 1;
-                }
-                *cursor = i;
-                return;
-            }
-            Input::KeyBackspace | Input::Character('\x7f') | Input::Character('\x08') => {
-                let cursor_pos = *cursor;
-                if cursor_pos > 0 {
-                    let message_before_cursor: String = text.chars().take(cursor_pos).collect();
-                    let new_cursor_pos = if let Some(pos) =
-                        message_before_cursor.rfind(|c: char| !c.is_whitespace())
-                    {
-                        if let Some(pos) = message_before_cursor[..pos].rfind(char::is_whitespace) {
-                            pos + 1
-                        } else {
-                            0
-                        }
-                    } else {
-                        0
-                    };
-
-                    let start_byte = text
-                        .char_indices()
-                        .nth(new_cursor_pos)
-                        .map_or(0, |(idx, _)| idx);
-                    let end_byte = text
-                        .char_indices()
-                        .nth(cursor_pos)
-                        .map_or(text.len(), |(idx, _)| idx);
-
-                    text.replace_range(start_byte..end_byte, "");
-                    *cursor = new_cursor_pos;
-                }
-                return;
-            }
-            _ => {}
-        }
-    }
-
     match input {
         Input::KeyBackspace | Input::Character('\x7f') | Input::Character('\x08') => {
             if *cursor > 0 {
@@ -196,9 +194,7 @@ pub fn handle_generic_text_input(
             *cursor = cursor.saturating_add(1).min(message_len);
         }
         Input::Character(c) => {
-            if c == '\u{1b}' {
-                *pending_esc = true;
-            } else if c == '\u{1}' {
+            if c == '\u{1}' {
                 // Ctrl-A: beginning of line
                 *cursor = 0;
             } else if c == '\u{5}' {
@@ -223,6 +219,36 @@ pub fn handle_generic_text_input(
             }
         }
         _ => {}
+    }
+}
+
+pub fn handle_commit_input_with_alt(state: &mut AppState, input: Input) {
+    let is_amend = matches!(
+        state.current_main_item(),
+        Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput { .. })
+    );
+
+    let (message_to_edit, cursor_to_edit) = if is_amend {
+        if let Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput {
+            message, ..
+        }) = state
+            .main_screen
+            .list_items
+            .get_mut(state.main_screen.file_cursor)
+        {
+            (Some(message), Some(&mut state.main_screen.commit_cursor))
+        } else {
+            (None, None)
+        }
+    } else {
+        (
+            Some(&mut state.main_screen.commit_message),
+            Some(&mut state.main_screen.commit_cursor),
+        )
+    };
+
+    if let (Some(message), Some(cursor)) = (message_to_edit, cursor_to_edit) {
+        handle_generic_text_input_with_alt(message, cursor, input);
     }
 }
 
@@ -300,7 +326,7 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
             state.refresh_diff(true);
         }
     } else {
-        handle_generic_text_input(message, cursor, &mut state.pending_esc, input);
+        handle_generic_text_input(message, cursor, input);
         if !is_amend {
             let _ = commit_storage::save_commit_message(&state.repo_path, message);
         }

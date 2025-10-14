@@ -61,7 +61,6 @@ pub struct AppState {
     pub focused_pane: FocusedPane,
     pub editor_request: Option<EditorRequest>,
     pub error_message: Option<String>,
-    pub pending_esc: bool,
 }
 impl AppState {
     pub fn new(repo_path: PathBuf, files: Vec<FileDiff>) -> Self {
@@ -104,7 +103,6 @@ impl AppState {
             focused_pane,
             editor_request: None,
             error_message: None,
-            pending_esc: false,
         };
         s.update_selected_commit_diff();
         s

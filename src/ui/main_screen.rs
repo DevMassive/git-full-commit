@@ -1,10 +1,9 @@
 use crate::app_state::{AppState, EditorRequest, FocusedPane};
-use crate::command::{
-    ApplyPatchCommand, CheckoutFileCommand, CommandHistory, DeleteUntrackedFileCommand,
+use crate::command::{ApplyPatchCommand, CheckoutFileCommand, CommandHistory, DeleteUntrackedFileCommand,
     DiscardCommitCommand, DiscardFileCommand, DiscardHunkCommand, DiscardUnstagedHunkCommand,
     IgnoreFileCommand, IgnoreUnstagedTrackedFileCommand, IgnoreUntrackedFileCommand,
     StageAllCommand, StageFileCommand, StagePatchCommand, StageUnstagedCommand,
-    StageUntrackedCommand, SwapCommitCommand, UnstageAllCommand, UnstageFileCommand,
+    StageUntrackedCommand, UnstageAllCommand, UnstageFileCommand,
 };
 use crate::commit_storage;
 use crate::git::{self, FileStatus};
@@ -278,8 +277,7 @@ fn render_main_pane(
                 }
             }
             ListItem::PreviousCommitInfo {
-                hash: _,
-                message,
+                hash: _, message,
                 is_on_remote,
                 is_fixup,
             } => {
@@ -332,7 +330,7 @@ fn render_main_pane(
             ListItem::EditingReorderCommit {
                 current_text,
                 cursor,
-                ..
+                .. 
             } => {
                 if is_selected {
                     (carret_x, carret_y) = commit_view::render_editor(
@@ -439,6 +437,24 @@ fn render_diff_view(window: &Window, state: &AppState, max_y: i32, top_offset: u
     }
 }
 
+pub fn handle_alt_input(state: &mut AppState, input: Input, _max_y: i32) {
+    if let Some(item) = state
+        .main_screen
+        .list_items
+        .get_mut(state.main_screen.file_cursor)
+    {
+        if let ListItem::EditingReorderCommit {
+            current_text,
+            cursor,
+            .. 
+        } = item {
+            commit_view::handle_generic_text_input_with_alt(current_text, cursor, input);
+        } else {
+            commit_view::handle_commit_input_with_alt(state, input);
+        }
+    }
+}
+
 pub fn handle_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
     match state.focused_pane {
         crate::app_state::FocusedPane::Main => {
@@ -485,11 +501,8 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
                 return;
             }
 
-            state.unstaged_pane.cursor = state
-                .unstaged_pane
-                .cursor
-                .saturating_add(1)
-                .min(unstaged_items_count.saturating_sub(1));
+            state.unstaged_pane.cursor =
+                state.unstaged_pane.cursor.saturating_add(1).min(unstaged_items_count.saturating_sub(1));
             state.unstaged_pane.diff_scroll = 0;
             state.main_screen.line_cursor = 0;
             state.unstaged_pane.is_diff_cursor_active = false;
@@ -537,8 +550,7 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
                 let diff_view_top = main_pane_offset + main_pane_height;
                 let content_height = (max_y as usize).saturating_sub(diff_view_top);
 
-                if state.main_screen.line_cursor >= state.unstaged_pane.diff_scroll + content_height
-                {
+                if state.main_screen.line_cursor >= state.unstaged_pane.diff_scroll + content_height {
                     state.unstaged_pane.diff_scroll =
                         state.main_screen.line_cursor - content_height + 1;
                 }
@@ -546,17 +558,13 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
         }
         Input::KeyLeft => {
             let scroll_amount = (max_x as usize).saturating_sub(diff_view::LINE_CONTENT_OFFSET);
-            state.unstaged_pane.horizontal_scroll = state
-                .unstaged_pane
-                .horizontal_scroll
-                .saturating_sub(scroll_amount);
+            state.unstaged_pane.horizontal_scroll =
+                state.unstaged_pane.horizontal_scroll.saturating_sub(scroll_amount);
         }
         Input::KeyRight => {
             let scroll_amount = (max_x as usize).saturating_sub(diff_view::LINE_CONTENT_OFFSET);
-            state.unstaged_pane.horizontal_scroll = state
-                .unstaged_pane
-                .horizontal_scroll
-                .saturating_add(scroll_amount);
+            state.unstaged_pane.horizontal_scroll =
+                state.unstaged_pane.horizontal_scroll.saturating_add(scroll_amount);
         }
         Input::Character('\n') | Input::Character('u') => {
             match state
@@ -823,9 +831,6 @@ fn unstage_line(state: &mut AppState, max_y: i32) {
 }
 
 fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
-    if state.pending_esc {
-        return false;
-    }
     match input {
         Input::Character('q') => {
             if state.main_screen.is_diff_cursor_active {
@@ -997,41 +1002,12 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
                     commit_view::handle_generic_text_input(
                         current_text,
                         cursor,
-                        &mut state.pending_esc,
                         input,
                     );
                 }
             }
             return;
         }
-    }
-
-    if state.pending_esc {
-        state.pending_esc = false;
-        if input == Input::Character('\n') {
-            let current_index = state.main_screen.file_cursor;
-            if let Some(ListItem::PreviousCommitInfo {
-                hash,
-                message,
-                is_on_remote,
-                is_fixup,
-            }) = state.main_screen.list_items.get(current_index).cloned()
-            {
-                if !is_on_remote {
-                    if let Some(item) = state.main_screen.list_items.get_mut(current_index) {
-                        *item = ListItem::EditingReorderCommit {
-                            hash,
-                            original_message: message.clone(),
-                            current_text: message.clone(),
-                            cursor: message.chars().count(),
-                            is_on_remote,
-                            is_fixup,
-                        };
-                    }
-                }
-            }
-        }
-        return;
     }
 
     match input {
@@ -1068,10 +1044,6 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
             state.main_screen.is_reordering_commits = false;
             state.reorder_command_history = None;
         }
-        Input::Character('\u{1b}') => {
-            // Esc
-            state.pending_esc = true;
-        }
         Input::Character('\n') => {
             // Enter
             let original_commits =
@@ -1095,11 +1067,8 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
         Input::KeyDown | Input::Character('\u{e}') => {
             let item_count = state.main_screen.list_items.len();
             if item_count > 0 {
-                state.main_screen.file_cursor = state
-                    .main_screen
-                    .file_cursor
-                    .saturating_add(1)
-                    .min(item_count - 1);
+                state.main_screen.file_cursor =
+                    state.main_screen.file_cursor.saturating_add(1).min(item_count - 1);
             }
         }
         Input::Character('f') => {
@@ -1246,79 +1215,6 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         state.main_screen.amending_commit_hash = None;
     }
 
-    if state.pending_esc {
-        state.pending_esc = false;
-        match input {
-            Input::KeyUp => {
-                if let Some(ListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
-                    start_reorder_mode(state);
-                    let cursor = state.main_screen.file_cursor;
-                    if cursor > 0 {
-                        if let Some(ListItem::PreviousCommitInfo { .. }) =
-                            state.main_screen.list_items.get(cursor - 1)
-                        {
-                            let command = Box::new(SwapCommitCommand::new(
-                                &mut state.main_screen.list_items,
-                                cursor,
-                                cursor - 1,
-                            ));
-                            state.execute_reorder_command(command);
-                            state.main_screen.file_cursor -= 1;
-                        }
-                    }
-                    return;
-                }
-            }
-            Input::KeyDown => {
-                if let Some(ListItem::PreviousCommitInfo { .. }) = state.current_main_item() {
-                    start_reorder_mode(state);
-                    let cursor = state.main_screen.file_cursor;
-                    if cursor < state.main_screen.list_items.len() - 1 {
-                        if let Some(ListItem::PreviousCommitInfo { .. }) =
-                            state.main_screen.list_items.get(cursor + 1)
-                        {
-                            let command = Box::new(SwapCommitCommand::new(
-                                &mut state.main_screen.list_items,
-                                cursor,
-                                cursor + 1,
-                            ));
-                            state.execute_reorder_command(command);
-                            state.main_screen.file_cursor += 1;
-                        }
-                    }
-                    return;
-                }
-            }
-            Input::Character('\n') => {
-                // Enter
-                if let Some(ListItem::PreviousCommitInfo {
-                    hash,
-                    message,
-                    is_on_remote,
-                    is_fixup,
-                }) = state.current_main_item().cloned()
-                {
-                    if !is_on_remote {
-                        start_reorder_mode(state);
-                        let current_index = state.main_screen.file_cursor;
-                        if let Some(item) = state.main_screen.list_items.get_mut(current_index) {
-                            *item = ListItem::EditingReorderCommit {
-                                hash,
-                                original_message: message.clone(),
-                                current_text: message.clone(),
-                                cursor: message.chars().count(),
-                                is_on_remote,
-                                is_fixup,
-                            };
-                        }
-                    }
-                    return;
-                }
-            }
-            _ => {}
-        }
-    }
-
     match input {
         Input::KeyUp | Input::Character('\u{10}') => {
             if state.main_screen.file_cursor == 0 && state.main_screen.has_unstaged_changes {
@@ -1408,20 +1304,13 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         }
         Input::KeyLeft => {
             let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
-            state.main_screen.horizontal_scroll = state
-                .main_screen
-                .horizontal_scroll
-                .saturating_sub(scroll_amount);
+            state.main_screen.horizontal_scroll =
+                state.main_screen.horizontal_scroll.saturating_sub(scroll_amount);
         }
         Input::KeyRight => {
             let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
-            state.main_screen.horizontal_scroll = state
-                .main_screen
-                .horizontal_scroll
-                .saturating_add(scroll_amount);
-        }
-        Input::Character('\u{1b}') => {
-            state.pending_esc = true;
+            state.main_screen.horizontal_scroll =
+                state.main_screen.horizontal_scroll.saturating_add(scroll_amount);
         }
         _ => {
             if let Some(ListItem::CommitMessageInput) = state

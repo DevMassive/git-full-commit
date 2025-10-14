@@ -173,7 +173,7 @@ impl Command for ReorderCommitsCommand {
         }
 
         // --- Re-create history on temp branch ---
-        let rebase_failed = |e: anyhow::Error| {
+        let rebase_failed = |_e: anyhow::Error| {
             let _ = git::cherry_pick_abort(&self.repo_path);
             let _ = git::checkout_branch(&self.repo_path, &original_branch);
             let _ = git::delete_branch(&self.repo_path, &temp_branch, true);
