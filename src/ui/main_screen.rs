@@ -1079,35 +1079,16 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32) {
             state.reorder_command_history = None;
         }
         Input::KeyUp | Input::Character('\u{10}') => {
-            let cursor = state.main_screen.file_cursor;
-            if cursor > 0 {
-                if let Some(ListItem::PreviousCommitInfo { .. }) =
-                    state.main_screen.list_items.get(cursor - 1)
-                {
-                    let command = Box::new(SwapCommitCommand::new(
-                        &mut state.main_screen.list_items,
-                        cursor,
-                        cursor - 1,
-                    ));
-                    state.execute_reorder_command(command);
-                    state.main_screen.file_cursor -= 1;
-                }
-            }
+            state.main_screen.file_cursor = state.main_screen.file_cursor.saturating_sub(1);
         }
         Input::KeyDown | Input::Character('\u{e}') => {
-            let cursor = state.main_screen.file_cursor;
-            if cursor < state.main_screen.list_items.len() - 1 {
-                if let Some(ListItem::PreviousCommitInfo { .. }) =
-                    state.main_screen.list_items.get(cursor + 1)
-                {
-                    let command = Box::new(SwapCommitCommand::new(
-                        &mut state.main_screen.list_items,
-                        cursor,
-                        cursor + 1,
-                    ));
-                    state.execute_reorder_command(command);
-                    state.main_screen.file_cursor += 1;
-                }
+            let item_count = state.main_screen.list_items.len();
+            if item_count > 0 {
+                state.main_screen.file_cursor = state
+                    .main_screen
+                    .file_cursor
+                    .saturating_add(1)
+                    .min(item_count - 1);
             }
         }
         Input::Character('f') => {
