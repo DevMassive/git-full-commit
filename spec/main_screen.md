@@ -88,6 +88,16 @@ When the Bottom Pane is focused, the user can perform the following operations:
   - **User Action:** Press `R`.
   - **Expected Outcome:** All unstaged and untracked files are staged. See `spec/stage_operations.md` for details.
 
+### 3.5. Keyboard Input Summary
+
+The main screen processes keyboard input in layers so global intent is handled before pane-specific logic.
+
+- **Global Keys:** `Tab`, `Ctrl-C`, `Q`, `<`, `>`, and `R` are treated as global commands when focus is not inside a text field. These shortcuts apply regardless of the active pane.
+- **Navigation Keys:** Arrow keys share bindings with `Ctrl-P`/`Ctrl-N` (`Up`/`Down`) to move within the current pane. When the cursor reaches the bottom of the Unstaged pane, focus automatically transfers to the Main pane.
+- **Diff Navigation:** `j` and `k` activate diff focus and step the diff cursor within the currently selected file.
+- **Context Keys:** Pane-specific actions (`enter`, `space`, `u`, `!`, `i`, etc.) are resolved after global and navigation handling, ensuring actions only fire when the relevant pane is focused.
+- **Text Input:** When the commit message or reorder editor is active, character input and editing commands are routed directly to the text editor logic described in `spec/commit_input_view.md`.
+
 ## 4. Initial State
 
 - When the application starts, the Main Screen is displayed.

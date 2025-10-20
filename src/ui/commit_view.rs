@@ -60,7 +60,8 @@ pub fn render(
     let (message, placeholder) =
         if let Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput {
             message, ..
-        }) = state.current_main_item() {
+        }) = state.current_main_item()
+        {
             (message.as_str(), "Enter amend message...")
         } else {
             (
@@ -85,10 +86,7 @@ pub fn render(
         window.addstr(placeholder);
         window.attroff(COLOR_PAIR(placeholder_pair));
         window.attroff(COLOR_PAIR(pair));
-        (
-            prefix.width().try_into().unwrap_or_default(),
-            line_y,
-        )
+        (prefix.width().try_into().unwrap_or_default(), line_y)
     } else {
         render_editor(
             window,
@@ -102,11 +100,7 @@ pub fn render(
     }
 }
 
-pub fn handle_generic_text_input_with_alt(
-    text: &mut String,
-    cursor: &mut usize,
-    input: Input,
-) {
+pub fn handle_generic_text_input_with_alt(text: &mut String, cursor: &mut usize, input: Input) {
     match input {
         Input::KeyLeft | Input::Character('b') => {
             let message_chars: Vec<char> = text.chars().collect();
@@ -138,17 +132,16 @@ pub fn handle_generic_text_input_with_alt(
             let cursor_pos = *cursor;
             if cursor_pos > 0 {
                 let message_before_cursor: String = text.chars().take(cursor_pos).collect();
-                let new_cursor_pos = if let Some(pos) =
-                    message_before_cursor.rfind(|c: char| !c.is_whitespace())
-                {
-                    if let Some(pos) = message_before_cursor[..pos].rfind(char::is_whitespace) {
-                        pos + 1
+                let new_cursor_pos =
+                    if let Some(pos) = message_before_cursor.rfind(|c: char| !c.is_whitespace()) {
+                        if let Some(pos) = message_before_cursor[..pos].rfind(char::is_whitespace) {
+                            pos + 1
+                        } else {
+                            0
+                        }
                     } else {
                         0
-                    }
-                } else {
-                    0
-                };
+                    };
 
                 let start_byte = text
                     .char_indices()
@@ -167,11 +160,7 @@ pub fn handle_generic_text_input_with_alt(
     }
 }
 
-pub fn handle_generic_text_input(
-    text: &mut String,
-    cursor: &mut usize,
-    input: Input,
-) {
+pub fn handle_generic_text_input(text: &mut String, cursor: &mut usize, input: Input) {
     match input {
         Input::KeyBackspace | Input::Character('\x7f') | Input::Character('\x08') => {
             if *cursor > 0 {

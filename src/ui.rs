@@ -1,6 +1,7 @@
 mod color;
 pub mod commit_view;
 mod diff_view;
+mod keyboard;
 pub mod main_screen;
 mod render;
 pub mod scroll;

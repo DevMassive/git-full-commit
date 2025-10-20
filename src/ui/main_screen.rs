@@ -1,5 +1,6 @@
 use crate::app_state::{AppState, EditorRequest, FocusedPane};
-use crate::command::{ApplyPatchCommand, CheckoutFileCommand, CommandHistory, DeleteUntrackedFileCommand,
+use crate::command::{
+    ApplyPatchCommand, CheckoutFileCommand, CommandHistory, DeleteUntrackedFileCommand,
     DiscardCommitCommand, DiscardFileCommand, DiscardHunkCommand, DiscardUnstagedHunkCommand,
     IgnoreFileCommand, IgnoreUnstagedTrackedFileCommand, IgnoreUntrackedFileCommand,
     StageAllCommand, StageFileCommand, StagePatchCommand, StageUnstagedCommand,
@@ -13,6 +14,10 @@ use crate::ui::diff_view::LINE_CONTENT_OFFSET;
 use crate::ui::scroll;
 use pancurses::Input;
 
+use super::keyboard::{
+    is_diff_move_down, is_diff_move_up, is_horizontal_left, is_horizontal_right, is_move_down,
+    is_move_up, is_stage_toggle, is_vertical_navigation,
+};
 use crate::git_patch;
 use pancurses::{COLOR_PAIR, Window};
 
@@ -277,7 +282,8 @@ fn render_main_pane(
                 }
             }
             ListItem::PreviousCommitInfo {
-                hash: _, message,
+                hash: _,
+                message,
                 is_on_remote,
                 is_fixup,
             } => {
@@ -330,7 +336,7 @@ fn render_main_pane(
             ListItem::EditingReorderCommit {
                 current_text,
                 cursor,
-                .. 
+                ..
             } => {
                 if is_selected {
                     (carret_x, carret_y) = commit_view::render_editor(
@@ -446,8 +452,9 @@ pub fn handle_alt_input(state: &mut AppState, input: Input, _max_y: i32) {
         if let ListItem::EditingReorderCommit {
             current_text,
             cursor,
-            .. 
-        } = item {
+            ..
+        } = item
+        {
             commit_view::handle_generic_text_input_with_alt(current_text, cursor, input);
         } else {
             commit_view::handle_commit_input_with_alt(state, input);
@@ -469,179 +476,204 @@ pub fn handle_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) 
 fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
     let (file_list_height, unstaged_items_count) = state.unstaged_header_height(max_y);
 
-    match input {
-        Input::Character('q') => {
-            if state.unstaged_pane.is_diff_cursor_active {
-                state.unstaged_pane.is_diff_cursor_active = false;
-            } else {
-                let _ = commit_storage::save_commit_message(
-                    &state.repo_path,
-                    &state.main_screen.commit_message,
-                );
-                state.running = false;
-            }
-        }
-        Input::KeyUp | Input::Character('\u{10}') => {
-            state.unstaged_pane.cursor = state.unstaged_pane.cursor.saturating_sub(1);
-            state.unstaged_pane.diff_scroll = 0;
-            state.main_screen.line_cursor = 0;
-            state.unstaged_pane.is_diff_cursor_active = false;
-            if state.unstaged_pane.cursor < state.unstaged_pane.scroll {
-                state.unstaged_pane.scroll = state.unstaged_pane.cursor;
-            }
-        }
-        Input::KeyDown | Input::Character('\u{e}') => {
-            if unstaged_items_count > 0
-                && state.unstaged_pane.cursor == unstaged_items_count - 1
-                && !state.main_screen.list_items.is_empty()
-            {
-                state.focused_pane = FocusedPane::Main;
-                state.main_screen.file_cursor = 0;
-                state.main_screen.file_list_scroll = 0;
-                return;
-            }
+    if handle_unstaged_quit(state, &input) {
+        return;
+    }
 
-            state.unstaged_pane.cursor =
-                state.unstaged_pane.cursor.saturating_add(1).min(unstaged_items_count.saturating_sub(1));
-            state.unstaged_pane.diff_scroll = 0;
-            state.main_screen.line_cursor = 0;
+    if handle_unstaged_vertical_navigation(state, &input, file_list_height, unstaged_items_count) {
+        return;
+    }
+
+    if handle_unstaged_diff_navigation(state, &input, max_y) {
+        return;
+    }
+
+    if handle_unstaged_horizontal_scroll(state, &input, max_x) {
+        return;
+    }
+
+    if handle_unstaged_stage_action(state, &input, max_y) {
+        return;
+    }
+
+    if handle_unstaged_stage_line(state, &input, max_y) {
+        return;
+    }
+
+    if handle_unstaged_stage_all(state, &input) {
+        return;
+    }
+
+    if handle_unstaged_open_editor(state, &input) {
+        return;
+    }
+
+    if handle_unstaged_discard(state, &input) {
+        return;
+    }
+
+    if handle_unstaged_ignore(state, &input) {
+        return;
+    }
+
+    scroll::handle_scroll(state, input, max_y);
+}
+
+fn handle_unstaged_quit(state: &mut AppState, input: &Input) -> bool {
+    if matches!(input, Input::Character('q')) {
+        if state.unstaged_pane.is_diff_cursor_active {
             state.unstaged_pane.is_diff_cursor_active = false;
-            if state.unstaged_pane.cursor >= state.unstaged_pane.scroll + file_list_height {
-                state.unstaged_pane.scroll = state.unstaged_pane.cursor - file_list_height + 1;
-            }
+        } else {
+            let _ = commit_storage::save_commit_message(
+                &state.repo_path,
+                &state.main_screen.commit_message,
+            );
+            state.running = false;
         }
-        Input::Character('k') => {
-            state.unstaged_pane.is_diff_cursor_active = true;
-            state.main_screen.line_cursor = state.main_screen.line_cursor.saturating_sub(1);
-            if state.main_screen.line_cursor < state.unstaged_pane.diff_scroll {
-                state.unstaged_pane.diff_scroll = state.main_screen.line_cursor;
-            }
+        return true;
+    }
+    false
+}
+
+fn handle_unstaged_vertical_navigation(
+    state: &mut AppState,
+    input: &Input,
+    file_list_height: usize,
+    total_items: usize,
+) -> bool {
+    if is_move_up(input) {
+        state.unstaged_pane.cursor = state.unstaged_pane.cursor.saturating_sub(1);
+        state.unstaged_pane.diff_scroll = 0;
+        state.main_screen.line_cursor = 0;
+        state.unstaged_pane.is_diff_cursor_active = false;
+        if state.unstaged_pane.cursor < state.unstaged_pane.scroll {
+            state.unstaged_pane.scroll = state.unstaged_pane.cursor;
         }
-        Input::Character('j') => {
-            state.unstaged_pane.is_diff_cursor_active = true;
-            let file_lines_count = match state
-                .unstaged_pane
-                .list_items
-                .get(state.unstaged_pane.cursor)
-            {
-                Some(UnstagedListItem::File(file)) => file.lines.len(),
-                Some(UnstagedListItem::UntrackedFile(file_name)) => {
-                    if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_name) {
-                        if is_binary(&content) {
-                            1
-                        } else {
-                            String::from_utf8_lossy(&content).lines().count()
-                        }
-                    } else {
+        return true;
+    }
+
+    if is_move_down(input) {
+        if total_items > 0
+            && state.unstaged_pane.cursor == total_items - 1
+            && !state.main_screen.list_items.is_empty()
+        {
+            state.focused_pane = FocusedPane::Main;
+            state.main_screen.file_cursor = 0;
+            state.main_screen.file_list_scroll = 0;
+            return true;
+        }
+
+        state.unstaged_pane.cursor = state
+            .unstaged_pane
+            .cursor
+            .saturating_add(1)
+            .min(total_items.saturating_sub(1));
+        state.unstaged_pane.diff_scroll = 0;
+        state.main_screen.line_cursor = 0;
+        state.unstaged_pane.is_diff_cursor_active = false;
+        if state.unstaged_pane.cursor >= state.unstaged_pane.scroll + file_list_height {
+            state.unstaged_pane.scroll = state.unstaged_pane.cursor - file_list_height + 1;
+        }
+        return true;
+    }
+
+    false
+}
+
+fn handle_unstaged_diff_navigation(state: &mut AppState, input: &Input, max_y: i32) -> bool {
+    if is_diff_move_up(input) {
+        state.unstaged_pane.is_diff_cursor_active = true;
+        state.main_screen.line_cursor = state.main_screen.line_cursor.saturating_sub(1);
+        if state.main_screen.line_cursor < state.unstaged_pane.diff_scroll {
+            state.unstaged_pane.diff_scroll = state.main_screen.line_cursor;
+        }
+        return true;
+    }
+
+    if is_diff_move_down(input) {
+        state.unstaged_pane.is_diff_cursor_active = true;
+        let file_lines_count = match state
+            .unstaged_pane
+            .list_items
+            .get(state.unstaged_pane.cursor)
+        {
+            Some(UnstagedListItem::File(file)) => file.lines.len(),
+            Some(UnstagedListItem::UntrackedFile(file_name)) => {
+                if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_name) {
+                    if is_binary(&content) {
                         1
-                    }
-                }
-                _ => 0,
-            };
-
-            if state.main_screen.line_cursor < file_lines_count.saturating_sub(1) {
-                state.main_screen.line_cursor += 1;
-
-                let mut main_pane_offset = 0;
-                if state.main_screen.has_unstaged_changes {
-                    main_pane_offset = state.unstaged_header_height(max_y).0 + 1;
-                }
-                let main_pane_height = state.main_header_height(max_y).0;
-                let diff_view_top = main_pane_offset + main_pane_height;
-                let content_height = (max_y as usize).saturating_sub(diff_view_top);
-
-                if state.main_screen.line_cursor >= state.unstaged_pane.diff_scroll + content_height {
-                    state.unstaged_pane.diff_scroll =
-                        state.main_screen.line_cursor - content_height + 1;
-                }
-            }
-        }
-        Input::KeyLeft => {
-            let scroll_amount = (max_x as usize).saturating_sub(diff_view::LINE_CONTENT_OFFSET);
-            state.unstaged_pane.horizontal_scroll =
-                state.unstaged_pane.horizontal_scroll.saturating_sub(scroll_amount);
-        }
-        Input::KeyRight => {
-            let scroll_amount = (max_x as usize).saturating_sub(diff_view::LINE_CONTENT_OFFSET);
-            state.unstaged_pane.horizontal_scroll =
-                state.unstaged_pane.horizontal_scroll.saturating_add(scroll_amount);
-        }
-        Input::Character('\n') | Input::Character('u') => {
-            match state
-                .unstaged_pane
-                .list_items
-                .get(state.unstaged_pane.cursor)
-            {
-                Some(UnstagedListItem::UnstagedChangesHeader) => {
-                    let command = Box::new(StageUnstagedCommand::new(state.repo_path.clone()));
-                    state.execute_and_refresh(command);
-                }
-                Some(UnstagedListItem::File(file)) => {
-                    if state.unstaged_pane.is_diff_cursor_active {
-                        if let Some(hunk) =
-                            git_patch::find_hunk(file, state.main_screen.line_cursor)
-                        {
-                            let patch = git_patch::create_stage_hunk_patch(file, hunk);
-                            let command =
-                                Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
-
-                            let old_line_cursor = state.main_screen.line_cursor;
-                            state.execute_and_refresh(command);
-
-                            if let Some(updated_file) = state.get_unstaged_file() {
-                                state.main_screen.line_cursor =
-                                    old_line_cursor.min(updated_file.lines.len().saturating_sub(1));
-                                let (file_list_height, _) = state.unstaged_header_height(max_y);
-                                let content_height =
-                                    (max_y as usize).saturating_sub(file_list_height + 1);
-                                if state.main_screen.line_cursor
-                                    >= state.unstaged_pane.diff_scroll + content_height
-                                {
-                                    state.unstaged_pane.diff_scroll =
-                                        state.main_screen.line_cursor - content_height + 1;
-                                }
-                            } else {
-                                state.main_screen.line_cursor = 0;
-                            }
-                        } else {
-                            // No hunk found, stage the whole file as a fallback
-                            let command = Box::new(StageFileCommand::new(
-                                state.repo_path.clone(),
-                                file.file_name.clone(),
-                            ));
-                            state.execute_and_refresh(command);
-                        }
                     } else {
-                        let command = Box::new(StageFileCommand::new(
-                            state.repo_path.clone(),
-                            file.file_name.clone(),
-                        ));
-                        state.execute_and_refresh(command);
+                        String::from_utf8_lossy(&content).lines().count()
                     }
+                } else {
+                    1
                 }
-                Some(UnstagedListItem::UntrackedFilesHeader) => {
-                    let command = Box::new(StageUntrackedCommand::new(state.repo_path.clone()));
-                    state.execute_and_refresh(command);
-                }
-                Some(UnstagedListItem::UntrackedFile(file_name)) => {
-                    let command = Box::new(StageFileCommand::new(
-                        state.repo_path.clone(),
-                        file_name.clone(),
-                    ));
-                    state.execute_and_refresh(command);
-                }
-                _ => {}
+            }
+            _ => 0,
+        };
+
+        if state.main_screen.line_cursor < file_lines_count.saturating_sub(1) {
+            state.main_screen.line_cursor += 1;
+
+            let mut main_pane_offset = 0;
+            if state.main_screen.has_unstaged_changes {
+                main_pane_offset = state.unstaged_header_height(max_y).0 + 1;
+            }
+            let main_pane_height = state.main_header_height(max_y).0;
+            let diff_view_top = main_pane_offset + main_pane_height;
+            let content_height = (max_y as usize).saturating_sub(diff_view_top);
+
+            if state.main_screen.line_cursor >= state.unstaged_pane.diff_scroll + content_height {
+                state.unstaged_pane.diff_scroll =
+                    state.main_screen.line_cursor - content_height + 1;
             }
         }
-        Input::Character('1') => {
-            if let Some(UnstagedListItem::File(file)) = state
-                .unstaged_pane
-                .list_items
-                .get(state.unstaged_pane.cursor)
-            {
-                if let Some(patch) =
-                    git_patch::create_stage_line_patch(file, state.main_screen.line_cursor)
-                {
+        return true;
+    }
+
+    false
+}
+
+fn handle_unstaged_horizontal_scroll(state: &mut AppState, input: &Input, max_x: i32) -> bool {
+    if is_horizontal_left(input) {
+        let scroll_amount = (max_x as usize).saturating_sub(diff_view::LINE_CONTENT_OFFSET);
+        state.unstaged_pane.horizontal_scroll = state
+            .unstaged_pane
+            .horizontal_scroll
+            .saturating_sub(scroll_amount);
+        return true;
+    }
+
+    if is_horizontal_right(input) {
+        let scroll_amount = (max_x as usize).saturating_sub(diff_view::LINE_CONTENT_OFFSET);
+        state.unstaged_pane.horizontal_scroll = state
+            .unstaged_pane
+            .horizontal_scroll
+            .saturating_add(scroll_amount);
+        return true;
+    }
+
+    false
+}
+
+fn handle_unstaged_stage_action(state: &mut AppState, input: &Input, max_y: i32) -> bool {
+    if !is_stage_toggle(input) {
+        return false;
+    }
+
+    match state
+        .unstaged_pane
+        .list_items
+        .get(state.unstaged_pane.cursor)
+    {
+        Some(UnstagedListItem::UnstagedChangesHeader) => {
+            let command = Box::new(StageUnstagedCommand::new(state.repo_path.clone()));
+            state.execute_and_refresh(command);
+        }
+        Some(UnstagedListItem::File(file)) => {
+            if state.unstaged_pane.is_diff_cursor_active {
+                if let Some(hunk) = git_patch::find_hunk(file, state.main_screen.line_cursor) {
+                    let patch = git_patch::create_stage_hunk_patch(file, hunk);
                     let command = Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
 
                     let old_line_cursor = state.main_screen.line_cursor;
@@ -661,127 +693,210 @@ fn handle_unstaged_pane_input(state: &mut AppState, input: Input, max_y: i32, ma
                     } else {
                         state.main_screen.line_cursor = 0;
                     }
-                }
-            }
-        }
-        Input::Character('R') => {
-            let command = Box::new(StageAllCommand::new(state.repo_path.clone()));
-            state.execute_and_refresh(command);
-        }
-        Input::Character('e') => {
-            match state
-                .unstaged_pane
-                .list_items
-                .get(state.unstaged_pane.cursor)
-            {
-                Some(UnstagedListItem::File(file)) => {
-                    let line_number =
-                        git_patch::get_line_number(file, state.main_screen.line_cursor);
-                    let file_path = state.repo_path.join(&file.file_name);
-                    if let Some(path_str) = file_path.to_str() {
-                        state.editor_request = Some(EditorRequest {
-                            file_path: path_str.to_string(),
-                            line_number,
-                        });
-                    }
-                }
-                Some(UnstagedListItem::UntrackedFile(file_name)) => {
-                    let file_path = state.repo_path.join(file_name);
-                    if let Some(path_str) = file_path.to_str() {
-                        state.editor_request = Some(EditorRequest {
-                            file_path: path_str.to_string(),
-                            line_number: None,
-                        });
-                    }
-                }
-                _ => {}
-            }
-        }
-        Input::Character('!') => {
-            match state
-                .unstaged_pane
-                .list_items
-                .get(state.unstaged_pane.cursor)
-            {
-                Some(UnstagedListItem::File(file)) => {
-                    if state.unstaged_pane.is_diff_cursor_active {
-                        if let Some(hunk) =
-                            git_patch::find_hunk(file, state.main_screen.line_cursor)
-                        {
-                            let patch = git_patch::create_unstage_hunk_patch(file, hunk);
-                            let command = Box::new(DiscardUnstagedHunkCommand::new(
-                                state.repo_path.clone(),
-                                patch,
-                            ));
-                            state.execute_and_refresh(command);
-                        }
-                    } else {
-                        let patch =
-                            git::get_unstaged_file_diff_patch(&state.repo_path, &file.file_name)
-                                .unwrap_or_default();
-                        let command = Box::new(CheckoutFileCommand::new(
-                            state.repo_path.clone(),
-                            file.file_name.clone(),
-                            patch,
-                        ));
-                        state.execute_and_refresh(command);
-                    }
-                }
-                Some(UnstagedListItem::UntrackedFile(file_name)) => {
-                    if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_name) {
-                        if is_binary(&content) {
-                            return; // Do not delete binary files
-                        }
-                        let command = Box::new(DeleteUntrackedFileCommand::new(
-                            state.repo_path.clone(),
-                            file_name.clone(),
-                            content,
-                        ));
-                        state.execute_and_refresh(command);
-                    }
-                }
-                _ => {}
-            }
-        }
-        Input::Character('i') => {
-            let mut file_to_ignore: Option<String> = None;
-            let mut is_tracked = false;
-
-            match state
-                .unstaged_pane
-                .list_items
-                .get(state.unstaged_pane.cursor)
-            {
-                Some(UnstagedListItem::File(file)) => {
-                    file_to_ignore = Some(file.file_name.clone());
-                    is_tracked = true;
-                }
-                Some(UnstagedListItem::UntrackedFile(file_name)) => {
-                    file_to_ignore = Some(file_name.clone());
-                    is_tracked = false;
-                }
-                _ => {}
-            }
-
-            if let Some(file_name) = file_to_ignore {
-                if file_name != ".gitignore" {
-                    let command: Box<dyn crate::command::Command> = if is_tracked {
-                        Box::new(IgnoreUnstagedTrackedFileCommand::new(
-                            state.repo_path.clone(),
-                            file_name,
-                        ))
-                    } else {
-                        Box::new(IgnoreUntrackedFileCommand::new(
-                            state.repo_path.clone(),
-                            file_name,
-                        ))
-                    };
+                } else {
+                    let command = Box::new(StageFileCommand::new(
+                        state.repo_path.clone(),
+                        file.file_name.clone(),
+                    ));
                     state.execute_and_refresh(command);
                 }
+            } else {
+                let command = Box::new(StageFileCommand::new(
+                    state.repo_path.clone(),
+                    file.file_name.clone(),
+                ));
+                state.execute_and_refresh(command);
             }
         }
-        _ => scroll::handle_scroll(state, input, max_y),
+        Some(UnstagedListItem::UntrackedFilesHeader) => {
+            let command = Box::new(StageUntrackedCommand::new(state.repo_path.clone()));
+            state.execute_and_refresh(command);
+        }
+        Some(UnstagedListItem::UntrackedFile(file_name)) => {
+            let command = Box::new(StageFileCommand::new(
+                state.repo_path.clone(),
+                file_name.clone(),
+            ));
+            state.execute_and_refresh(command);
+        }
+        _ => {}
     }
+
+    true
+}
+
+fn handle_unstaged_stage_line(state: &mut AppState, input: &Input, max_y: i32) -> bool {
+    if !matches!(input, Input::Character('1')) {
+        return false;
+    }
+
+    if let Some(UnstagedListItem::File(file)) = state
+        .unstaged_pane
+        .list_items
+        .get(state.unstaged_pane.cursor)
+    {
+        if let Some(patch) = git_patch::create_stage_line_patch(file, state.main_screen.line_cursor)
+        {
+            let command = Box::new(StagePatchCommand::new(state.repo_path.clone(), patch));
+
+            let old_line_cursor = state.main_screen.line_cursor;
+            state.execute_and_refresh(command);
+
+            if let Some(updated_file) = state.get_unstaged_file() {
+                state.main_screen.line_cursor =
+                    old_line_cursor.min(updated_file.lines.len().saturating_sub(1));
+                let (file_list_height, _) = state.unstaged_header_height(max_y);
+                let content_height = (max_y as usize).saturating_sub(file_list_height + 1);
+                if state.main_screen.line_cursor >= state.unstaged_pane.diff_scroll + content_height
+                {
+                    state.unstaged_pane.diff_scroll =
+                        state.main_screen.line_cursor - content_height + 1;
+                }
+            } else {
+                state.main_screen.line_cursor = 0;
+            }
+        }
+    }
+
+    true
+}
+
+fn handle_unstaged_stage_all(state: &mut AppState, input: &Input) -> bool {
+    if matches!(input, Input::Character('R')) {
+        let command = Box::new(StageAllCommand::new(state.repo_path.clone()));
+        state.execute_and_refresh(command);
+        return true;
+    }
+    false
+}
+
+fn handle_unstaged_open_editor(state: &mut AppState, input: &Input) -> bool {
+    if !matches!(input, Input::Character('e')) {
+        return false;
+    }
+
+    match state
+        .unstaged_pane
+        .list_items
+        .get(state.unstaged_pane.cursor)
+    {
+        Some(UnstagedListItem::File(file)) => {
+            let line_number = git_patch::get_line_number(file, state.main_screen.line_cursor);
+            let file_path = state.repo_path.join(&file.file_name);
+            if let Some(path_str) = file_path.to_str() {
+                state.editor_request = Some(EditorRequest {
+                    file_path: path_str.to_string(),
+                    line_number,
+                });
+            }
+        }
+        Some(UnstagedListItem::UntrackedFile(file_name)) => {
+            let file_path = state.repo_path.join(file_name);
+            if let Some(path_str) = file_path.to_str() {
+                state.editor_request = Some(EditorRequest {
+                    file_path: path_str.to_string(),
+                    line_number: None,
+                });
+            }
+        }
+        _ => {}
+    }
+
+    true
+}
+
+fn handle_unstaged_discard(state: &mut AppState, input: &Input) -> bool {
+    if !matches!(input, Input::Character('!')) {
+        return false;
+    }
+
+    match state
+        .unstaged_pane
+        .list_items
+        .get(state.unstaged_pane.cursor)
+    {
+        Some(UnstagedListItem::File(file)) => {
+            if state.unstaged_pane.is_diff_cursor_active {
+                if let Some(hunk) = git_patch::find_hunk(file, state.main_screen.line_cursor) {
+                    let patch = git_patch::create_unstage_hunk_patch(file, hunk);
+                    let command = Box::new(DiscardUnstagedHunkCommand::new(
+                        state.repo_path.clone(),
+                        patch,
+                    ));
+                    state.execute_and_refresh(command);
+                }
+            } else {
+                let patch = git::get_unstaged_file_diff_patch(&state.repo_path, &file.file_name)
+                    .unwrap_or_default();
+                let command = Box::new(CheckoutFileCommand::new(
+                    state.repo_path.clone(),
+                    file.file_name.clone(),
+                    patch,
+                ));
+                state.execute_and_refresh(command);
+            }
+        }
+        Some(UnstagedListItem::UntrackedFile(file_name)) => {
+            if let Ok((content, _)) = git::read_file_content(&state.repo_path, file_name) {
+                if is_binary(&content) {
+                    return true;
+                }
+                let command = Box::new(DeleteUntrackedFileCommand::new(
+                    state.repo_path.clone(),
+                    file_name.clone(),
+                    content,
+                ));
+                state.execute_and_refresh(command);
+            }
+        }
+        _ => {}
+    }
+
+    true
+}
+
+fn handle_unstaged_ignore(state: &mut AppState, input: &Input) -> bool {
+    if !matches!(input, Input::Character('i')) {
+        return false;
+    }
+
+    let mut file_to_ignore: Option<String> = None;
+    let mut is_tracked = false;
+
+    match state
+        .unstaged_pane
+        .list_items
+        .get(state.unstaged_pane.cursor)
+    {
+        Some(UnstagedListItem::File(file)) => {
+            file_to_ignore = Some(file.file_name.clone());
+            is_tracked = true;
+        }
+        Some(UnstagedListItem::UntrackedFile(file_name)) => {
+            file_to_ignore = Some(file_name.clone());
+            is_tracked = false;
+        }
+        _ => {}
+    }
+
+    if let Some(file_name) = file_to_ignore {
+        if file_name != ".gitignore" {
+            let command: Box<dyn crate::command::Command> = if is_tracked {
+                Box::new(IgnoreUnstagedTrackedFileCommand::new(
+                    state.repo_path.clone(),
+                    file_name,
+                ))
+            } else {
+                Box::new(IgnoreUntrackedFileCommand::new(
+                    state.repo_path.clone(),
+                    file_name,
+                ))
+            };
+            state.execute_and_refresh(command);
+        }
+    }
+
+    true
 }
 
 fn handle_main_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x: i32) {
@@ -791,19 +906,13 @@ fn handle_main_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x:
     }
 
     if state.is_in_input_mode() {
-        match input {
-            Input::KeyUp
-            | Input::Character('\u{10}')
-            | Input::KeyDown
-            | Input::Character('\u{e}') => {
-                handle_navigation(state, input, max_y, max_x);
-            }
-            _ => {
-                // Other keys go to the text editor
-                commit_view::handle_commit_input(state, input, max_y);
-            }
+        if is_vertical_navigation(&input) {
+            handle_navigation(state, input, max_y, max_x);
+        } else {
+            // Other keys go to the text editor
+            commit_view::handle_commit_input(state, input, max_y);
         }
-    } else if !handle_commands(state, input, max_y) {
+    } else if !handle_commands(state, &input, max_y) {
         handle_navigation(state, input, max_y, max_x);
     }
 }
@@ -830,137 +939,203 @@ fn unstage_line(state: &mut AppState, max_y: i32) {
     }
 }
 
-fn handle_commands(state: &mut AppState, input: Input, max_y: i32) -> bool {
-    match input {
-        Input::Character('q') => {
-            if state.main_screen.is_diff_cursor_active {
-                state.main_screen.is_diff_cursor_active = false;
+fn handle_commands(state: &mut AppState, input: &Input, max_y: i32) -> bool {
+    if handle_main_quit(state, input) {
+        return true;
+    }
+
+    if handle_main_ignore(state, input) {
+        return true;
+    }
+
+    if handle_main_discard(state, input) {
+        return true;
+    }
+
+    if handle_main_stage_toggle(state, input) {
+        return true;
+    }
+
+    if handle_main_stage_line(state, input, max_y) {
+        return true;
+    }
+
+    if handle_main_stage_all(state, input) {
+        return true;
+    }
+
+    if handle_main_open_editor(state, input) {
+        return true;
+    }
+
+    false
+}
+
+fn handle_main_quit(state: &mut AppState, input: &Input) -> bool {
+    if matches!(input, Input::Character('q')) {
+        if state.main_screen.is_diff_cursor_active {
+            state.main_screen.is_diff_cursor_active = false;
+        } else {
+            let _ = commit_storage::save_commit_message(
+                &state.repo_path,
+                &state.main_screen.commit_message,
+            );
+            state.running = false;
+        }
+        return true;
+    }
+    false
+}
+
+fn handle_main_ignore(state: &mut AppState, input: &Input) -> bool {
+    if !matches!(input, Input::Character('i')) {
+        return false;
+    }
+
+    if let Some(file) = state.current_main_file().cloned() {
+        if file.file_name != ".gitignore" {
+            let command = Box::new(IgnoreFileCommand::new(
+                state.repo_path.clone(),
+                file.file_name.clone(),
+            ));
+            state.execute_and_refresh(command);
+        }
+    }
+
+    true
+}
+
+fn handle_main_discard(state: &mut AppState, input: &Input) -> bool {
+    if !matches!(input, Input::Character('!')) {
+        return false;
+    }
+
+    if state.main_screen.is_diff_cursor_active {
+        if let Some(file) = state.current_main_file() {
+            let line_index = state.main_screen.line_cursor;
+            if let Some(hunk) = git_patch::find_hunk(file, line_index) {
+                let patch = git_patch::create_unstage_hunk_patch(file, hunk);
+                let command = Box::new(DiscardHunkCommand::new(state.repo_path.clone(), patch));
+                state.execute_and_refresh(command);
+            }
+        }
+    } else if let Some(file) = state.current_main_file().cloned() {
+        let is_new = file.status == FileStatus::Added;
+        let command = Box::new(DiscardFileCommand::new(
+            state.repo_path.clone(),
+            file.file_name.clone(),
+            is_new,
+        ));
+        state.execute_and_refresh(command);
+    }
+
+    true
+}
+
+fn handle_main_stage_toggle(state: &mut AppState, input: &Input) -> bool {
+    if !is_stage_toggle(input) {
+        return false;
+    }
+
+    match state
+        .main_screen
+        .list_items
+        .get(state.main_screen.file_cursor)
+        .cloned()
+    {
+        Some(ListItem::StagedChangesHeader) => {
+            let command = Box::new(UnstageAllCommand::new(state.repo_path.clone()));
+            state.execute_and_refresh(command);
+        }
+        Some(ListItem::File(file)) => {
+            let line_index = state.main_screen.line_cursor;
+            if let Some(hunk) = git_patch::find_hunk(&file, line_index) {
+                let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
+                let command = Box::new(ApplyPatchCommand::new(state.repo_path.clone(), patch));
+                state.execute_and_refresh(command);
             } else {
-                let _ = commit_storage::save_commit_message(
-                    &state.repo_path,
-                    &state.main_screen.commit_message,
-                );
-                state.running = false;
-            }
-        }
-        Input::Character('i') => {
-            if let Some(file) = state.current_main_file().cloned() {
-                if file.file_name != ".gitignore" {
-                    let command = Box::new(IgnoreFileCommand::new(
-                        state.repo_path.clone(),
-                        file.file_name.clone(),
-                    ));
-                    state.execute_and_refresh(command);
-                }
-            }
-        }
-        Input::Character('!') => {
-            if state.main_screen.is_diff_cursor_active {
-                if let Some(file) = state.current_main_file() {
-                    let line_index = state.main_screen.line_cursor;
-                    if let Some(hunk) = git_patch::find_hunk(file, line_index) {
-                        let patch = git_patch::create_unstage_hunk_patch(file, hunk);
-                        let command =
-                            Box::new(DiscardHunkCommand::new(state.repo_path.clone(), patch));
-                        state.execute_and_refresh(command);
-                    }
-                }
-            } else if let Some(file) = state.current_main_file().cloned() {
-                let is_new = file.status == FileStatus::Added;
-                let command = Box::new(DiscardFileCommand::new(
+                let command = Box::new(UnstageFileCommand::new(
                     state.repo_path.clone(),
                     file.file_name.clone(),
-                    is_new,
                 ));
                 state.execute_and_refresh(command);
             }
         }
-        Input::Character('\n') | Input::Character('u') => {
-            match state
-                .main_screen
-                .list_items
-                .get(state.main_screen.file_cursor)
-                .cloned()
-            {
-                Some(ListItem::StagedChangesHeader) => {
-                    let command = Box::new(UnstageAllCommand::new(state.repo_path.clone()));
-                    state.execute_and_refresh(command);
+        Some(ListItem::PreviousCommitInfo {
+            hash,
+            message,
+            is_on_remote,
+            is_fixup: _,
+        }) => {
+            if !is_on_remote {
+                state.main_screen.amending_commit_hash = Some(hash.clone());
+
+                let current_index = state.main_screen.file_cursor;
+                if let Some(item) = state.main_screen.list_items.get_mut(current_index) {
+                    *item = ListItem::AmendingCommitMessageInput {
+                        hash: hash.clone(),
+                        message: message.clone(),
+                    };
                 }
-                Some(ListItem::File(file)) => {
-                    let line_index = state.main_screen.line_cursor;
-                    if let Some(hunk) = git_patch::find_hunk(&file, line_index) {
-                        let patch = git_patch::create_unstage_hunk_patch(&file, hunk);
-                        let command =
-                            Box::new(ApplyPatchCommand::new(state.repo_path.clone(), patch));
-                        state.execute_and_refresh(command);
-                    } else {
-                        let command = Box::new(UnstageFileCommand::new(
-                            state.repo_path.clone(),
-                            file.file_name.clone(),
-                        ));
-                        state.execute_and_refresh(command);
+
+                if let Some(commit_input_index) = state
+                    .main_screen
+                    .list_items
+                    .iter()
+                    .position(|item| matches!(item, ListItem::CommitMessageInput))
+                {
+                    if let Some(item) = state.main_screen.list_items.get_mut(commit_input_index) {
+                        if let ListItem::CommitMessageInput = item {
+                            state.main_screen.commit_message.clear();
+                        }
                     }
                 }
-                Some(ListItem::PreviousCommitInfo {
-                    hash,
-                    message,
-                    is_on_remote,
-                    is_fixup: _,
-                }) => {
-                    if !is_on_remote {
-                        state.main_screen.amending_commit_hash = Some(hash.clone());
-
-                        let current_index = state.main_screen.file_cursor;
-                        if let Some(item) = state.main_screen.list_items.get_mut(current_index) {
-                            *item = ListItem::AmendingCommitMessageInput {
-                                hash: hash.clone(),
-                                message: message.clone(),
-                            };
-                        }
-
-                        if let Some(commit_input_index) = state
-                            .main_screen
-                            .list_items
-                            .iter()
-                            .position(|item| matches!(item, ListItem::CommitMessageInput))
-                        {
-                            if let Some(item) =
-                                state.main_screen.list_items.get_mut(commit_input_index)
-                            {
-                                if let ListItem::CommitMessageInput = item {
-                                    state.main_screen.commit_message.clear();
-                                }
-                            }
-                        }
-                        state.main_screen.commit_cursor = message.chars().count();
-                    }
-                }
-                _ => {}
+                state.main_screen.commit_cursor = message.chars().count();
             }
         }
-        Input::Character('1') => unstage_line(state, max_y),
-        Input::Character('R') => {
-            let command = Box::new(StageAllCommand::new(state.repo_path.clone()));
-            state.execute_and_refresh(command);
-        }
-        Input::Character('e') => {
-            if let Some(file) = state.current_main_file() {
-                let line_number = if state.main_screen.is_diff_cursor_active {
-                    git_patch::get_line_number(file, state.main_screen.line_cursor)
-                } else {
-                    None
-                };
-                let file_path = state.repo_path.join(&file.file_name);
-                if let Some(path_str) = file_path.to_str() {
-                    state.editor_request = Some(EditorRequest {
-                        file_path: path_str.to_string(),
-                        line_number,
-                    });
-                }
-            }
-        }
-        _ => return false,
+        _ => {}
     }
+
+    true
+}
+
+fn handle_main_stage_line(state: &mut AppState, input: &Input, max_y: i32) -> bool {
+    if !matches!(input, Input::Character('1')) {
+        return false;
+    }
+    unstage_line(state, max_y);
+    true
+}
+
+fn handle_main_stage_all(state: &mut AppState, input: &Input) -> bool {
+    if matches!(input, Input::Character('R')) {
+        let command = Box::new(StageAllCommand::new(state.repo_path.clone()));
+        state.execute_and_refresh(command);
+        return true;
+    }
+    false
+}
+
+fn handle_main_open_editor(state: &mut AppState, input: &Input) -> bool {
+    if !matches!(input, Input::Character('e')) {
+        return false;
+    }
+
+    if let Some(file) = state.current_main_file() {
+        let line_number = if state.main_screen.is_diff_cursor_active {
+            git_patch::get_line_number(file, state.main_screen.line_cursor)
+        } else {
+            None
+        };
+        let file_path = state.repo_path.join(&file.file_name);
+        if let Some(path_str) = file_path.to_str() {
+            state.editor_request = Some(EditorRequest {
+                file_path: path_str.to_string(),
+                line_number,
+            });
+        }
+    }
+
     true
 }
 
@@ -999,11 +1174,7 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32, max
                     };
                 }
                 _ => {
-                    commit_view::handle_generic_text_input(
-                        current_text,
-                        cursor,
-                        input,
-                    );
+                    commit_view::handle_generic_text_input(current_text, cursor, input);
                 }
             }
             return;
@@ -1070,8 +1241,11 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32, max
         Input::KeyDown | Input::Character('\u{e}') => {
             let item_count = state.main_screen.list_items.len();
             if item_count > 0 {
-                state.main_screen.file_cursor =
-                    state.main_screen.file_cursor.saturating_add(1).min(item_count - 1);
+                state.main_screen.file_cursor = state
+                    .main_screen
+                    .file_cursor
+                    .saturating_add(1)
+                    .min(item_count - 1);
             }
             state.main_screen.diff_scroll = 0;
             state.main_screen.line_cursor = 0;
@@ -1221,113 +1395,150 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         state.main_screen.amending_commit_hash = None;
     }
 
-    match input {
-        Input::KeyUp | Input::Character('\u{10}') => {
-            if state.main_screen.file_cursor == 0 && state.main_screen.has_unstaged_changes {
-                let unstaged_items_count = state.unstaged_pane.list_items.len();
-                if unstaged_items_count > 0 {
-                    state.focused_pane = FocusedPane::Unstaged;
-                    state.unstaged_pane.cursor = unstaged_items_count - 1;
-
-                    let (file_list_height, _) = state.unstaged_header_height(max_y);
-                    if state.unstaged_pane.cursor >= state.unstaged_pane.scroll + file_list_height {
-                        state.unstaged_pane.scroll =
-                            state.unstaged_pane.cursor - file_list_height + 1;
-                    }
-                    return;
-                }
-            }
-
-            state.main_screen.file_cursor = state.main_screen.file_cursor.saturating_sub(1);
-            state.main_screen.diff_scroll = 0;
-            state.main_screen.line_cursor = 0;
-            state.main_screen.is_diff_cursor_active = false;
-
-            if state.main_screen.file_cursor < state.main_screen.file_list_scroll {
-                state.main_screen.file_list_scroll = state.main_screen.file_cursor;
-            }
-            state.update_selected_commit_diff();
+    if is_move_up(&input) {
+        if handle_main_move_up(state, max_y) {
+            return;
         }
-        Input::KeyDown | Input::Character('\u{e}') => {
-            if state.main_screen.file_cursor < state.main_screen.list_items.len() - 1 {
-                state.main_screen.file_cursor += 1;
-                state.main_screen.diff_scroll = 0;
-                state.main_screen.line_cursor = 0;
+        state.update_selected_commit_diff();
+        return;
+    }
+
+    if is_move_down(&input) {
+        handle_main_move_down(state, max_y);
+        state.update_selected_commit_diff();
+        return;
+    }
+
+    if is_diff_move_up(&input) {
+        handle_main_diff_move_up(state);
+        return;
+    }
+
+    if is_diff_move_down(&input) {
+        handle_main_diff_move_down(state, max_y);
+        return;
+    }
+
+    if is_horizontal_left(&input) {
+        handle_main_horizontal_scroll_left(state, max_x);
+        return;
+    }
+
+    if is_horizontal_right(&input) {
+        handle_main_horizontal_scroll_right(state, max_x);
+        return;
+    }
+
+    if matches!(
+        state
+            .main_screen
+            .list_items
+            .get(state.main_screen.file_cursor),
+        Some(ListItem::CommitMessageInput)
+    ) {
+        commit_view::handle_commit_input(state, input, max_y);
+    } else {
+        scroll::handle_scroll(state, input, max_y);
+    }
+}
+
+fn handle_main_move_up(state: &mut AppState, max_y: i32) -> bool {
+    if state.main_screen.file_cursor == 0 && state.main_screen.has_unstaged_changes {
+        let unstaged_items_count = state.unstaged_pane.list_items.len();
+        if unstaged_items_count > 0 {
+            state.focused_pane = FocusedPane::Unstaged;
+            state.unstaged_pane.cursor = unstaged_items_count - 1;
+
+            let (file_list_height, _) = state.unstaged_header_height(max_y);
+            if state.unstaged_pane.cursor >= state.unstaged_pane.scroll + file_list_height {
+                state.unstaged_pane.scroll = state.unstaged_pane.cursor - file_list_height + 1;
             }
-            state.main_screen.is_diff_cursor_active = false;
-
-            let file_list_height = state.main_header_height(max_y).0;
-
-            if state.main_screen.file_cursor
-                >= state.main_screen.file_list_scroll + file_list_height
-            {
-                state.main_screen.file_list_scroll =
-                    state.main_screen.file_cursor - file_list_height + 1;
-            }
-            state.update_selected_commit_diff();
-        }
-        Input::Character('k') => {
-            state.main_screen.is_diff_cursor_active = true;
-            state.main_screen.line_cursor = state.main_screen.line_cursor.saturating_sub(1);
-            let cursor_line = state.get_cursor_line_index();
-            if cursor_line < state.main_screen.diff_scroll {
-                state.main_screen.diff_scroll = cursor_line;
-            }
-        }
-        Input::Character('j') => {
-            state.main_screen.is_diff_cursor_active = true;
-            let lines_count = match state
-                .main_screen
-                .list_items
-                .get(state.main_screen.file_cursor)
-            {
-                Some(ListItem::File(file)) => file.lines.len(),
-                Some(ListItem::PreviousCommitInfo { .. }) => state
-                    .selected_commit_files
-                    .iter()
-                    .map(|f| f.lines.len())
-                    .sum(),
-                _ => 0,
-            };
-
-            if lines_count > 0 && state.main_screen.line_cursor < lines_count.saturating_sub(1) {
-                state.main_screen.line_cursor += 1;
-
-                let mut main_pane_offset = 0;
-                if state.main_screen.has_unstaged_changes {
-                    main_pane_offset = state.unstaged_header_height(max_y).0 + 1;
-                }
-                let main_pane_height = state.main_header_height(max_y).0;
-                let diff_view_top = main_pane_offset + main_pane_height;
-                let content_height = (max_y as usize).saturating_sub(diff_view_top);
-
-                let cursor_line = state.get_cursor_line_index();
-
-                if cursor_line >= state.main_screen.diff_scroll + content_height {
-                    state.main_screen.diff_scroll = cursor_line - content_height + 1;
-                }
-            }
-        }
-        Input::KeyLeft => {
-            let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
-            state.main_screen.horizontal_scroll =
-                state.main_screen.horizontal_scroll.saturating_sub(scroll_amount);
-        }
-        Input::KeyRight => {
-            let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
-            state.main_screen.horizontal_scroll =
-                state.main_screen.horizontal_scroll.saturating_add(scroll_amount);
-        }
-        _ => {
-            if let Some(ListItem::CommitMessageInput) = state
-                .main_screen
-                .list_items
-                .get(state.main_screen.file_cursor)
-            {
-                commit_view::handle_commit_input(state, input, max_y);
-            } else {
-                scroll::handle_scroll(state, input, max_y);
-            }
+            return true;
         }
     }
+
+    state.main_screen.file_cursor = state.main_screen.file_cursor.saturating_sub(1);
+    state.main_screen.diff_scroll = 0;
+    state.main_screen.line_cursor = 0;
+    state.main_screen.is_diff_cursor_active = false;
+
+    if state.main_screen.file_cursor < state.main_screen.file_list_scroll {
+        state.main_screen.file_list_scroll = state.main_screen.file_cursor;
+    }
+    false
+}
+
+fn handle_main_move_down(state: &mut AppState, max_y: i32) {
+    if state.main_screen.file_cursor < state.main_screen.list_items.len().saturating_sub(1) {
+        state.main_screen.file_cursor += 1;
+        state.main_screen.diff_scroll = 0;
+        state.main_screen.line_cursor = 0;
+    }
+    state.main_screen.is_diff_cursor_active = false;
+
+    let file_list_height = state.main_header_height(max_y).0;
+
+    if state.main_screen.file_cursor >= state.main_screen.file_list_scroll + file_list_height {
+        state.main_screen.file_list_scroll = state.main_screen.file_cursor - file_list_height + 1;
+    }
+}
+
+fn handle_main_diff_move_up(state: &mut AppState) {
+    state.main_screen.is_diff_cursor_active = true;
+    state.main_screen.line_cursor = state.main_screen.line_cursor.saturating_sub(1);
+    let cursor_line = state.get_cursor_line_index();
+    if cursor_line < state.main_screen.diff_scroll {
+        state.main_screen.diff_scroll = cursor_line;
+    }
+}
+
+fn handle_main_diff_move_down(state: &mut AppState, max_y: i32) {
+    state.main_screen.is_diff_cursor_active = true;
+    let lines_count = match state
+        .main_screen
+        .list_items
+        .get(state.main_screen.file_cursor)
+    {
+        Some(ListItem::File(file)) => file.lines.len(),
+        Some(ListItem::PreviousCommitInfo { .. }) => state
+            .selected_commit_files
+            .iter()
+            .map(|f| f.lines.len())
+            .sum(),
+        _ => 0,
+    };
+
+    if lines_count > 0 && state.main_screen.line_cursor < lines_count.saturating_sub(1) {
+        state.main_screen.line_cursor += 1;
+
+        let mut main_pane_offset = 0;
+        if state.main_screen.has_unstaged_changes {
+            main_pane_offset = state.unstaged_header_height(max_y).0 + 1;
+        }
+        let main_pane_height = state.main_header_height(max_y).0;
+        let diff_view_top = main_pane_offset + main_pane_height;
+        let content_height = (max_y as usize).saturating_sub(diff_view_top);
+
+        let cursor_line = state.get_cursor_line_index();
+
+        if cursor_line >= state.main_screen.diff_scroll + content_height {
+            state.main_screen.diff_scroll = cursor_line - content_height + 1;
+        }
+    }
+}
+
+fn handle_main_horizontal_scroll_left(state: &mut AppState, max_x: i32) {
+    let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
+    state.main_screen.horizontal_scroll = state
+        .main_screen
+        .horizontal_scroll
+        .saturating_sub(scroll_amount);
+}
+
+fn handle_main_horizontal_scroll_right(state: &mut AppState, max_x: i32) {
+    let scroll_amount = (max_x as usize).saturating_sub(LINE_CONTENT_OFFSET);
+    state.main_screen.horizontal_scroll = state
+        .main_screen
+        .horizontal_scroll
+        .saturating_add(scroll_amount);
 }

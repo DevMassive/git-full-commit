@@ -1,4 +1,4 @@
-use crate::integration::common::{select_commit_in_log, TestRepo};
+use crate::integration::common::{TestRepo, select_commit_in_log};
 use git_full_commit::ui::main_screen::ListItem;
 use git_full_commit::ui::update::{update_state, update_state_with_alt};
 use pancurses::Input;
