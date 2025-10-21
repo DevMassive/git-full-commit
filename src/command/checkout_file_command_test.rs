@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::command::{test_helpers::TestRepo, CheckoutFileCommand, Command};
+    use crate::command::{CheckoutFileCommand, Command, test_helpers::TestRepo};
     use crate::git;
 
     #[test]

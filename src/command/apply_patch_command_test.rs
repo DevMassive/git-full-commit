@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::command::{test_helpers::TestRepo, Command, ApplyPatchCommand};
+    use crate::command::{ApplyPatchCommand, Command, test_helpers::TestRepo};
     use crate::git;
 
     fn get_test_patch(repo: &TestRepo, file_name: &str) -> String {

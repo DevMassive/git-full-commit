@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::command::{test_helpers::TestRepo, Command, StagePatchCommand};
+    use crate::command::{Command, StagePatchCommand, test_helpers::TestRepo};
     use crate::git;
 
     fn get_unstaged_test_patch(repo: &TestRepo, file_name: &str) -> String {

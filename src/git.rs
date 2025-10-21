@@ -330,14 +330,8 @@ pub fn amend_commit_with_staged_changes(
     message: &str,
 ) -> Result<()> {
     let commits_before = get_local_commits(repo_path)?;
-    let short_hash_len = commits_before
-        .first()
-        .map(|c| c.hash.len())
-        .unwrap_or(7);
-    let target_hash_short: String = target_hash
-        .chars()
-        .take(short_hash_len)
-        .collect();
+    let short_hash_len = commits_before.first().map(|c| c.hash.len()).unwrap_or(7);
+    let target_hash_short: String = target_hash.chars().take(short_hash_len).collect();
     let target_index = commits_before
         .iter()
         .position(|c| c.hash == target_hash_short)

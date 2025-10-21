@@ -248,8 +248,7 @@ fn test_amend_commit_with_staged_changes_on_non_head_updates_only_target() {
     let diff_str = String::from_utf8_lossy(&amended_diff.stdout);
     assert!(
         diff_str.contains("c.txt"),
-        "Expected staged file to be part of amended commit diff. Diff: {}",
-        diff_str
+        "Expected staged file to be part of amended commit diff. Diff: {diff_str}"
     );
 }
 
