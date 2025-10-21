@@ -160,6 +160,99 @@ fn test_run_with_unstaged_changes() {
     assert!(!files.is_empty());
 }
 
+fn get_commit_messages(repo_path: &PathBuf, count: usize) -> Vec<String> {
+    let output = OsCommand::new("git")
+        .arg("log")
+        .arg(format!("-n{count}"))
+        .arg("--pretty=%s")
+        .current_dir(repo_path)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+fn get_commit_hash(repo_path: &PathBuf, rev: &str) -> String {
+    let output = OsCommand::new("git")
+        .arg("rev-parse")
+        .arg(rev)
+        .current_dir(repo_path)
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+#[test]
+fn test_reword_commit_on_non_head_updates_only_target() {
+    let tmp_dir = TempDir::new().unwrap();
+    let repo_path = tmp_dir.path().to_path_buf();
+    run_git(&repo_path, &["init"]);
+    run_git(&repo_path, &["config", "user.name", "Test"]);
+    run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+
+    fs::write(repo_path.join("a.txt"), "one").unwrap();
+    run_git(&repo_path, &["add", "a.txt"]);
+    run_git(&repo_path, &["commit", "-m", "first commit"]);
+
+    fs::write(repo_path.join("b.txt"), "two").unwrap();
+    run_git(&repo_path, &["add", "b.txt"]);
+    run_git(&repo_path, &["commit", "-m", "second commit"]);
+
+    let target_hash = get_commit_hash(&repo_path, "HEAD~1");
+    git::reword_commit(&repo_path, &target_hash, "rewritten first commit").unwrap();
+
+    let messages = get_commit_messages(&repo_path, 2);
+    assert_eq!(messages[0], "second commit");
+    assert_eq!(messages[1], "rewritten first commit");
+}
+
+#[test]
+fn test_amend_commit_with_staged_changes_on_non_head_updates_only_target() {
+    let tmp_dir = TempDir::new().unwrap();
+    let repo_path = tmp_dir.path().to_path_buf();
+    run_git(&repo_path, &["init"]);
+    run_git(&repo_path, &["config", "user.name", "Test"]);
+    run_git(&repo_path, &["config", "user.email", "test@example.com"]);
+
+    fs::write(repo_path.join("a.txt"), "one").unwrap();
+    run_git(&repo_path, &["add", "a.txt"]);
+    run_git(&repo_path, &["commit", "-m", "first commit"]);
+
+    fs::write(repo_path.join("b.txt"), "two").unwrap();
+    run_git(&repo_path, &["add", "b.txt"]);
+    run_git(&repo_path, &["commit", "-m", "second commit"]);
+
+    fs::write(repo_path.join("c.txt"), "staged file").unwrap();
+    run_git(&repo_path, &["add", "c.txt"]);
+
+    let target_hash = get_commit_hash(&repo_path, "HEAD~1");
+    git::amend_commit_with_staged_changes(
+        &repo_path,
+        &target_hash,
+        "first commit with staged changes",
+    )
+    .unwrap();
+
+    let messages = get_commit_messages(&repo_path, 2);
+    assert_eq!(messages[0], "second commit");
+    assert_eq!(messages[1], "first commit with staged changes");
+
+    let amended_diff = OsCommand::new("git")
+        .arg("show")
+        .arg("HEAD~1")
+        .current_dir(&repo_path)
+        .output()
+        .unwrap();
+    let diff_str = String::from_utf8_lossy(&amended_diff.stdout);
+    assert!(
+        diff_str.contains("c.txt"),
+        "Expected staged file to be part of amended commit diff. Diff: {}",
+        diff_str
+    );
+}
+
 #[test]
 fn test_get_commit_diff() {
     let setup = TestSetup::new();

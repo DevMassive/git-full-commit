@@ -329,6 +329,20 @@ pub fn amend_commit_with_staged_changes(
     target_hash: &str,
     message: &str,
 ) -> Result<()> {
+    let commits_before = get_local_commits(repo_path)?;
+    let short_hash_len = commits_before
+        .first()
+        .map(|c| c.hash.len())
+        .unwrap_or(7);
+    let target_hash_short: String = target_hash
+        .chars()
+        .take(short_hash_len)
+        .collect();
+    let target_index = commits_before
+        .iter()
+        .position(|c| c.hash == target_hash_short)
+        .ok_or_else(|| anyhow::anyhow!("Target commit not found in local history"))?;
+
     // 1. Get the original message to check if it needs to be changed later
     let original_message_output = git_command()
         .arg("log")
@@ -392,20 +406,12 @@ pub fn amend_commit_with_staged_changes(
 
     // 4. If the message has changed, amend the now-squashed commit
     if message.trim() != original_message.trim() {
-        let amend_output = git_command()
-            .arg("commit")
-            .arg("--amend")
-            .arg("-m")
-            .arg(message)
-            .current_dir(repo_path)
-            .output()?;
+        let commits_after = get_local_commits(repo_path)?;
+        let rewritten_commit = commits_after
+            .get(target_index)
+            .ok_or_else(|| anyhow::anyhow!("Rewritten commit not found after amend rebase"))?;
 
-        if !amend_output.status.success() {
-            anyhow::bail!(
-                "Failed to amend commit message. Stderr: {}",
-                String::from_utf8_lossy(&amend_output.stderr)
-            );
-        }
+        reword_commit(repo_path, &rewritten_commit.hash, message)?;
     }
 
     Ok(())

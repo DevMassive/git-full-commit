@@ -78,6 +78,54 @@ fn test_amend_commit_reword_only() {
 }
 
 #[test]
+fn test_amend_non_head_commit_rewords_only_target() {
+    let repo = TestRepo::new();
+    repo.create_file("a.txt", "hello");
+    repo.add_all();
+    repo.commit("first commit");
+
+    repo.create_file("b.txt", "world");
+    repo.add_all();
+    repo.commit("second commit");
+
+    let files = git::get_diff(repo.path.clone());
+    let mut app_state = AppState::new(repo.path.clone(), files);
+
+    // list is [Header, Input, second commit, first commit]
+    app_state.main_screen.file_cursor = 3;
+
+    // Press enter to start amending the first commit
+    app_state = update_state(app_state, Some(Input::Character('\n')), 80, 80);
+    assert!(matches!(
+        app_state.main_screen.list_items[3],
+        MainScreenListItem::AmendingCommitMessageInput { .. }
+    ));
+
+    let original_message = "first commit";
+    for _ in 0..original_message.len() {
+        app_state = update_state(app_state, Some(Input::KeyBackspace), 80, 80);
+    }
+
+    let new_message = "rewritten older commit";
+    for ch in new_message.chars() {
+        app_state = update_state(app_state, Some(Input::Character(ch)), 80, 80);
+    }
+
+    // Confirm the amend
+    update_state(app_state, Some(Input::Character('\n')), 80, 80);
+
+    // HEAD should still be the second commit
+    let head_log = repo.get_log(1);
+    assert!(head_log.contains("second commit"));
+    assert!(!head_log.contains(new_message));
+
+    // The older commit should have the new message
+    let log = repo.get_log(2);
+    assert!(log.contains(new_message));
+    let original_entry = format!("\n    {original_message}\n");
+    assert!(!log.contains(&original_entry));
+}
+
 fn test_amend_commit_with_staged_changes() {
     let repo = TestRepo::new();
     repo.create_file("a.txt", "hello");

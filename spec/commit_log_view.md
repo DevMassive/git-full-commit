@@ -44,6 +44,7 @@ This document specifies the behavior of the Commit Log View, which is part of th
   2.  The input field is pre-populated with the message from the commit being amended.
   3.  The cursor is placed at the end of the commit message, ready for editing.
   4.  The user is now in "amend mode," and all interactions are handled by the commit input view. (See `spec/commit_input_view.md` for details on editing).
+  5.  When the amended message is confirmed, only the selected commit is rewritten—the newest commit (HEAD) and any other commits retain their original messages.
 
 - **Canceling Amend Mode:**
   - Navigating away from the input field using the `Up` or `Down` arrow keys cancels the operation.
