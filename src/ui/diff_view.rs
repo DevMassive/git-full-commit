@@ -275,7 +275,7 @@ fn render_line(
         let max_x = win.get_max_x();
         let current_x = win.get_cur_x();
         let remaining_width = if max_x > current_x {
-            max_x - current_x
+            (max_x - current_x) as usize
         } else {
             0
         };
@@ -283,10 +283,24 @@ fn render_line(
             return;
         }
 
+        let truncate_and_add = |txt: &str| {
+            let mut current_width = 0;
+            let mut end_byte_index = txt.len();
+            for (byte_index, ch) in txt.char_indices() {
+                let char_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+                if current_width + char_width > remaining_width {
+                    end_byte_index = byte_index;
+                    break;
+                }
+                current_width += char_width;
+            }
+            win.addstr(&txt[..end_byte_index]);
+        };
+
         if *remaining_scroll == 0 {
             win.attron(COLOR_PAIR(pair));
             win.attron(attr);
-            win.addnstr(text, remaining_width as usize);
+            truncate_and_add(text);
             win.attroff(attr);
             win.attroff(COLOR_PAIR(pair));
         } else {
@@ -295,7 +309,7 @@ fn render_line(
                 let scrolled_text = get_scrolled_line(text, *remaining_scroll);
                 win.attron(COLOR_PAIR(pair));
                 win.attron(attr);
-                win.addnstr(scrolled_text, remaining_width as usize);
+                truncate_and_add(scrolled_text);
                 win.attroff(attr);
                 win.attroff(COLOR_PAIR(pair));
                 *remaining_scroll = 0;
