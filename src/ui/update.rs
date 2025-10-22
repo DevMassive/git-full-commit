@@ -1,6 +1,7 @@
 use crate::app_state::{AppState, FocusedPane};
 use crate::commit_storage;
 use crate::cursor_state::CursorState;
+use crate::ui::commit_view;
 use crate::ui::main_screen::{self, ListItem as MainScreenListItem};
 use pancurses::Input;
 
@@ -164,11 +165,21 @@ pub fn update_state_with_alt(
                                 if let Some(item) =
                                     state.main_screen.list_items.get_mut(current_index)
                                 {
+                                    let cursor = message.chars().count();
+                                    let (scroll_offset, scroll_extra_space) =
+                                        commit_view::compute_scroll_for_prefix(
+                                            message.as_str(),
+                                            cursor,
+                                            max_x,
+                                            " ● ",
+                                        );
                                     *item = MainScreenListItem::EditingReorderCommit {
                                         hash,
                                         original_message: message.clone(),
                                         current_text: message.clone(),
-                                        cursor: message.chars().count(),
+                                        cursor,
+                                        scroll_offset,
+                                        scroll_extra_space,
                                         is_on_remote,
                                         is_fixup,
                                     };
@@ -244,11 +255,21 @@ pub fn update_state_with_alt(
                         if !is_on_remote {
                             if let Some(item) = state.main_screen.list_items.get_mut(current_index)
                             {
+                                let cursor = message.chars().count();
+                                let (scroll_offset, scroll_extra_space) =
+                                    commit_view::compute_scroll_for_prefix(
+                                        message.as_str(),
+                                        cursor,
+                                        max_x,
+                                        " ● ",
+                                    );
                                 *item = MainScreenListItem::EditingReorderCommit {
                                     hash,
                                     original_message: message.clone(),
                                     current_text: message.clone(),
-                                    cursor: message.chars().count(),
+                                    cursor,
+                                    scroll_offset,
+                                    scroll_extra_space,
                                     is_on_remote,
                                     is_fixup,
                                 };

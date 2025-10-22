@@ -75,3 +75,11 @@ This document specifies the behavior of the Commit Log View, which is part of th
   - `>`: Redoes the last undone action.
   - `Enter`: Confirms the new commit order and exits reordering mode. The application will then perform a safe rebase operation in the background. If any conflicts are detected, the operation is aborted, and the commit order remains unchanged.
   - `Esc` or `q`: Cancels the reordering, reverts the commit list to its original order, and exits reordering mode.
+
+### 3.3. Editing Commit Messages While Reordering
+
+- Pressing `Alt+Enter` (`Meta+Enter`) while a local commit is selected replaces the row with an inline editor for that commit message.
+- The editor uses the same single-line scrolling behaviour as the commit input field:
+  - Once the cursor reaches `available_width - 5` cells (after the ` ● ` prefix), the view scrolls forward so the cursor remains at `available_width - 4`.
+  - The first visible glyph becomes `…` or `… ` to indicate hidden content; the extra space is used when required to keep the glyph grid aligned around double-width characters.
+  - Moving the cursor back toward the left edge scrolls the view backwards, stopping at the beginning of the string if further scrolling would go negative.

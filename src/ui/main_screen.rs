@@ -53,6 +53,8 @@ pub enum ListItem {
         original_message: String,
         current_text: String,
         cursor: usize,
+        scroll_offset: usize,
+        scroll_extra_space: bool,
         is_on_remote: bool,
         is_fixup: bool,
     },
@@ -336,21 +338,21 @@ fn render_main_pane(
             ListItem::EditingReorderCommit {
                 current_text,
                 cursor,
+                scroll_offset,
+                scroll_extra_space,
                 ..
             } => {
-                if is_selected {
-                    (carret_x, carret_y) = commit_view::render_editor(
-                        window,
-                        current_text,
-                        *cursor,
-                        is_selected,
-                        line_y,
-                        max_x,
-                        " ● ",
-                        0,
-                        false,
-                    );
-                }
+                (carret_x, carret_y) = commit_view::render_editor(
+                    window,
+                    current_text,
+                    *cursor,
+                    is_selected,
+                    line_y,
+                    max_x,
+                    " ● ",
+                    *scroll_offset,
+                    *scroll_extra_space,
+                );
             }
         }
     }
@@ -454,10 +456,20 @@ pub fn handle_alt_input(state: &mut AppState, input: Input, _max_y: i32, max_x: 
         if let ListItem::EditingReorderCommit {
             current_text,
             cursor,
+            scroll_offset,
+            scroll_extra_space,
             ..
         } = item
         {
             commit_view::handle_generic_text_input_with_alt(current_text, cursor, input);
+            let (offset, extra_space) = commit_view::compute_scroll_for_prefix(
+                current_text.as_str(),
+                *cursor,
+                max_x,
+                " ● ",
+            );
+            *scroll_offset = offset;
+            *scroll_extra_space = extra_space;
         } else {
             commit_view::handle_commit_input_with_alt(state, input, max_x);
         }
@@ -1154,6 +1166,8 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32, max
             hash,
             is_on_remote,
             is_fixup,
+            scroll_offset,
+            scroll_extra_space,
         } = item
         {
             match input {
@@ -1177,6 +1191,14 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32, max
                 }
                 _ => {
                     commit_view::handle_generic_text_input(current_text, cursor, input);
+                    let (offset, extra_space) = commit_view::compute_scroll_for_prefix(
+                        current_text.as_str(),
+                        *cursor,
+                        max_x,
+                        " ● ",
+                    );
+                    *scroll_offset = offset;
+                    *scroll_extra_space = extra_space;
                 }
             }
             return;

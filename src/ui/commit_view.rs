@@ -106,6 +106,20 @@ pub fn render(
     }
 }
 
+pub fn compute_scroll_for_prefix(
+    text: &str,
+    cursor: usize,
+    max_x: i32,
+    prefix: &str,
+) -> (usize, bool) {
+    let max_x = max_x.max(0) as usize;
+    let available_width = max_x.saturating_sub(prefix.width());
+    if available_width == 0 || text.is_empty() {
+        return (0, false);
+    }
+    compute_commit_scroll(text, cursor, available_width)
+}
+
 fn build_display_line(
     text: &str,
     cursor: usize,
@@ -257,15 +271,7 @@ fn compute_commit_scroll(text: &str, cursor: usize, available_width: usize) -> (
 }
 
 fn adjust_commit_scroll_state(state: &mut AppState, text: &str, cursor: usize, max_x: i32) {
-    let max_x = max_x.max(0) as usize;
-    let available_width = max_x.saturating_sub(COMMIT_INPUT_PREFIX.width());
-    if available_width == 0 || text.is_empty() {
-        state.main_screen.commit_scroll_offset = 0;
-        state.main_screen.commit_scroll_extra_space = false;
-        return;
-    }
-
-    let (offset, extra_space) = compute_commit_scroll(text, cursor, available_width);
+    let (offset, extra_space) = compute_scroll_for_prefix(text, cursor, max_x, COMMIT_INPUT_PREFIX);
     state.main_screen.commit_scroll_offset = offset.min(text.chars().count());
     state.main_screen.commit_scroll_extra_space = extra_space;
 }
