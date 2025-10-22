@@ -3,7 +3,9 @@ use crate::commit_storage;
 use crate::git;
 use pancurses::COLOR_PAIR;
 use pancurses::Input;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+const COMMIT_INPUT_PREFIX: &str = " ○ ";
 
 pub fn render_editor(
     window: &pancurses::Window,
@@ -13,6 +15,8 @@ pub fn render_editor(
     line_y: i32,
     max_x: i32,
     prefix: &str,
+    scroll_offset: usize,
+    scroll_extra_space: bool,
 ) -> (i32, i32) {
     let pair = if is_selected { 5 } else { 1 };
     window.attron(COLOR_PAIR(pair));
@@ -24,30 +28,28 @@ pub fn render_editor(
     window.mv(line_y, 0);
 
     window.addstr(prefix);
-    let available_width = (max_x as usize).saturating_sub(prefix.width());
-    let mut truncated_message = String::new();
-    let mut current_width = 0;
-    for ch in text.chars() {
-        let char_width = ch.to_string().width();
-        if current_width + char_width > available_width {
-            break;
-        }
-        truncated_message.push(ch);
-        current_width += char_width;
+    let max_x_usize = if max_x < 0 { 0 } else { max_x as usize };
+    let prefix_width = prefix.width();
+    let available_width = max_x_usize.saturating_sub(prefix_width);
+
+    let (displayed_text, cursor_column_relative) = build_display_line(
+        text,
+        cursor,
+        available_width,
+        scroll_offset,
+        scroll_extra_space,
+    );
+
+    if !displayed_text.is_empty() {
+        window.addstr(&displayed_text);
     }
-    window.addstr(&truncated_message);
 
     window.attroff(COLOR_PAIR(pair));
 
-    let commit_line_y = line_y;
-    let prefix_width = prefix.width();
-    let message_before_cursor: String = text.chars().take(cursor).collect();
-    let cursor_display_pos = prefix_width + message_before_cursor.width();
+    let cursor_display_pos = prefix_width.saturating_add(cursor_column_relative);
+    let clamped_cursor = cursor_display_pos.min(max_x_usize.saturating_sub(1));
 
-    let carret_x = cursor_display_pos as i32;
-    let carret_y = commit_line_y;
-
-    (carret_x, carret_y)
+    (clamped_cursor as i32, line_y)
 }
 
 pub fn render(
@@ -79,14 +81,16 @@ pub fn render(
             }
         }
         window.mv(line_y, 0);
-        let prefix = " ○ ";
-        window.addstr(prefix);
+        window.addstr(COMMIT_INPUT_PREFIX);
         let placeholder_pair = if is_selected { 16 } else { 9 };
         window.attron(COLOR_PAIR(placeholder_pair));
         window.addstr(placeholder);
         window.attroff(COLOR_PAIR(placeholder_pair));
         window.attroff(COLOR_PAIR(pair));
-        (prefix.width().try_into().unwrap_or_default(), line_y)
+        (
+            COMMIT_INPUT_PREFIX.width().try_into().unwrap_or_default(),
+            line_y,
+        )
     } else {
         render_editor(
             window,
@@ -95,9 +99,175 @@ pub fn render(
             is_selected,
             line_y,
             max_x,
-            " ○ ",
+            COMMIT_INPUT_PREFIX,
+            state.main_screen.commit_scroll_offset,
+            state.main_screen.commit_scroll_extra_space,
         )
     }
+}
+
+fn build_display_line(
+    text: &str,
+    cursor: usize,
+    available_width: usize,
+    scroll_offset: usize,
+    scroll_extra_space: bool,
+) -> (String, usize) {
+    if available_width == 0 {
+        return (String::new(), 0);
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    let cursor_index = cursor.min(chars.len());
+    let offset_index = scroll_offset.min(cursor_index).min(chars.len());
+    let prefix_widths = prefix_widths_for(&chars);
+
+    let offset_width = prefix_widths[offset_index];
+    let cursor_absolute_width = prefix_widths[cursor_index];
+    let ellipsis = if offset_index > 0 {
+        if scroll_extra_space { "… " } else { "…" }
+    } else {
+        ""
+    };
+    let ellipsis_width = if offset_index > 0 {
+        if scroll_extra_space { 2 } else { 1 }
+    } else {
+        0
+    };
+
+    let mut rendered = String::new();
+    let mut consumed_width = 0usize;
+    let mut actual_ellipsis_width = 0usize;
+
+    if !ellipsis.is_empty() && ellipsis_width <= available_width {
+        rendered.push_str(ellipsis);
+        consumed_width = ellipsis_width;
+        actual_ellipsis_width = ellipsis_width;
+    }
+
+    for ch in chars.iter().skip(offset_index) {
+        let ch_width = ch.width().unwrap_or(0);
+        if consumed_width + ch_width > available_width {
+            break;
+        }
+        rendered.push(*ch);
+        consumed_width += ch_width;
+    }
+
+    let visible_width_to_cursor = cursor_absolute_width.saturating_sub(offset_width);
+    let cursor_column_relative = visible_width_to_cursor
+        .saturating_add(actual_ellipsis_width)
+        .min(available_width);
+
+    (rendered, cursor_column_relative)
+}
+
+fn prefix_widths_for(chars: &[char]) -> Vec<usize> {
+    let mut widths = Vec::with_capacity(chars.len() + 1);
+    widths.push(0);
+    for ch in chars {
+        let width = ch.width().unwrap_or(0);
+        let next = widths.last().copied().unwrap_or(0) + width;
+        widths.push(next);
+    }
+    widths
+}
+
+fn compute_commit_scroll(text: &str, cursor: usize, available_width: usize) -> (usize, bool) {
+    if available_width <= 4 {
+        return (0, false);
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() {
+        return (0, false);
+    }
+    let cursor_index = cursor.min(chars.len());
+    if cursor_index == 0 {
+        return (0, false);
+    }
+
+    let prefix_widths = prefix_widths_for(&chars);
+    let cursor_absolute_width = prefix_widths[cursor_index];
+
+    let right_scroll_trigger = available_width.saturating_sub(5);
+    if cursor_absolute_width <= right_scroll_trigger {
+        return (0, false);
+    }
+
+    let target_position = available_width.saturating_sub(4);
+    if target_position == 0 {
+        return (0, false);
+    }
+
+    let mut best_offset = cursor_index;
+    let mut best_extra_space = false;
+    let mut best_display_col = 0usize;
+    let mut found = false;
+
+    for &(ellipsis_width, extra_space) in &[(1usize, false), (2usize, true)] {
+        if target_position < ellipsis_width || available_width < ellipsis_width {
+            continue;
+        }
+
+        let required_trim = cursor_absolute_width + ellipsis_width - target_position;
+        if required_trim <= 0 {
+            continue;
+        }
+
+        let mut offset = cursor_index;
+        for i in 0..=cursor_index {
+            if prefix_widths[i] >= required_trim {
+                offset = i;
+                break;
+            }
+        }
+
+        let trimmed_width = prefix_widths[offset];
+        let visible_width = cursor_absolute_width.saturating_sub(trimmed_width);
+        let display_col = visible_width + ellipsis_width;
+        if display_col > target_position {
+            continue;
+        }
+
+        if !found
+            || display_col > best_display_col
+            || (display_col == best_display_col && offset < best_offset)
+        {
+            found = true;
+            best_offset = offset;
+            best_extra_space = extra_space;
+            best_display_col = display_col;
+        }
+
+        if display_col == target_position {
+            return (offset, extra_space);
+        }
+    }
+
+    if found {
+        return (best_offset, best_extra_space);
+    }
+
+    if available_width >= 1 && cursor_absolute_width > target_position {
+        return (cursor_index, false);
+    }
+
+    (0, false)
+}
+
+fn adjust_commit_scroll_state(state: &mut AppState, text: &str, cursor: usize, max_x: i32) {
+    let max_x = max_x.max(0) as usize;
+    let available_width = max_x.saturating_sub(COMMIT_INPUT_PREFIX.width());
+    if available_width == 0 || text.is_empty() {
+        state.main_screen.commit_scroll_offset = 0;
+        state.main_screen.commit_scroll_extra_space = false;
+        return;
+    }
+
+    let (offset, extra_space) = compute_commit_scroll(text, cursor, available_width);
+    state.main_screen.commit_scroll_offset = offset.min(text.chars().count());
+    state.main_screen.commit_scroll_extra_space = extra_space;
 }
 
 pub fn handle_generic_text_input_with_alt(text: &mut String, cursor: &mut usize, input: Input) {
@@ -214,7 +384,7 @@ pub fn handle_generic_text_input(text: &mut String, cursor: &mut usize, input: I
     }
 }
 
-pub fn handle_commit_input_with_alt(state: &mut AppState, input: Input) {
+pub fn handle_commit_input_with_alt(state: &mut AppState, input: Input, max_x: i32) {
     let is_amend = matches!(
         state.current_main_item(),
         Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput { .. })
@@ -240,11 +410,15 @@ pub fn handle_commit_input_with_alt(state: &mut AppState, input: Input) {
     };
 
     if let (Some(message), Some(cursor)) = (message_to_edit, cursor_to_edit) {
-        handle_generic_text_input_with_alt(message, cursor, input);
+        let (cursor_position, message_snapshot) = {
+            handle_generic_text_input_with_alt(message, cursor, input);
+            (*cursor, message.clone())
+        };
+        adjust_commit_scroll_state(state, message_snapshot.as_str(), cursor_position, max_x);
     }
 }
 
-pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
+pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32, max_x: i32) {
     let is_amend = matches!(
         state.current_main_item(),
         Some(crate::ui::main_screen::ListItem::AmendingCommitMessageInput { .. })
@@ -297,6 +471,8 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
             if result.is_ok() {
                 let _ = commit_storage::delete_commit_message(&state.repo_path);
                 message.clear();
+                state.main_screen.commit_scroll_offset = 0;
+                state.main_screen.commit_scroll_extra_space = false;
             }
             result
         };
@@ -318,9 +494,13 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32) {
             state.refresh_diff(true);
         }
     } else {
-        handle_generic_text_input(message, cursor, input);
-        if !is_amend {
-            let _ = commit_storage::save_commit_message(&state.repo_path, message);
-        }
+        let (cursor_position, message_snapshot) = {
+            handle_generic_text_input(message, cursor, input);
+            if !is_amend {
+                let _ = commit_storage::save_commit_message(&state.repo_path, message);
+            }
+            (*cursor, message.clone())
+        };
+        adjust_commit_scroll_state(state, message_snapshot.as_str(), cursor_position, max_x);
     }
 }

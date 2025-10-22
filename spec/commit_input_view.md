@@ -57,3 +57,12 @@ The following keybindings are active when the Commit Message Input view is selec
   3. The application checks the repository status:
      - If there are no more staged changes, the application exits.
      - If staged changes remain, the screen is refreshed to show the new state, with the cursor moved to the top of the list.
+
+## 4. Horizontal Scrolling Behaviour
+
+- Both commit and amend message inputs support horizontal scrolling when the text exceeds the available window width (after the ` ○ ` prefix).
+- The rendered line maintains at least a four half-width character buffer to the right of the cursor.
+  - When the cursor reaches `available_width - 5` (measured in half-width cells) the view scrolls forward so the cursor appears at `available_width - 4`.
+  - The first visible glyph is replaced with `…` or `… ` to indicate that content has been scrolled off-screen. A trailing space is inserted when needed to align the rendered width after accounting for double-width characters.
+- While scrolled, moving the cursor left so that it is within five half-width cells of the left edge causes the view to scroll backwards.
+  - The scroll position is reduced so that the cursor lands at `available_width - 4`, unless that would move the scroll offset before the start of the string. In that case the view simply snaps back to the beginning with no negative scroll.

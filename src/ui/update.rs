@@ -136,11 +136,11 @@ pub fn update_state_with_alt(
     mut state: AppState,
     input: Option<Input>,
     max_y: i32,
-    _max_x: i32,
+    max_x: i32,
 ) -> AppState {
     if let Some(input) = input {
         if state.is_in_input_mode() {
-            main_screen::handle_alt_input(&mut state, input, max_y);
+            main_screen::handle_alt_input(&mut state, input, max_y, max_x);
             return state;
         }
 

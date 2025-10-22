@@ -347,6 +347,8 @@ fn render_main_pane(
                         line_y,
                         max_x,
                         " ● ",
+                        0,
+                        false,
                     );
                 }
             }
@@ -443,7 +445,7 @@ fn render_diff_view(window: &Window, state: &AppState, max_y: i32, top_offset: u
     }
 }
 
-pub fn handle_alt_input(state: &mut AppState, input: Input, _max_y: i32) {
+pub fn handle_alt_input(state: &mut AppState, input: Input, _max_y: i32, max_x: i32) {
     if let Some(item) = state
         .main_screen
         .list_items
@@ -457,7 +459,7 @@ pub fn handle_alt_input(state: &mut AppState, input: Input, _max_y: i32) {
         {
             commit_view::handle_generic_text_input_with_alt(current_text, cursor, input);
         } else {
-            commit_view::handle_commit_input_with_alt(state, input);
+            commit_view::handle_commit_input_with_alt(state, input, max_x);
         }
     }
 }
@@ -910,7 +912,7 @@ fn handle_main_pane_input(state: &mut AppState, input: Input, max_y: i32, max_x:
             handle_navigation(state, input, max_y, max_x);
         } else {
             // Other keys go to the text editor
-            commit_view::handle_commit_input(state, input, max_y);
+            commit_view::handle_commit_input(state, input, max_y, max_x);
         }
     } else if !handle_commands(state, &input, max_y) {
         handle_navigation(state, input, max_y, max_x);
@@ -1436,7 +1438,7 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
             .get(state.main_screen.file_cursor),
         Some(ListItem::CommitMessageInput)
     ) {
-        commit_view::handle_commit_input(state, input, max_y);
+        commit_view::handle_commit_input(state, input, max_y, max_x);
     } else {
         scroll::handle_scroll(state, input, max_y);
     }

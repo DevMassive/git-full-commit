@@ -28,6 +28,8 @@ pub struct MainScreenState {
     pub line_cursor: usize,
     pub commit_message: String,
     pub commit_cursor: usize,
+    pub commit_scroll_offset: usize,
+    pub commit_scroll_extra_space: bool,
     pub amending_commit_hash: Option<String>,
     pub is_diff_cursor_active: bool,
     pub has_unstaged_changes: bool,

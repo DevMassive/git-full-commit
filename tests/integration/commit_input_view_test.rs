@@ -4,6 +4,7 @@ use git_full_commit::git;
 use git_full_commit::ui::main_screen::ListItem as MainScreenListItem;
 use git_full_commit::ui::update::{update_state, update_state_with_alt};
 use pancurses::Input;
+use unicode_width::UnicodeWidthStr;
 
 #[test]
 fn test_commit_message_input_and_commit() {
@@ -312,5 +313,91 @@ fn test_commit_message_word_movement_bf() {
     assert_eq!(
         app_state.main_screen.commit_cursor,
         "word1 word2 word3".len()
+    );
+}
+
+#[test]
+fn test_commit_message_horizontal_scroll_ascii() {
+    let repo = TestRepo::new();
+    repo.create_file("a.txt", "hello");
+    repo.add_all();
+
+    let files = git::get_diff(repo.path.clone());
+    let mut app_state = AppState::new(repo.path.clone(), files);
+
+    app_state.main_screen.file_cursor = 2;
+    app_state = update_state(app_state, Some(Input::Character('\n')), 24, 24);
+    assert!(app_state.is_in_input_mode());
+
+    let long_message = "abcdefghijklmnopqrstuvwxyz0123456789";
+    for ch in long_message.chars() {
+        app_state = update_state(app_state, Some(Input::Character(ch)), 24, 24);
+    }
+
+    let prefix_width = " ○ ".width();
+    let available_width = (24usize).saturating_sub(prefix_width);
+    let target_position = available_width.saturating_sub(4);
+    let expected_offset = long_message.chars().count() + 1usize - target_position;
+
+    assert!(
+        app_state.main_screen.commit_scroll_offset > 0,
+        "scroll offset should be positive for long messages"
+    );
+    assert_eq!(app_state.main_screen.commit_scroll_offset, expected_offset);
+    assert!(
+        !app_state.main_screen.commit_scroll_extra_space,
+        "ASCII-only scrolling should not require an extra space with the ellipsis"
+    );
+
+    let original_offset = app_state.main_screen.commit_scroll_offset;
+    app_state = update_state(app_state, Some(Input::KeyLeft), 24, 24);
+    assert!(app_state.main_screen.commit_scroll_offset <= original_offset);
+
+    for _ in 0..long_message.len() {
+        app_state = update_state(app_state, Some(Input::KeyLeft), 24, 24);
+    }
+    assert_eq!(app_state.main_screen.commit_scroll_offset, 0);
+    assert!(
+        !app_state.main_screen.commit_scroll_extra_space,
+        "Resetting scroll should clear ellipsis padding"
+    );
+}
+
+#[test]
+fn test_commit_message_horizontal_scroll_with_wide_characters() {
+    let repo = TestRepo::new();
+    repo.create_file("a.txt", "hello");
+    repo.add_all();
+
+    let files = git::get_diff(repo.path.clone());
+    let mut app_state = AppState::new(repo.path.clone(), files);
+
+    app_state.main_screen.file_cursor = 2;
+    app_state = update_state(app_state, Some(Input::Character('\n')), 24, 24);
+    assert!(app_state.is_in_input_mode());
+
+    let wide_message = format!("ABCD界{}", "b".repeat(15));
+    for ch in wide_message.chars() {
+        app_state = update_state(app_state, Some(Input::Character(ch)), 24, 24);
+    }
+
+    assert_eq!(app_state.main_screen.commit_scroll_offset, 5);
+    assert!(
+        app_state.main_screen.commit_scroll_extra_space,
+        "Double-width boundary should require ellipsis padding"
+    );
+
+    let original_offset = app_state.main_screen.commit_scroll_offset;
+    app_state = update_state(app_state, Some(Input::KeyLeft), 24, 24);
+    assert!(app_state.main_screen.commit_scroll_offset <= original_offset);
+
+    for _ in 0..wide_message.len() {
+        app_state = update_state(app_state, Some(Input::KeyLeft), 24, 24);
+    }
+
+    assert_eq!(app_state.main_screen.commit_scroll_offset, 0);
+    assert!(
+        !app_state.main_screen.commit_scroll_extra_space,
+        "When no scrolling is needed the ellipsis padding should reset"
     );
 }
