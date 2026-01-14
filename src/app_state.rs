@@ -5,8 +5,10 @@ use crate::git::{
     CommitInfo, FileDiff, get_commit_diff, get_diff, get_local_commits, get_unstaged_diff,
     get_untracked_files,
 };
+use crate::background::{BackgroundWorker, Response};
 use crate::ui::main_screen::{ListItem as MainScreenListItem, UnstagedListItem};
 use std::path::PathBuf;
+use std::time::Instant;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FocusedPane {
@@ -63,6 +65,8 @@ pub struct AppState {
     pub focused_pane: FocusedPane,
     pub editor_request: Option<EditorRequest>,
     pub error_message: Option<String>,
+    pub last_interaction_time: Option<Instant>,
+    pub background_worker: BackgroundWorker,
 }
 impl AppState {
     pub fn new(repo_path: PathBuf, files: Vec<FileDiff>) -> Self {
@@ -105,6 +109,8 @@ impl AppState {
             focused_pane,
             editor_request: None,
             error_message: None,
+            last_interaction_time: None,
+            background_worker: BackgroundWorker::new(),
         };
         s.update_selected_commit_diff();
         s
@@ -247,17 +253,7 @@ impl AppState {
     }
 
     pub fn update_selected_commit_diff(&mut self) {
-        let hash = if let Some(item) = self.current_main_item() {
-            match item {
-                MainScreenListItem::PreviousCommitInfo { hash, .. } => Some(hash.clone()),
-                MainScreenListItem::EditingReorderCommit { hash, .. } => Some(hash.clone()),
-                _ => None,
-            }
-        } else {
-            None
-        };
-
-        if let Some(hash) = hash {
+        if let Some(hash) = self.get_selected_commit_hash() {
             self.selected_commit_files =
                 get_commit_diff(&self.repo_path, &hash).unwrap_or_default();
         } else {
@@ -314,5 +310,52 @@ impl AppState {
                 | Some(MainScreenListItem::AmendingCommitMessageInput { .. })
                 | Some(MainScreenListItem::EditingReorderCommit { .. })
         )
+    }
+
+    pub fn debounce_diff_update(&mut self) {
+        self.last_interaction_time = Some(Instant::now());
+    }
+
+    pub fn check_diff_update(&mut self) -> bool {
+        if let Some(last_time) = self.last_interaction_time {
+            if last_time.elapsed() > std::time::Duration::from_millis(200) {
+                if let Some(hash) = self.get_selected_commit_hash() {
+                    self.background_worker
+                        .request_commit_diff(self.repo_path.clone(), hash);
+                }
+                self.last_interaction_time = None;
+                return false; // Don't trigger render yet, wait for response
+            }
+        }
+        false
+    }
+
+    pub fn poll_background(&mut self) -> bool {
+        let mut needs_render = false;
+        while let Some(response) = self.background_worker.poll() {
+            match response {
+                Response::CommitDiff(hash, diff) => {
+                    if let Some(current_hash) = self.get_selected_commit_hash() {
+                        if current_hash == hash {
+                            self.selected_commit_files = diff;
+                            needs_render = true;
+                        }
+                    }
+                }
+            }
+        }
+        needs_render
+    }
+
+    pub fn get_selected_commit_hash(&self) -> Option<String> {
+        if let Some(item) = self.current_main_item() {
+            match item {
+                MainScreenListItem::PreviousCommitInfo { hash, .. } => Some(hash.clone()),
+                MainScreenListItem::EditingReorderCommit { hash, .. } => Some(hash.clone()),
+                _ => None,
+            }
+        } else {
+            None
+        }
     }
 }

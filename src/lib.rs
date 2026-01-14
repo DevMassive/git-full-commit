@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::path::PathBuf;
 
 pub mod app_state;
+pub mod background;
 pub mod command;
 mod commit_storage;
 pub mod cursor_state;

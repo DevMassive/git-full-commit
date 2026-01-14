@@ -7,6 +7,7 @@ pub mod fixup_commit_test;
 pub mod ignore_operations_test;
 pub mod main_screen_test;
 pub mod pane_switching_test;
+pub mod performance_test;
 pub mod reorder_commits_test;
 pub mod stage_operations_test;
 pub mod undo_redo_test;

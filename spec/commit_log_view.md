@@ -30,6 +30,7 @@ This document specifies the behavior of the Commit Log View, which is part of th
 
 - Standard `Up Arrow` and `Down Arrow` keys are used to navigate up and down the list of commits.
 - As the selection changes, the Diff View in the bottom panel updates to show the diff corresponding to the newly selected commit.
+- **Note:** The diff update occurs asynchronously to ensure smooth scrolling. Large diffs may take a moment to load, during which the UI remains responsive.
 
 ## 3. Interaction and Commands
 

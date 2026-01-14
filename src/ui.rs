@@ -55,7 +55,12 @@ pub fn tui_loop(repo_path: std::path::PathBuf, files: Vec<crate::git::FileDiff>,
 
         let input = window.getch();
 
+        if state.poll_background() {
+            needs_render = true;
+        }
+
         if input.is_none() {
+            state.check_diff_update();
             thread::sleep(Duration::from_millis(10));
             continue;
         }

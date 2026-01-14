@@ -1260,7 +1260,7 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32, max
             state.main_screen.file_cursor = state.main_screen.file_cursor.saturating_sub(1);
             state.main_screen.diff_scroll = 0;
             state.main_screen.line_cursor = 0;
-            state.update_selected_commit_diff();
+            state.debounce_diff_update();
         }
         Input::KeyDown | Input::Character('\u{e}') => {
             let item_count = state.main_screen.list_items.len();
@@ -1273,7 +1273,7 @@ fn handle_reorder_mode_input(state: &mut AppState, input: Input, max_y: i32, max
             }
             state.main_screen.diff_scroll = 0;
             state.main_screen.line_cursor = 0;
-            state.update_selected_commit_diff();
+            state.debounce_diff_update();
         }
         Input::Character('f') => {
             let cursor = state.main_screen.file_cursor;
@@ -1423,13 +1423,13 @@ fn handle_navigation(state: &mut AppState, input: Input, max_y: i32, max_x: i32)
         if handle_main_move_up(state, max_y) {
             return;
         }
-        state.update_selected_commit_diff();
+        state.debounce_diff_update();
         return;
     }
 
     if is_move_down(&input) {
         handle_main_move_down(state, max_y);
-        state.update_selected_commit_diff();
+        state.debounce_diff_update();
         return;
     }
 
