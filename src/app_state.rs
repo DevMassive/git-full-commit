@@ -1,3 +1,4 @@
+use crate::background::{BackgroundWorker, Response};
 use crate::command::{Command, CommandHistory};
 use crate::commit_storage;
 use crate::cursor_state::CursorState;
@@ -5,7 +6,6 @@ use crate::git::{
     CommitInfo, FileDiff, get_commit_diff, get_diff, get_local_commits, get_unstaged_diff,
     get_untracked_files,
 };
-use crate::background::{BackgroundWorker, Response};
 use crate::ui::main_screen::{ListItem as MainScreenListItem, UnstagedListItem};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -82,17 +82,20 @@ impl AppState {
         let untracked_files = get_untracked_files(&repo_path).unwrap_or_default();
         let has_unstaged_changes = !unstaged_files.is_empty() || !untracked_files.is_empty();
 
-        let mut main_screen = MainScreenState::default();
-        main_screen.commit_message = commit_message;
-        main_screen.has_unstaged_changes = has_unstaged_changes;
-        main_screen.list_items = Self::build_main_screen_list_items(&files, &previous_commits);
-        main_screen.file_cursor = if !files.is_empty() { 1 } else { 0 };
+        let main_screen = MainScreenState {
+            commit_message,
+            has_unstaged_changes,
+            list_items: Self::build_main_screen_list_items(&files, &previous_commits),
+            file_cursor: if !files.is_empty() { 1 } else { 0 },
+            ..Default::default()
+        };
 
-        let mut unstaged_pane = UnstagedPaneState::default();
-        unstaged_pane.unstaged_files = unstaged_files.clone();
-        unstaged_pane.untracked_files = untracked_files.clone();
-        unstaged_pane.list_items =
-            Self::build_unstaged_screen_list_items(&unstaged_files, &untracked_files);
+        let unstaged_pane = UnstagedPaneState {
+            unstaged_files: unstaged_files.clone(),
+            untracked_files: untracked_files.clone(),
+            list_items: Self::build_unstaged_screen_list_items(&unstaged_files, &untracked_files),
+            ..Default::default()
+        };
 
         let focused_pane = FocusedPane::Main;
 
@@ -156,17 +159,14 @@ impl AppState {
     }
 
     pub fn get_cursor_line_index(&self) -> usize {
-        if let Some(item) = self
+        if let Some(
+            MainScreenListItem::File(_) | MainScreenListItem::PreviousCommitInfo { .. },
+        ) = self
             .main_screen
             .list_items
             .get(self.main_screen.file_cursor)
         {
-            match item {
-                MainScreenListItem::File(_) | MainScreenListItem::PreviousCommitInfo { .. } => {
-                    self.main_screen.line_cursor
-                }
-                _ => 0,
-            }
+            self.main_screen.line_cursor
         } else {
             0
         }
@@ -213,19 +213,14 @@ impl AppState {
         } else {
             self.main_screen.file_cursor =
                 old_file_cursor.min(self.main_screen.list_items.len() - 1);
-            if let Some(item) = self
+            if let Some(MainScreenListItem::File(file)) = self
                 .main_screen
                 .list_items
                 .get(self.main_screen.file_cursor)
             {
-                if let MainScreenListItem::File(file) = item {
-                    let max_line = file.lines.len().saturating_sub(1);
-                    self.main_screen.line_cursor = old_line_cursor.min(max_line);
-                    self.main_screen.diff_scroll = old_scroll.min(max_line);
-                } else {
-                    self.main_screen.line_cursor = 0;
-                    self.main_screen.diff_scroll = 0;
-                }
+                let max_line = file.lines.len().saturating_sub(1);
+                self.main_screen.line_cursor = old_line_cursor.min(max_line);
+                self.main_screen.diff_scroll = old_scroll.min(max_line);
             } else {
                 self.main_screen.line_cursor = 0;
                 self.main_screen.diff_scroll = 0;
@@ -268,24 +263,18 @@ impl AppState {
     }
 
     pub fn current_main_file(&self) -> Option<&FileDiff> {
-        if let Some(item) = self.current_main_item() {
-            if let MainScreenListItem::File(file_diff) = item {
-                Some(file_diff)
-            } else {
-                None
-            }
+        if let Some(MainScreenListItem::File(file_diff)) = self.current_main_item() {
+            Some(file_diff)
         } else {
             None
         }
     }
 
     pub fn get_unstaged_file(&self) -> Option<&FileDiff> {
-        if let Some(item) = self.unstaged_pane.list_items.get(self.unstaged_pane.cursor) {
-            if let UnstagedListItem::File(file_diff) = item {
-                Some(file_diff)
-            } else {
-                None
-            }
+        if let Some(UnstagedListItem::File(file_diff)) =
+            self.unstaged_pane.list_items.get(self.unstaged_pane.cursor)
+        {
+            Some(file_diff)
         } else {
             None
         }
@@ -395,7 +384,7 @@ impl AppState {
                         || right.contains('-')
                         || right.contains("Bin")
                         || (!right.is_empty()
-                            && right.chars().all(|c| c.is_digit(10) || c.is_whitespace()))
+                            && right.chars().all(|c| c.is_ascii_digit() || c.is_whitespace()))
                     {
                         stat_line_indices.push(i);
                     }

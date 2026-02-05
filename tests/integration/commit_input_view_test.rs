@@ -127,6 +127,7 @@ fn test_amend_non_head_commit_rewords_only_target() {
     assert!(!log.contains(&original_entry));
 }
 
+#[test]
 fn test_amend_commit_with_staged_changes() {
     let repo = TestRepo::new();
     repo.create_file("a.txt", "hello");

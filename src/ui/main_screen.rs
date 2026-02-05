@@ -1081,11 +1081,10 @@ fn handle_main_stage_toggle(state: &mut AppState, input: &Input) -> bool {
             is_on_remote,
             is_fixup: _,
         }) => {
-            if state.main_screen.is_diff_cursor_active {
-                if state.jump_to_file_in_diff() {
+            if state.main_screen.is_diff_cursor_active
+                && state.jump_to_file_in_diff() {
                     return true;
                 }
-            }
             if !is_on_remote {
                 state.main_screen.amending_commit_hash = Some(hash.clone());
 
@@ -1103,10 +1102,10 @@ fn handle_main_stage_toggle(state: &mut AppState, input: &Input) -> bool {
                     .iter()
                     .position(|item| matches!(item, ListItem::CommitMessageInput))
                 {
-                    if let Some(item) = state.main_screen.list_items.get_mut(commit_input_index) {
-                        if let ListItem::CommitMessageInput = item {
-                            state.main_screen.commit_message.clear();
-                        }
+                    if let Some(ListItem::CommitMessageInput) =
+                        state.main_screen.list_items.get_mut(commit_input_index)
+                    {
+                        state.main_screen.commit_message.clear();
                     }
                 }
                 state.main_screen.commit_cursor = message.chars().count();

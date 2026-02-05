@@ -1,6 +1,6 @@
 use crate::git::{self, FileDiff};
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 
 pub enum Request {
@@ -14,6 +14,12 @@ pub enum Response {
 pub struct BackgroundWorker {
     tx: Sender<Request>,
     rx: Receiver<Response>,
+}
+
+impl Default for BackgroundWorker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl BackgroundWorker {
@@ -32,7 +38,10 @@ impl BackgroundWorker {
             }
         });
 
-        Self { tx: req_tx, rx: res_rx }
+        Self {
+            tx: req_tx,
+            rx: res_rx,
+        }
     }
 
     pub fn request_commit_diff(&self, repo_path: PathBuf, hash: String) {

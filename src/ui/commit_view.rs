@@ -225,13 +225,13 @@ fn compute_commit_scroll(text: &str, cursor: usize, available_width: usize) -> (
         }
 
         let required_trim = cursor_absolute_width + ellipsis_width - target_position;
-        if required_trim <= 0 {
+        if required_trim == 0 {
             continue;
         }
 
         let mut offset = cursor_index;
-        for i in 0..=cursor_index {
-            if prefix_widths[i] >= required_trim {
+        for (i, &width) in prefix_widths.iter().enumerate().take(cursor_index + 1) {
+            if width >= required_trim {
                 offset = i;
                 break;
             }

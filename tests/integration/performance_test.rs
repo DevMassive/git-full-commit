@@ -10,7 +10,7 @@ fn test_debounce_diff_update() {
     repo.create_file("test.txt", "content");
     repo.add_all();
     repo.commit("Initial commit");
-    
+
     let files = git::get_diff(repo.path.clone());
     let mut state = AppState::new(repo.path.clone(), files);
 
