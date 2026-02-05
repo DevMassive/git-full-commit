@@ -358,4 +358,73 @@ impl AppState {
             None
         }
     }
+
+    pub fn jump_to_file_in_diff(&mut self) -> bool {
+        if !self.main_screen.is_diff_cursor_active {
+            return false;
+        }
+
+        if self.selected_commit_files.is_empty() {
+            return false;
+        }
+
+        let line_index = self.main_screen.line_cursor;
+
+        // The first file contains the header which includes the stat summary.
+        let first_file = &self.selected_commit_files[0];
+        if line_index >= first_file.lines.len() {
+            // We are already beyond the first file's lines (including header),
+            // so we are definitely not in the stat summary.
+            return false;
+        }
+
+        let mut stat_line_indices = Vec::new();
+        let mut patch_start_index = 0;
+
+        for (i, line) in first_file.lines.iter().enumerate() {
+            if line.starts_with("diff --git ") {
+                patch_start_index = i;
+                break;
+            }
+            // Heuristic for stat line: " path | count +++---"
+            if line.contains('|') {
+                let parts: Vec<&str> = line.split('|').collect();
+                if parts.len() == 2 {
+                    let right = parts[1].trim();
+                    if right.contains('+')
+                        || right.contains('-')
+                        || right.contains("Bin")
+                        || (!right.is_empty()
+                            && right.chars().all(|c| c.is_digit(10) || c.is_whitespace()))
+                    {
+                        stat_line_indices.push(i);
+                    }
+                }
+            }
+        }
+
+        if let Some(stat_index) = stat_line_indices.iter().position(|&idx| idx == line_index) {
+            // Found the file index (stat_index)
+            let mut target_offset = 0;
+            if stat_index == 0 {
+                target_offset = patch_start_index;
+            } else if stat_index < self.selected_commit_files.len() {
+                // Sum lengths of previous files
+                for i in 0..stat_index {
+                    target_offset += self.selected_commit_files[i].lines.len();
+                }
+            } else {
+                return false;
+            }
+
+            self.main_screen.line_cursor = target_offset;
+
+            // Update diff_scroll to show the jumped-to line at the top
+            self.main_screen.diff_scroll = target_offset;
+
+            return true;
+        }
+
+        false
+    }
 }

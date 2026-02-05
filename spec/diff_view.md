@@ -57,10 +57,32 @@ Page scrolling follows a two-step logic: first the cursor moves, then the view s
 
 ### 3.4. Half-Page Scrolling (Vertical)
 
+
+
 Half-page scrolling follows the same two-step logic as full-page scrolling, but with half the page height.
 
+
+
 - **User Action (Half Page Down):** Press `Ctrl+D`.
+
 - **Expected Outcome:** The cursor moves down by half a page, and the view scrolls by half a page if the cursor moves off-screen.
 
+
+
 - **User Action (Half Page Up):** Press `Ctrl+U`.
+
 - **Expected Outcome:** The cursor moves up by half a page, and the view scrolls by half a page if the cursor moves off-screen.
+
+
+
+## 4. Navigation from Stat Summary
+
+
+
+When viewing a commit's diff, the header often includes a stat summary (a list of changed files with their respective change counts).
+
+
+
+- **User Action:** Navigate the diff cursor (using `j`/`k`) to a line in the stat summary and press `Enter`.
+
+- **Expected Outcome:** The diff view scrolls to the beginning of the patch for the corresponding file. The cursor is moved to the `diff --git` line of that file.

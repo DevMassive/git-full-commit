@@ -1,5 +1,6 @@
 pub mod commit_input_view_test;
 pub mod common;
+pub mod diff_jump_test;
 pub mod diff_view_test;
 pub mod discard_operations_test;
 mod edit_commit_message_test;

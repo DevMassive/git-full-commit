@@ -1081,6 +1081,11 @@ fn handle_main_stage_toggle(state: &mut AppState, input: &Input) -> bool {
             is_on_remote,
             is_fixup: _,
         }) => {
+            if state.main_screen.is_diff_cursor_active {
+                if state.jump_to_file_in_diff() {
+                    return true;
+                }
+            }
             if !is_on_remote {
                 state.main_screen.amending_commit_hash = Some(hash.clone());
 
