@@ -307,7 +307,7 @@ impl AppState {
 
     pub fn check_diff_update(&mut self) -> bool {
         if let Some(last_time) = self.last_interaction_time {
-            if last_time.elapsed() > std::time::Duration::from_millis(200) {
+            if last_time.elapsed() > std::time::Duration::from_millis(30) {
                 if let Some(hash) = self.get_selected_commit_hash() {
                     self.background_worker
                         .request_commit_diff(self.repo_path.clone(), hash);

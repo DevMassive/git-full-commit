@@ -35,12 +35,12 @@ fn test_debounce_diff_update() {
     // last_interaction_time should still be some
     assert!(state.last_interaction_time.is_some());
 
-    // Sleep for a bit, but less than 200ms
-    thread::sleep(Duration::from_millis(50));
+    // Sleep for a bit, but less than 30ms
+    thread::sleep(Duration::from_millis(10));
     assert!(!state.check_diff_update());
 
-    // Sleep enough to pass 200ms total
-    thread::sleep(Duration::from_millis(200));
+    // Sleep enough to pass 30ms total
+    thread::sleep(Duration::from_millis(30));
 
     // Now it should trigger the request and reset timer
     // check_diff_update returns false now because it doesn't trigger render directly
