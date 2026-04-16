@@ -30,11 +30,15 @@ fn test_commit_message_input_and_commit() {
     assert_eq!(app_state.main_screen.commit_message, commit_message);
 
     // Press enter to commit
-    update_state(app_state, Some(Input::Character('\n')), 80, 80);
+    app_state = update_state(app_state, Some(Input::Character('\n')), 80, 80);
 
     // Check git log
     let log = repo.get_log(1);
     assert!(log.contains(commit_message));
+
+    // Check that the input is cleared and the cursor is reset
+    assert_eq!(app_state.main_screen.commit_message, "");
+    assert_eq!(app_state.main_screen.commit_cursor, 0);
 }
 
 #[test]
@@ -71,11 +75,14 @@ fn test_amend_commit_reword_only() {
     }
 
     // Press enter to finalize
-    update_state(app_state, Some(Input::Character('\n')), 80, 80);
+    app_state = update_state(app_state, Some(Input::Character('\n')), 80, 80);
 
     let log = repo.get_log(1);
     assert!(log.contains(new_message));
     assert!(!log.contains(initial_message));
+
+    // Check that the cursor is reset
+    assert_eq!(app_state.main_screen.commit_cursor, 0);
 }
 
 #[test]
@@ -113,7 +120,7 @@ fn test_amend_non_head_commit_rewords_only_target() {
     }
 
     // Confirm the amend
-    update_state(app_state, Some(Input::Character('\n')), 80, 80);
+    app_state = update_state(app_state, Some(Input::Character('\n')), 80, 80);
 
     // HEAD should still be the second commit
     let head_log = repo.get_log(1);
@@ -125,6 +132,9 @@ fn test_amend_non_head_commit_rewords_only_target() {
     assert!(log.contains(new_message));
     let original_entry = format!("\n    {original_message}\n");
     assert!(!log.contains(&original_entry));
+
+    // Check that the cursor is reset
+    assert_eq!(app_state.main_screen.commit_cursor, 0);
 }
 
 #[test]
@@ -159,7 +169,7 @@ fn test_amend_commit_with_staged_changes() {
     }
 
     // Press enter to finalize
-    update_state(app_state, Some(Input::Character('\n')), 80, 80);
+    app_state = update_state(app_state, Some(Input::Character('\n')), 80, 80);
 
     let log = repo.get_log(1);
     assert!(log.contains(new_message));
@@ -167,6 +177,9 @@ fn test_amend_commit_with_staged_changes() {
     // Check that the staged file is in the commit
     let diff = repo.get_commit_diff("HEAD");
     assert!(diff.contains("b.txt"));
+
+    // Check that the cursor is reset
+    assert_eq!(app_state.main_screen.commit_cursor, 0);
 }
 
 #[test]

@@ -477,8 +477,6 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32, max_
             if result.is_ok() {
                 let _ = commit_storage::delete_commit_message(&state.repo_path);
                 message.clear();
-                state.main_screen.commit_scroll_offset = 0;
-                state.main_screen.commit_scroll_extra_space = false;
             }
             result
         };
@@ -487,6 +485,11 @@ pub fn handle_commit_input(state: &mut AppState, input: Input, _max_y: i32, max_
             state.error_message = Some(format!("Error committing: {e}"));
             return;
         }
+
+        // On success, reset common state
+        *cursor = 0;
+        state.main_screen.commit_scroll_offset = 0;
+        state.main_screen.commit_scroll_extra_space = false;
 
         state.command_history.clear();
         git::add_all(&state.repo_path).expect("Failed to git add -A.");

@@ -52,9 +52,10 @@ The following keybindings are active when the Commit Message Input view is selec
 ### 3.3. Post-Commit Workflow
 
 - After any successful commit (normal or amend), the following actions occur automatically:
-  1. The application's undo/redo history is cleared.
-  2. The application executes `git add -A` to stage all remaining unstaged changes.
-  3. The application checks the repository status:
+  1. The commit message input is cleared and the cursor position is reset to 0.
+  2. The application's undo/redo history is cleared.
+  3. The application executes `git add -A` to stage all remaining unstaged changes.
+  4. The application checks the repository status:
      - If there are no more staged changes, the application exits.
      - If staged changes remain, the screen is refreshed to show the new state, with the cursor moved to the top of the list.
 
